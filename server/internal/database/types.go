@@ -1,0 +1,158 @@
+package database
+
+import "encoding/json"
+
+// HubIdentity identifies this P7 Scanner instance for future SignalHub federation.
+type HubIdentity struct {
+	HubID                     string `json:"hubId"`
+	Name                      string `json:"name"`
+	PublicURL                 string `json:"publicUrl"`
+	Region                    string `json:"region"`
+	Contact                   string `json:"contact"`
+	PublicKey                 string `json:"publicKey"`
+	FederationEnabled         bool   `json:"federationEnabled"`
+	DirectoryValidationStatus string `json:"directoryValidationStatus"`
+	CreatedAt                 int64  `json:"createdAt"`
+	UpdatedAt                 int64  `json:"updatedAt"`
+}
+
+// HubInvite is an admin-generated token another hub can use to become a trusted peer.
+type HubInvite struct {
+	ID              string `json:"id"`
+	Token           string `json:"token"`
+	CreatedByUserID string `json:"createdByUserId,omitempty"`
+	ExpiresAt       int64  `json:"expiresAt"`
+	UsedAt          int64  `json:"usedAt"`
+	RevokedAt       int64  `json:"revokedAt"`
+	CreatedAt       int64  `json:"createdAt"`
+}
+
+// HubPeer is a trusted remote P7 Scanner hub known to this SignalHub instance.
+type HubPeer struct {
+	ID         string `json:"id"`
+	HubID      string `json:"hubId"`
+	Name       string `json:"name"`
+	PublicURL  string `json:"publicUrl"`
+	Region     string `json:"region"`
+	Contact    string `json:"contact"`
+	Status     string `json:"status"`
+	Direction  string `json:"direction"`
+	AcceptedAt int64  `json:"acceptedAt"`
+	LastSeenAt int64  `json:"lastSeenAt"`
+	CreatedAt  int64  `json:"createdAt"`
+	UpdatedAt  int64  `json:"updatedAt"`
+}
+
+// Call is a single decoded radio call stored by the server.
+type Call struct {
+	ID             int64   `json:"id"`
+	UserID         string  `json:"userId,omitempty"`
+	SourceID       string  `json:"sourceId,omitempty"`
+	Redacted       bool    `json:"redacted,omitempty"`
+	DateTime       int64   `json:"dateTime"`
+	System         int     `json:"system"`
+	SystemLabel    string  `json:"systemLabel"`
+	Talkgroup      int     `json:"talkgroup"`
+	TalkgroupLabel string  `json:"talkgroupLabel"`
+	TalkgroupGroup string  `json:"talkgroupGroup"`
+	TalkgroupTag   string  `json:"talkgroupTag"`
+	Frequency      int     `json:"frequency"`
+	Duration       float64 `json:"duration"`
+	AudioName      string  `json:"audioName"`
+	AudioType      string  `json:"audioType"`
+	CreatedAt      int64   `json:"createdAt"`
+}
+
+// TalkgroupSetting stores per-talkgroup operator preferences.
+type TalkgroupSetting struct {
+	Talkgroup int   `json:"talkgroup"`
+	Favorite  bool  `json:"favorite"`
+	Muted     bool  `json:"muted"`
+	UpdatedAt int64 `json:"updatedAt"`
+}
+
+// IngestionSource represents a scanner ingestion source (e.g., SDRTrunk, mock sender).
+type IngestionSource struct {
+	ID            string `json:"id"`
+	UserID        string `json:"userId,omitempty"`
+	Label         string `json:"label"`
+	Enabled       bool   `json:"enabled"`
+	IsShared      bool   `json:"isShared"`
+	DeletedAt     int64  `json:"deletedAt,omitempty"`
+	SystemID      int    `json:"systemId"`
+	SystemLabel   string `json:"systemLabel"`
+	LastSeenUnix  int64  `json:"lastSeenUnix"`
+	ErrorCount    int    `json:"errorCount"`
+	CallsReceived int    `json:"callsReceived"`
+	UpdatedAt     int64  `json:"updatedAt"`
+}
+
+// User represents an account that can own sources and sessions.
+type User struct {
+	ID        string `json:"id"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	Status    string `json:"status"`
+	CreatedAt int64  `json:"createdAt"`
+	UpdatedAt int64  `json:"updatedAt"`
+}
+
+// AuditLogEntry represents a single audit event.
+type AuditLogEntry struct {
+	ID         int64           `json:"id"`
+	UserID     string          `json:"userId,omitempty"`
+	Action     string          `json:"action"`
+	TargetType string          `json:"targetType"`
+	TargetID   string          `json:"targetId"`
+	Metadata   json.RawMessage `json:"metadata"`
+	CreatedAt  int64           `json:"createdAt"`
+}
+
+// SourceAPIKey represents an API key for a source.
+type SourceAPIKey struct {
+	ID         string `json:"id"`
+	SourceID   string `json:"sourceId"`
+	UserID     string `json:"userId,omitempty"`
+	APIKey     string `json:"apiKey"`
+	CreatedAt  int64  `json:"createdAt"`
+	LastUsedAt int64  `json:"lastUsedAt"`
+}
+
+// SourceShare grants one user access to one ingestion source.
+type SourceShare struct {
+	SourceID  string `json:"sourceId"`
+	UserID    string `json:"userId"`
+	CreatedAt int64  `json:"createdAt"`
+}
+
+// TalkgroupInfo is a distinct talkgroup entry derived from call history.
+type TalkgroupInfo struct {
+	Talkgroup      int    `json:"talkgroup"`
+	TalkgroupLabel string `json:"talkgroupLabel"`
+	TalkgroupGroup string `json:"talkgroupGroup"`
+}
+
+// RadioSet is a named, user-owned collection of talkgroup IDs used to filter the call log.
+type RadioSet struct {
+	ID         string   `json:"id"`
+	UserID     string   `json:"userId,omitempty"`
+	Name       string   `json:"name"`
+	Talkgroups []int    `json:"talkgroups"`
+	SourceIDs  []string `json:"sourceIds,omitempty"`
+	ShareToken *string  `json:"shareToken,omitempty"`
+	CreatedAt  int64    `json:"createdAt"`
+	UpdatedAt  int64    `json:"updatedAt"`
+}
+
+// ListCallsParams configures filtering and sorting for ListCalls.
+type ListCallsParams struct {
+	Limit       int
+	SortBy      string
+	Order       string
+	Search      string
+	Group       string
+	Offset      int
+	UserID      string
+	OnlyUnowned bool
+	Talkgroups  []int
+}

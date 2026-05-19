@@ -1,0 +1,92 @@
+# Second SignalHub/P7 Scanner stack for peer testing.
+#
+# Use this when you want a separate hub to connect to your main hub.
+# It is intentionally close to docker-compose.plesk.yml, but defaults to a
+# different stack name, client port, and hub identity.
+#
+# Usage:
+#   cp .env.peer.example .env.peer
+#   docker-compose --env-file .env.peer -f docker-compose.peer.yml up -d
+#
+# In Plesk/Portainer, create this as a second stack and use the values from
+# .env.peer.example as that stack's environment variables.
+
+name: ${COMPOSE_PROJECT_NAME:-p7scanner-peer}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-p7scanner_peer}
+      POSTGRES_USER: ${POSTGRES_USER:-p7scanner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-peer-strong}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-p7scanner} -d ${POSTGRES_DB:-p7scanner_peer}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  server:
+    image: ${SERVER_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-cptplastic}/p7-scanner-server:${IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      LISTEN_ADDR: :8080
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-p7scanner}:${POSTGRES_PASSWORD:-change-me-peer-strong}@postgres:5432/${POSTGRES_DB:-p7scanner_peer}?sslmode=disable}
+      APP_ENV: ${APP_ENV:-production}
+      STACK_ID: ${STACK_ID:-peer-stack}
+      DEPLOY_TAG: ${DEPLOY_TAG:-${IMAGE_TAG:-latest}}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      APP_BASE_URL: ${APP_BASE_URL}
+      MAILJET_API_KEY: ${MAILJET_API_KEY:-}
+      MAILJET_SECRET_KEY: ${MAILJET_SECRET_KEY:-}
+      MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-P7 Scanner Peer}
+      HUB_NAME: ${HUB_NAME:-P7 Scanner Peer Hub}
+      HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-${APP_BASE_URL}}
+      HUB_REGION: ${HUB_REGION:-Peer Test}
+      HUB_CONTACT: ${HUB_CONTACT:-}
+      HUB_FEDERATION_ENABLED: ${HUB_FEDERATION_ENABLED:-true}
+      UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  client:
+    image: ${CLIENT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-cptplastic}/p7-scanner-client:${IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    ports:
+      - "${CLIENT_PORT:-3001}:8080"
+    depends_on:
+      server:
+        condition: service_healthy
+
+  mock-call-sender:
+    image: ${MOCK_CALL_SENDER_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-cptplastic}/p7-scanner-mock-call-sender:${IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    profiles: ["mock"]
+    environment:
+      SCANNER_URL: http://server:8080
+      MOCK_INTERVAL_SEC: ${MOCK_INTERVAL_SEC:-5}
+      MOCK_DURATION_SEC: ${MOCK_DURATION_SEC:-3}
+      MOCK_SYSTEM_ID: ${MOCK_SYSTEM_ID:-2}
+      MOCK_SYSTEM_LABEL: ${MOCK_SYSTEM_LABEL:-Peer Mock P25 System}
+      MOCK_FREQUENCY: ${MOCK_FREQUENCY:-460500000}
+      MOCK_SOURCE_API_KEY: ${MOCK_SOURCE_API_KEY:-}
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

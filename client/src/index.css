@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #c9c9c9;
+  background: #0a0a0a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: #00ff41;
+  color: #0a0a0a;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #111111;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1f1f1f;
+  border: 1px solid #00ff41;
+}
+
+@layer components {
+  .console-panel {
+    @apply bg-console-surface border border-console-border rounded-md p-4;
+  }
+
+  .console-label {
+    @apply uppercase tracking-[0.2em] text-console-muted;
+  }
+
+  .console-accent {
+    @apply text-console-accent;
+  }
+
+  .cursor-blink {
+    @apply text-console-accent;
+    animation: blink 1s step-end infinite;
+  }
+
+  .console-divider {
+    @apply h-px w-full bg-console-border;
+  }
+
+  .account-tab-attn {
+    animation: accountTabAttention 3.2s ease-in-out infinite;
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes accountTabAttention {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(0, 255, 65, 0);
+    background-color: rgba(0, 255, 65, 0.05);
+  }
+
+  50% {
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.18);
+    background-color: rgba(0, 255, 65, 0.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-tab-attn {
+    animation: none;
+  }
+}

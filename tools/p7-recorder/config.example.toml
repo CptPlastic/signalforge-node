@@ -1,0 +1,39 @@
+[p7]
+# URL of your P7 Scanner server. Release builds default to https://p7scan.projectseven.us/.
+# For local Docker dev, change this to http://localhost:8080/.
+base_url = "https://p7scan.projectseven.us/"
+
+# Generate this in the P7 Integrations view for the source this recorder represents.
+source_key = "sk_live_REPLACE_WITH_GENERATED_SOURCE_KEY"
+timeout_sec = 20
+
+[audio]
+# Run: python p7_recorder.py --list-devices
+# Use either a numeric device index or the device name. Leave blank for the default input.
+# device = 1
+sample_rate = 16000
+channels = 1
+block_ms = 100
+
+# RMS level that starts recording. Raise it if background noise triggers clips.
+threshold = 500
+
+# Stop a call after this much quiet audio.
+silence_ms = 1200
+min_duration_ms = 400
+max_duration_sec = 120
+pre_roll_ms = 300
+
+[metadata]
+# These values become the visible call metadata in P7.
+system = 1
+system_label = "GMRS"
+talkgroup = 18
+talkgroup_label = "GMRS Channel 18"
+talkgroup_group = "GMRS"
+talkgroup_tag = "voice"
+frequency = 462625000
+
+[queue]
+# Clips are written here first. If P7 is offline, they remain queued and upload later.
+directory = "queue"

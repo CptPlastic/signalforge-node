@@ -1,0 +1,35 @@
+{
+  "name": "P7 Scanner",
+  "short_name": "P7 Scan",
+  "description": "Console-style scanner monitor for projectseven .Co .Ltd radio traffic.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "background_color": "#0a0a0a",
+  "theme_color": "#00ff41",
+  "orientation": "any",
+  "categories": ["utilities", "productivity"],
+  "icons": [
+    {
+      "src": "/pwa/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Monitor",
+      "short_name": "Monitor",
+      "url": "/?view=monitor",
+      "description": "Open the live scanner monitor"
+    },
+    {
+      "name": "Radio Sets",
+      "short_name": "Sets",
+      "url": "/?view=radio-sets",
+      "description": "Open radio set controls"
+    }
+  ]
+}

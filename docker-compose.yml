@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: p7scanner
+      POSTGRES_USER: p7scanner
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U p7scanner -d p7scanner"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
+        BUILD_VERSION: ${BUILD_VERSION:-0.1.0-dev}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    environment:
+      LISTEN_ADDR: :8080
+      DATABASE_URL: postgres://p7scanner@postgres:5432/p7scanner?sslmode=disable
+      APP_ENV: development
+      STACK_ID: ${STACK_ID:-local-compose}
+      DEPLOY_TAG: ${DEPLOY_TAG:-local}
+      LOG_LEVEL: info
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      MAILJET_API_KEY: ${MAILJET_API_KEY:-}
+      MAILJET_SECRET_KEY: ${MAILJET_SECRET_KEY:-}
+      MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-P7 Scanner}
+      HUB_NAME: ${HUB_NAME:-P7 Scanner Local Hub}
+      HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-${APP_BASE_URL:-http://localhost:3000}}
+      HUB_REGION: ${HUB_REGION:-}
+      HUB_CONTACT: ${HUB_CONTACT:-}
+      HUB_FEDERATION_ENABLED: ${HUB_FEDERATION_ENABLED:-false}
+      UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.client
+    ports:
+      - "${CLIENT_PORT:-3000}:8080"
+    depends_on:
+      server:
+        condition: service_healthy
+
+  mock-call-sender:
+    build:
+      context: ./docker/mock-call-sender
+      dockerfile: Dockerfile
+    profiles: ["mock"]
+    restart: unless-stopped
+    environment:
+      SCANNER_URL: ${SCANNER_URL:-http://server:8080}
+      MOCK_INTERVAL_SEC: 5
+      MOCK_DURATION_SEC: 3
+      MOCK_SYSTEM_ID: 1
+      MOCK_SYSTEM_LABEL: Mock P25 System
+      MOCK_FREQUENCY: 460000000
+      MOCK_SOURCE_API_KEY: ${MOCK_SOURCE_API_KEY:-}
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

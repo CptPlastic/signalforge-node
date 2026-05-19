@@ -1,0 +1,47 @@
+[p7]
+base_url = "https://p7scan.projectseven.us/"
+source_key = "sk_live_REPLACE_WITH_GENERATED_SOURCE_KEY"
+timeout_sec = 20
+
+[audio]
+# Use --list-devices to find input device names. Leave blank for the default input.
+device = ""
+sample_rate = 16000
+channels = 1
+block_ms = 100
+threshold = 500
+silence_ms = 1200
+min_duration_ms = 400
+max_duration_sec = 120
+pre_roll_ms = 300
+
+[metadata]
+system = 1
+system_label = "GMRS"
+talkgroup = 18
+talkgroup_label = "GMRS Channel 18"
+talkgroup_group = "GMRS"
+talkgroup_tag = "voice"
+frequency = 462625000
+
+[queue]
+directory = "queue"
+
+[folder_ingest]
+# When enabled, the recorder watches a folder instead of recording microphone audio.
+enabled = false
+directory = "ingest"
+processed_directory = "processed"
+# Replays files already in processed once per recorder run. Useful for canary checks or alert demos.
+reprocess_processed = false
+poll_ms = 1000
+stable_ms = 2500
+
+[canary]
+# When enabled, uploads a silent 1-second WAV at a regular interval as a heartbeat.
+# Appears in the call log so you can confirm the pipeline is alive end-to-end.
+# talkgroup and talkgroup_label override [metadata] values for canary clips only (optional).
+enabled = false
+interval_sec = 300
+# talkgroup = 9999
+# talkgroup_label = "CANARY"

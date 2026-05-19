@@ -1,0 +1,383 @@
+package database
+
+import (
+	"database/sql"
+	"time"
+)
+
+// GetHubIdentity returns the local hub identity, if it has been initialized.
+func (d *DB) GetHubIdentity() (*HubIdentity, bool, error) {
+	row := d.db.QueryRow(`
+		SELECT hub_id, name, public_url, region, contact, public_key,
+		       federation_enabled, directory_validation_status, created_at, updated_at
+		FROM hub_identity
+		WHERE id = 'local'`)
+
+	var identity HubIdentity
+	if err := row.Scan(
+		&identity.HubID,
+		&identity.Name,
+		&identity.PublicURL,
+		&identity.Region,
+		&identity.Contact,
+		&identity.PublicKey,
+		&identity.FederationEnabled,
+		&identity.DirectoryValidationStatus,
+		&identity.CreatedAt,
+		&identity.UpdatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	return &identity, true, nil
+}
+
+// UpsertHubIdentity stores the single local hub identity row.
+func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
+	now := time.Now().Unix()
+	if identity.HubID == "" {
+		identity.HubID = NewHubID()
+	}
+	if identity.DirectoryValidationStatus == "" {
+		identity.DirectoryValidationStatus = "unverified"
+	}
+
+	row := d.db.QueryRow(`
+		INSERT INTO hub_identity
+			(id, hub_id, name, public_url, region, contact, public_key,
+			 federation_enabled, directory_validation_status, created_at, updated_at)
+		VALUES ('local', $1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+		ON CONFLICT (id) DO UPDATE SET
+			name = excluded.name,
+			public_url = excluded.public_url,
+			region = excluded.region,
+			contact = excluded.contact,
+			public_key = excluded.public_key,
+			federation_enabled = excluded.federation_enabled,
+			directory_validation_status = excluded.directory_validation_status,
+			updated_at = excluded.updated_at
+		RETURNING hub_id, name, public_url, region, contact, public_key,
+		          federation_enabled, directory_validation_status, created_at, updated_at`,
+		identity.HubID,
+		identity.Name,
+		identity.PublicURL,
+		identity.Region,
+		identity.Contact,
+		identity.PublicKey,
+		identity.FederationEnabled,
+		identity.DirectoryValidationStatus,
+		now,
+	)
+
+	var saved HubIdentity
+	if err := row.Scan(
+		&saved.HubID,
+		&saved.Name,
+		&saved.PublicURL,
+		&saved.Region,
+		&saved.Contact,
+		&saved.PublicKey,
+		&saved.FederationEnabled,
+		&saved.DirectoryValidationStatus,
+		&saved.CreatedAt,
+		&saved.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &saved, nil
+}
+
+// CreateHubInvite stores a new peer invite token.
+func (d *DB) CreateHubInvite(createdByUserID string, expiresAt int64) (*HubInvite, error) {
+	invite := HubInvite{
+		ID:              NewHubInviteID(),
+		Token:           NewHubInviteToken(),
+		CreatedByUserID: createdByUserID,
+		ExpiresAt:       expiresAt,
+		CreatedAt:       time.Now().Unix(),
+	}
+
+	row := d.db.QueryRow(`
+		INSERT INTO hub_invites (id, token, created_by_user_id, expires_at, used_at, revoked_at, created_at)
+		VALUES ($1, $2, $3, $4, 0, 0, $5)
+		RETURNING id, token, COALESCE(created_by_user_id, ''), expires_at, used_at, revoked_at, created_at`,
+		invite.ID,
+		invite.Token,
+		nullableString(invite.CreatedByUserID),
+		invite.ExpiresAt,
+		invite.CreatedAt,
+	)
+
+	var saved HubInvite
+	if err := row.Scan(
+		&saved.ID,
+		&saved.Token,
+		&saved.CreatedByUserID,
+		&saved.ExpiresAt,
+		&saved.UsedAt,
+		&saved.RevokedAt,
+		&saved.CreatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &saved, nil
+}
+
+// ListHubInvites returns recent peer invite tokens for admin management.
+func (d *DB) ListHubInvites() ([]HubInvite, error) {
+	rows, err := d.db.Query(`
+		SELECT id, token, COALESCE(created_by_user_id, ''), expires_at, used_at, revoked_at, created_at
+		FROM hub_invites
+		ORDER BY created_at DESC
+		LIMIT 100`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	invites := make([]HubInvite, 0)
+	for rows.Next() {
+		var invite HubInvite
+		if err := rows.Scan(
+			&invite.ID,
+			&invite.Token,
+			&invite.CreatedByUserID,
+			&invite.ExpiresAt,
+			&invite.UsedAt,
+			&invite.RevokedAt,
+			&invite.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		invites = append(invites, invite)
+	}
+	return invites, rows.Err()
+}
+
+// RevokeHubInvite marks an invite as no longer usable.
+func (d *DB) RevokeHubInvite(id string) (*HubInvite, bool, error) {
+	row := d.db.QueryRow(`
+		UPDATE hub_invites
+		SET revoked_at = $1
+		WHERE id = $2 AND revoked_at = 0
+		RETURNING id, token, COALESCE(created_by_user_id, ''), expires_at, used_at, revoked_at, created_at`,
+		time.Now().Unix(),
+		id,
+	)
+
+	var invite HubInvite
+	if err := row.Scan(
+		&invite.ID,
+		&invite.Token,
+		&invite.CreatedByUserID,
+		&invite.ExpiresAt,
+		&invite.UsedAt,
+		&invite.RevokedAt,
+		&invite.CreatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	return &invite, true, nil
+}
+
+// RedeemHubInvite marks a valid invite token as used.
+func (d *DB) RedeemHubInvite(token string) (*HubInvite, bool, string, error) {
+	row := d.db.QueryRow(`
+		SELECT id, token, COALESCE(created_by_user_id, ''), expires_at, used_at, revoked_at, created_at
+		FROM hub_invites
+		WHERE token = $1`, token)
+
+	var invite HubInvite
+	if err := row.Scan(
+		&invite.ID,
+		&invite.Token,
+		&invite.CreatedByUserID,
+		&invite.ExpiresAt,
+		&invite.UsedAt,
+		&invite.RevokedAt,
+		&invite.CreatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false, "invalid invite", nil
+		}
+		return nil, false, "", err
+	}
+
+	now := time.Now().Unix()
+	if invite.RevokedAt > 0 {
+		return &invite, false, "invite revoked", nil
+	}
+	if invite.UsedAt > 0 {
+		return &invite, false, "invite already used", nil
+	}
+	if invite.ExpiresAt <= now {
+		return &invite, false, "invite expired", nil
+	}
+
+	row = d.db.QueryRow(`
+		UPDATE hub_invites
+		SET used_at = $1
+		WHERE token = $2 AND used_at = 0 AND revoked_at = 0 AND expires_at > $1
+		RETURNING id, token, COALESCE(created_by_user_id, ''), expires_at, used_at, revoked_at, created_at`, now, token)
+	if err := row.Scan(
+		&invite.ID,
+		&invite.Token,
+		&invite.CreatedByUserID,
+		&invite.ExpiresAt,
+		&invite.UsedAt,
+		&invite.RevokedAt,
+		&invite.CreatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false, "invite already used", nil
+		}
+		return nil, false, "", err
+	}
+
+	return &invite, true, "", nil
+}
+
+// UpsertHubPeer creates or updates a known hub peer by remote hub ID.
+func (d *DB) UpsertHubPeer(peer HubPeer) (*HubPeer, error) {
+	now := time.Now().Unix()
+	if peer.ID == "" {
+		peer.ID = NewHubPeerID()
+	}
+	if peer.Status == "" {
+		peer.Status = "connected"
+	}
+	if peer.Direction == "" {
+		peer.Direction = "outbound"
+	}
+	if peer.AcceptedAt == 0 {
+		peer.AcceptedAt = now
+	}
+	peer.LastSeenAt = now
+
+	row := d.db.QueryRow(`
+		INSERT INTO hub_peers
+			(id, hub_id, name, public_url, region, contact, status, direction, accepted_at, last_seen_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $10)
+		ON CONFLICT (hub_id) DO UPDATE SET
+			name = excluded.name,
+			public_url = excluded.public_url,
+			region = excluded.region,
+			contact = excluded.contact,
+			status = excluded.status,
+			direction = excluded.direction,
+			accepted_at = CASE WHEN hub_peers.accepted_at = 0 THEN excluded.accepted_at ELSE hub_peers.accepted_at END,
+			last_seen_at = excluded.last_seen_at,
+			updated_at = excluded.updated_at
+		RETURNING id, hub_id, name, public_url, region, contact, status, direction, accepted_at, last_seen_at, created_at, updated_at`,
+		peer.ID,
+		peer.HubID,
+		peer.Name,
+		peer.PublicURL,
+		peer.Region,
+		peer.Contact,
+		peer.Status,
+		peer.Direction,
+		peer.AcceptedAt,
+		peer.LastSeenAt,
+	)
+
+	var saved HubPeer
+	if err := row.Scan(
+		&saved.ID,
+		&saved.HubID,
+		&saved.Name,
+		&saved.PublicURL,
+		&saved.Region,
+		&saved.Contact,
+		&saved.Status,
+		&saved.Direction,
+		&saved.AcceptedAt,
+		&saved.LastSeenAt,
+		&saved.CreatedAt,
+		&saved.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &saved, nil
+}
+
+// ListHubPeers returns known peer hubs.
+func (d *DB) ListHubPeers() ([]HubPeer, error) {
+	rows, err := d.db.Query(`
+		SELECT id, hub_id, name, public_url, region, contact, status, direction, accepted_at, last_seen_at, created_at, updated_at
+		FROM hub_peers
+		ORDER BY updated_at DESC
+		LIMIT 100`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	peers := make([]HubPeer, 0)
+	for rows.Next() {
+		var peer HubPeer
+		if err := rows.Scan(
+			&peer.ID,
+			&peer.HubID,
+			&peer.Name,
+			&peer.PublicURL,
+			&peer.Region,
+			&peer.Contact,
+			&peer.Status,
+			&peer.Direction,
+			&peer.AcceptedAt,
+			&peer.LastSeenAt,
+			&peer.CreatedAt,
+			&peer.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		peers = append(peers, peer)
+	}
+	return peers, rows.Err()
+}
+
+// DisableHubPeer marks a peer as disabled without deleting history.
+func (d *DB) DisableHubPeer(id string) (*HubPeer, bool, error) {
+	row := d.db.QueryRow(`
+		UPDATE hub_peers
+		SET status = 'disabled', updated_at = $1
+		WHERE id = $2
+		RETURNING id, hub_id, name, public_url, region, contact, status, direction, accepted_at, last_seen_at, created_at, updated_at`,
+		time.Now().Unix(),
+		id,
+	)
+
+	var peer HubPeer
+	if err := row.Scan(
+		&peer.ID,
+		&peer.HubID,
+		&peer.Name,
+		&peer.PublicURL,
+		&peer.Region,
+		&peer.Contact,
+		&peer.Status,
+		&peer.Direction,
+		&peer.AcceptedAt,
+		&peer.LastSeenAt,
+		&peer.CreatedAt,
+		&peer.UpdatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	return &peer, true, nil
+}

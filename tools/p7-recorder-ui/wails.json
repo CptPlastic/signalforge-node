@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "p7-recorder-ui",
+  "outputfilename": "p7-recorder-ui",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Jason Johnson",
+    "email": "jason.johnson@p7n.net"
+  }
+}

@@ -1,0 +1,23 @@
+FROM golang:1.25-alpine AS builder
+ARG GIT_SHA=unknown
+ARG BUILD_VERSION=0.1.0-dev
+ARG BUILD_DATE=unknown
+WORKDIR /app
+COPY server/go.mod server/go.sum ./
+RUN go mod download
+COPY server ./
+RUN CGO_ENABLED=0 GOOS=linux go build \
+	-ldflags "-X github.com/projectseven-co-ltd/p7-scanner/server/internal/api.BuildVersion=${BUILD_VERSION} -X github.com/projectseven-co-ltd/p7-scanner/server/internal/api.BuildCommit=${GIT_SHA} -X github.com/projectseven-co-ltd/p7-scanner/server/internal/api.BuildDate=${BUILD_DATE}" \
+	-o /out/server ./main.go
+
+FROM alpine:3.20
+RUN apk add --no-cache ffmpeg ca-certificates su-exec \
+	&& addgroup -S app \
+	&& adduser -S -G app -u 10001 app
+WORKDIR /app
+COPY --from=builder /out/server /usr/local/bin/p7-scanner-server
+COPY docker/server-entrypoint.sh /usr/local/bin/server-entrypoint.sh
+RUN chmod +x /usr/local/bin/server-entrypoint.sh
+EXPOSE 8080
+ENTRYPOINT ["server-entrypoint.sh"]
+CMD ["p7-scanner-server"]

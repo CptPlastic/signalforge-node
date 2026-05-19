@@ -1,0 +1,48 @@
+# Go
+bin/
+*.test
+*.out
+
+# Node
+node_modules/
+dist/
+
+# P7 Recorder local packaging
+tools/p7-recorder/.venv/
+tools/p7-recorder/build/
+tools/p7-recorder/*.spec
+tools/p7-recorder/__pycache__/
+tools/p7-recorder-go/dist/
+tools/p7-recorder-go/p7-recorder-go
+tools/p7-recorder-go/p7-recorder-go.exe
+
+# Environment
+.env
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.pdf
+PLAN_tmp.html
+.lore/
+.github/copilot-instructions.md
+AGENTS.md
+CLAUDE.md
+.cursor/rules/memory.md
+.github/prompts/lore.prompt.md
+.windsurfrules
+GEMINI.md
+.clinerules
+CONVENTIONS.md
+*.code-workspace
+*.code-workspace
+.env.peer

@@ -1,0 +1,50 @@
+services:
+  server:
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-cptplastic}/p7-scanner-server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      LISTEN_ADDR: :8080
+      DATABASE_URL: ${DATABASE_URL}
+      APP_ENV: ${APP_ENV}
+      STACK_ID: ${STACK_ID:-prod-compose}
+      DEPLOY_TAG: ${DEPLOY_TAG:-${IMAGE_TAG}}
+      LOG_LEVEL: ${LOG_LEVEL}
+      APP_BASE_URL: ${APP_BASE_URL}
+      MAILJET_API_KEY: ${MAILJET_API_KEY}
+      MAILJET_SECRET_KEY: ${MAILJET_SECRET_KEY}
+      MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-P7 Scanner}
+    ports:
+      - "${SERVER_PORT}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  client:
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-cptplastic}/p7-scanner-client:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${CLIENT_PORT}:8080"
+    depends_on:
+      server:
+        condition: service_healthy
+
+  mock-call-sender:
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-cptplastic}/p7-scanner-mock-call-sender:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    profiles: ["mock"]
+    environment:
+      SCANNER_URL: ${SCANNER_URL:-http://server:8080}
+      MOCK_INTERVAL_SEC: ${MOCK_INTERVAL_SEC:-5}
+      MOCK_DURATION_SEC: ${MOCK_DURATION_SEC:-3}
+      MOCK_SYSTEM_ID: ${MOCK_SYSTEM_ID:-1}
+      MOCK_SYSTEM_LABEL: ${MOCK_SYSTEM_LABEL:-Mock P25 System}
+      MOCK_FREQUENCY: ${MOCK_FREQUENCY:-460000000}
+      MOCK_SOURCE_API_KEY: ${MOCK_SOURCE_API_KEY:-}
+    depends_on:
+      server:
+        condition: service_healthy
