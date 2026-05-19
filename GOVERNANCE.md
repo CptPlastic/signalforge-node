@@ -12,13 +12,21 @@ SignalForge Node is open for community contribution, but project authority stays
 ## Contribution Flow
 
 1. Open an issue or discussion for large changes.
-2. Fork the repo and open a pull request.
+2. Fork the repo and open a pull request against `dev` for routine work.
 3. Keep the pull request focused.
 4. CI must pass before merge.
-5. Maintainer review is required before merge.
+5. Maintainer review is required when more than one maintainer is available.
 6. Conversations must be resolved before merge.
+7. Maintainers promote `dev` to `main` for stable public source updates.
 
 Small documentation and bug-fix pull requests are welcome without prior discussion.
+
+## Branches
+
+- `main` is the stable public source line for operators and public containers.
+- `dev` is the integration branch for active work and contributor pull requests.
+- Feature branches should be short-lived and merge through pull requests.
+- Direct pushes to protected branches should be avoided except for repository administration.
 
 ## Protected Areas
 

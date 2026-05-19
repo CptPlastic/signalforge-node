@@ -1,5 +1,7 @@
 # SignalForge Node
 
+![SignalForge Node banner](.github/assets/signalforge-node-banner.svg)
+
 Buildable public source for running a SignalForge/P7 Scanner community node.
 
 This repo is the clean public mirror of the node stack: Go API server, React web console, recorder clients, Dockerfiles, compose files, database migrations, and operator docs. It is meant for people who want to run their own scanner hub, test SignalHub federation, or inspect how the public containers are built.
@@ -117,6 +119,8 @@ SignalForge is open source and peer-to-peer first, but trust is explicit:
 ## Contributions
 
 Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), [GOVERNANCE.md](GOVERNANCE.md), and [FAIR-SOURCE.md](FAIR-SOURCE.md) before submitting changes. Security issues should be reported privately through [SECURITY.md](SECURITY.md).
+
+Routine development targets the `dev` branch. Maintainers promote tested changes from `dev` to `main` when they are ready for public operators.
 
 ## Upstream
 

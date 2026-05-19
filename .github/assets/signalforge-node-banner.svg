@@ -1,0 +1,41 @@
+<svg width="1280" height="420" viewBox="0 0 1280 420" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">SignalForge Node</title>
+  <desc id="desc">A dark SignalForge repository banner with a radio tower logo and community node messaging.</desc>
+  <rect width="1280" height="420" fill="#070909"/>
+  <path d="M0 322C180 270 296 352 462 304C610 262 711 178 873 212C1016 242 1088 330 1280 262V420H0V322Z" fill="#0D1814"/>
+  <path d="M0 98C190 34 306 122 476 82C651 41 792 50 958 104C1083 145 1178 128 1280 86" stroke="#173D2C" stroke-width="2" opacity="0.75"/>
+  <path d="M0 132C190 68 306 156 476 116C651 75 792 84 958 138C1083 179 1178 162 1280 120" stroke="#123124" stroke-width="1" opacity="0.65"/>
+  <g opacity="0.16">
+    <path d="M80 0V420M160 0V420M240 0V420M320 0V420M400 0V420M480 0V420M560 0V420M640 0V420M720 0V420M800 0V420M880 0V420M960 0V420M1040 0V420M1120 0V420M1200 0V420" stroke="#1E3C31"/>
+    <path d="M0 60H1280M0 120H1280M0 180H1280M0 240H1280M0 300H1280M0 360H1280" stroke="#1E3C31"/>
+  </g>
+  <g transform="translate(86 78)">
+    <circle cx="132" cy="132" r="121" fill="#08110E" stroke="#18F26A" stroke-width="2" opacity="0.95"/>
+    <circle cx="132" cy="132" r="96" stroke="#6EE7F9" stroke-width="1" opacity="0.22"/>
+    <path d="M132 42V210" stroke="#F4FFF8" stroke-width="6" stroke-linecap="round"/>
+    <path d="M132 92L83 137M132 92L181 137M132 137L48 199M132 137L216 199M48 199H216" stroke="#18F26A" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M95 70C119 46 145 46 169 70M84 48C115 17 149 17 180 48M73 27C113 -13 151 -13 191 27" stroke="#6EE7F9" stroke-width="5" stroke-linecap="round" opacity="0.96"/>
+    <circle cx="132" cy="92" r="9" fill="#F4FFF8"/>
+  </g>
+  <g transform="translate(372 90)">
+    <text x="0" y="54" fill="#F4FFF8" font-family="JetBrains Mono, SFMono-Regular, Consolas, monospace" font-size="54" font-weight="800" letter-spacing="4">SIGNALFORGE NODE</text>
+    <rect x="2" y="82" width="545" height="2" fill="#18F26A" opacity="0.85"/>
+    <text x="0" y="126" fill="#8DF6B5" font-family="JetBrains Mono, SFMono-Regular, Consolas, monospace" font-size="22" letter-spacing="2">BUILDABLE COMMUNITY SCANNER HUB</text>
+    <text x="0" y="178" fill="#C8D8D1" font-family="JetBrains Mono, SFMono-Regular, Consolas, monospace" font-size="25">Go API • React console • recorder clients • Docker stacks</text>
+    <g transform="translate(0 224)" font-family="JetBrains Mono, SFMono-Regular, Consolas, monospace" font-size="18" letter-spacing="1.6">
+      <rect x="0" y="0" width="128" height="36" rx="6" fill="#10251B" stroke="#18F26A"/>
+      <text x="18" y="24" fill="#18F26A">AGPLv3</text>
+      <rect x="148" y="0" width="192" height="36" rx="6" fill="#102026" stroke="#6EE7F9"/>
+      <text x="166" y="24" fill="#6EE7F9">FAIR SOURCE</text>
+      <rect x="360" y="0" width="154" height="36" rx="6" fill="#1F1C10" stroke="#F0C15A"/>
+      <text x="380" y="24" fill="#F0C15A">SELF HOST</text>
+    </g>
+  </g>
+  <g opacity="0.6">
+    <circle cx="1120" cy="104" r="4" fill="#18F26A"/>
+    <circle cx="1162" cy="148" r="3" fill="#6EE7F9"/>
+    <circle cx="1086" cy="198" r="3" fill="#18F26A"/>
+    <circle cx="1198" cy="238" r="4" fill="#F0C15A"/>
+    <path d="M1086 198L1120 104L1162 148L1198 238" stroke="#2A6B50" stroke-width="2"/>
+  </g>
+</svg>
