@@ -1,0 +1,13 @@
+# GNU Affero General Public License v3.0 or later
+
+Copyright (C) 2026 Project Seven / SignalForge contributors
+
+This project is licensed under the GNU Affero General Public License version 3 or, at your option, any later version.
+
+You should have received a copy of the GNU Affero General Public License along with this program. If not, see <https://www.gnu.org/licenses/agpl-3.0.html>.
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+
+Project intent:
+
+SignalForge Node is community infrastructure. The license is chosen so people can inspect, run, modify, and share the software, while network-service operators who modify it must offer corresponding source code to their users. This notice is not a replacement for the AGPL license text; the canonical license terms are the GNU Affero General Public License version 3 or later.

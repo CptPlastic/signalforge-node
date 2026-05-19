@@ -4,6 +4,12 @@ Buildable public source for running a SignalForge/P7 Scanner community node.
 
 This repo is the clean public mirror of the node stack: Go API server, React web console, recorder clients, Dockerfiles, compose files, database migrations, and operator docs. It is meant for people who want to run their own scanner hub, test SignalHub federation, or inspect how the public containers are built.
 
+## License
+
+SignalForge Node is licensed under the GNU Affero General Public License v3.0 or later. See [LICENSE](LICENSE) and [GOVERNANCE.md](GOVERNANCE.md).
+
+The intent is community infrastructure, not closed resale. If you run a modified network service from this code, AGPL requires you to offer the corresponding source code to users of that service.
+
 ## What Is Included
 
 - `server/`: Go API, auth, ingest, database migrations, hub identity, peer invites, and federation endpoints.
@@ -105,6 +111,10 @@ SignalForge is open source and peer-to-peer first, but trust is explicit:
 - SignalForge can list known hubs.
 - Verified and official status require maintainer approval.
 - Remote sources stay labeled with their origin hub.
+
+## Contributions
+
+Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and [GOVERNANCE.md](GOVERNANCE.md) before submitting changes. Security issues should be reported privately through [SECURITY.md](SECURITY.md).
 
 ## Upstream
 
