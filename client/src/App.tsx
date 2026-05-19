@@ -3033,7 +3033,16 @@ function App() {
     )}
 
       <footer className="text-xs text-console-muted border-t border-console-border pt-3 flex flex-col gap-1">
-        <div>projectseven .Co .Ltd © {new Date().getFullYear()} — ALL SYSTEMS OPERATIONAL</div>
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <span>projectseven .Co .Ltd © {new Date().getFullYear()} — ALL SYSTEMS OPERATIONAL</span>
+          <span className="flex flex-wrap gap-2 text-[10px] uppercase tracking-widest">
+            <a className="hover:text-console-accent" href="https://github.com/CptPlastic/signalforge-node" target="_blank" rel="noreferrer">Source</a>
+            <span aria-hidden>/</span>
+            <a className="hover:text-console-accent" href="https://github.com/CptPlastic/signalforge-node/blob/main/LICENSE" target="_blank" rel="noreferrer">AGPLv3</a>
+            <span aria-hidden>/</span>
+            <a className="hover:text-console-accent" href="https://github.com/CptPlastic/signalforge-node/blob/main/FAIR-SOURCE.md" target="_blank" rel="noreferrer">Fair Source</a>
+          </span>
+        </div>
         <div className="text-[10px] tabular-nums break-all">{footerDeploymentLabel}</div>
       </footer>
     </div>
