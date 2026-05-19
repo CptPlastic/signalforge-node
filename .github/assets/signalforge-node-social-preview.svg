@@ -1,0 +1,49 @@
+<svg width="1280" height="640" viewBox="0 0 1280 640" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">SignalForge Node social preview</title>
+  <desc id="desc">A GitHub social preview image for SignalForge Node using the official SignalForge logo.</desc>
+  <rect width="1280" height="640" fill="#070909"/>
+  <path d="M0 420C176 350 294 463 470 396C642 331 774 250 957 310C1098 356 1188 436 1280 390V640H0V420Z" fill="#0D1814"/>
+  <path d="M0 122C194 52 320 158 504 102C676 50 806 64 972 132C1098 184 1186 162 1280 110" stroke="#173D2C" stroke-width="2" opacity="0.75"/>
+  <path d="M0 178C194 108 320 214 504 158C676 106 806 120 972 188C1098 240 1186 218 1280 166" stroke="#123124" stroke-width="1" opacity="0.65"/>
+  <g opacity="0.14">
+    <path d="M80 0V640M160 0V640M240 0V640M320 0V640M400 0V640M480 0V640M560 0V640M640 0V640M720 0V640M800 0V640M880 0V640M960 0V640M1040 0V640M1120 0V640M1200 0V640" stroke="#1E3C31"/>
+    <path d="M0 80H1280M0 160H1280M0 240H1280M0 320H1280M0 400H1280M0 480H1280M0 560H1280" stroke="#1E3C31"/>
+  </g>
+  <g transform="translate(82 98)">
+    <circle cx="220" cy="220" r="188" fill="#08110E" stroke="#18F26A" stroke-width="3" opacity="0.95"/>
+    <circle cx="220" cy="220" r="148" stroke="#6EE7F9" stroke-width="2" opacity="0.22"/>
+    <g transform="translate(88 88) scale(2.2)" filter="drop-shadow(0 0 18px rgba(255,255,255,0.24)) drop-shadow(0 0 30px rgba(0,255,65,0.2))">
+      <path d="M60,15L60,88" stroke="white" stroke-width="2.5"/>
+      <path d="M60,36L38,55" stroke="white" stroke-width="2"/>
+      <path d="M60,36L82,55" stroke="white" stroke-width="2"/>
+      <path d="M60,55L22,80" stroke="white" stroke-width="2"/>
+      <path d="M60,55L98,80" stroke="white" stroke-width="2"/>
+      <path d="M22,80L98,80" stroke="white" stroke-width="1.5"/>
+      <g transform="translate(0 8)">
+        <path d="M46,28C55.333,18.667 64.667,18.667 74,28" stroke="white" stroke-width="2"/>
+      </g>
+      <g transform="translate(0 2)">
+        <path d="M46,28C55.333,18.667 64.667,18.667 74,28" stroke="white" stroke-width="2"/>
+      </g>
+      <g transform="translate(0 -4)">
+        <path d="M46,28C55.333,18.667 64.667,18.667 74,28" stroke="white" stroke-width="2"/>
+      </g>
+    </g>
+  </g>
+  <g transform="translate(520 152)">
+    <text x="0" y="64" fill="#F4FFF8" font-family="JetBrains Mono, SFMono-Regular, Consolas, monospace" font-size="58" font-weight="800" letter-spacing="4">SIGNALFORGE</text>
+    <text x="0" y="128" fill="#F4FFF8" font-family="JetBrains Mono, SFMono-Regular, Consolas, monospace" font-size="58" font-weight="800" letter-spacing="4">NODE</text>
+    <rect x="4" y="160" width="488" height="3" fill="#18F26A" opacity="0.9"/>
+    <text x="0" y="212" fill="#8DF6B5" font-family="JetBrains Mono, SFMono-Regular, Consolas, monospace" font-size="24" letter-spacing="2">BUILDABLE COMMUNITY SCANNER HUB</text>
+    <text x="0" y="270" fill="#C8D8D1" font-family="JetBrains Mono, SFMono-Regular, Consolas, monospace" font-size="25">Go API - React console - recorder clients</text>
+    <text x="0" y="312" fill="#C8D8D1" font-family="JetBrains Mono, SFMono-Regular, Consolas, monospace" font-size="25">Docker stacks - SignalHub federation</text>
+    <g transform="translate(0 372)" font-family="JetBrains Mono, SFMono-Regular, Consolas, monospace" font-size="18" letter-spacing="1.6">
+      <rect x="0" y="0" width="128" height="36" rx="6" fill="#10251B" stroke="#18F26A"/>
+      <text x="18" y="24" fill="#18F26A">AGPLv3</text>
+      <rect x="148" y="0" width="192" height="36" rx="6" fill="#102026" stroke="#6EE7F9"/>
+      <text x="166" y="24" fill="#6EE7F9">FAIR SOURCE</text>
+      <rect x="360" y="0" width="154" height="36" rx="6" fill="#1F1C10" stroke="#F0C15A"/>
+      <text x="380" y="24" fill="#F0C15A">SELF HOST</text>
+    </g>
+  </g>
+</svg>
