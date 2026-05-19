@@ -41,6 +41,12 @@ const WS_RECONNECT_GRACE_SEC = 8
 const API_HEALTH_GRACE_SEC = 8
 const SESSION_WARNING_WINDOW_SEC = 15 * 60
 const CALL_PAGE_SIZE = 50
+const DEFAULT_SOURCE_REPO_URL = 'https://github.com/CptPlastic/signalforge-node'
+
+const sourceRepoURL = (import.meta.env.VITE_SIGNALFORGE_SOURCE_REPO_URL?.trim() || DEFAULT_SOURCE_REPO_URL).replace(/\/+$/, '')
+const configuredSourceURL = import.meta.env.VITE_SIGNALFORGE_SOURCE_URL?.trim()
+const configuredLicenseURL = import.meta.env.VITE_SIGNALFORGE_LICENSE_URL?.trim()
+const configuredFairSourceURL = import.meta.env.VITE_SIGNALFORGE_FAIR_SOURCE_URL?.trim()
 
 type SourceRuntimeStatus = {
   state: 'live' | 'offline' | 'disabled' | 'error'
@@ -55,6 +61,20 @@ type SmoothedSourceStatus = SourceRuntimeStatus & {
 
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text).catch(console.error)
+}
+
+function sourceReference(info: VersionInfo | null): string {
+  const commit = info?.commit?.trim()
+  return commit && commit !== 'unknown' ? commit : 'main'
+}
+
+function sourceLinks(info: VersionInfo | null) {
+  const ref = sourceReference(info)
+  return {
+    source: configuredSourceURL || `${sourceRepoURL}/tree/${ref}`,
+    license: configuredLicenseURL || `${sourceRepoURL}/blob/${ref}/LICENSE`,
+    fairSource: configuredFairSourceURL || `${sourceRepoURL}/blob/${ref}/FAIR-SOURCE.md`,
+  }
 }
 
 function redactKey(key: string): string {
@@ -1558,6 +1578,10 @@ function App() {
     return deploymentFooterLabel(versionInfo)
   }, [versionInfo])
 
+  const footerSourceLinks = useMemo(() => {
+    return sourceLinks(versionInfo)
+  }, [versionInfo])
+
   const updateTitle = useMemo(() => {
     if (!updateInfo?.latest) return updateInfo?.error || 'update check unavailable'
     const latest = updateInfo.latest
@@ -3036,11 +3060,11 @@ function App() {
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <span>projectseven .Co .Ltd © {new Date().getFullYear()} — ALL SYSTEMS OPERATIONAL</span>
           <span className="flex flex-wrap gap-2 text-[10px] uppercase tracking-widest">
-            <a className="hover:text-console-accent" href="https://github.com/CptPlastic/signalforge-node" target="_blank" rel="noreferrer">Source</a>
+            <a className="hover:text-console-accent" href={footerSourceLinks.source} target="_blank" rel="noopener noreferrer">Source</a>
             <span aria-hidden>/</span>
-            <a className="hover:text-console-accent" href="https://github.com/CptPlastic/signalforge-node/blob/main/LICENSE" target="_blank" rel="noreferrer">AGPLv3</a>
+            <a className="hover:text-console-accent" href={footerSourceLinks.license} target="_blank" rel="noopener noreferrer">AGPLv3</a>
             <span aria-hidden>/</span>
-            <a className="hover:text-console-accent" href="https://github.com/CptPlastic/signalforge-node/blob/main/FAIR-SOURCE.md" target="_blank" rel="noreferrer">Fair Source</a>
+            <a className="hover:text-console-accent" href={footerSourceLinks.fairSource} target="_blank" rel="noopener noreferrer">Fair Source</a>
           </span>
         </div>
         <div className="text-[10px] tabular-nums break-all">{footerDeploymentLabel}</div>

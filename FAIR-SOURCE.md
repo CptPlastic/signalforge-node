@@ -23,4 +23,13 @@ The source stays available. The network stays trust-aware. The official SignalFo
 
 If you run a public or shared node, keep a visible source/license link available to users of that service. If you modify the node, publish the corresponding source for the version you operate.
 
+The web console footer includes source, license, and Fair Source links. Forks and modified builds should set these Vite build variables so users are sent to the corresponding source for that deployed service:
+
+```text
+VITE_SIGNALFORGE_SOURCE_REPO_URL=https://github.com/your-org/your-node
+VITE_SIGNALFORGE_SOURCE_URL=https://github.com/your-org/your-node/tree/<deployed-ref>
+VITE_SIGNALFORGE_LICENSE_URL=https://github.com/your-org/your-node/blob/<deployed-ref>/LICENSE
+VITE_SIGNALFORGE_FAIR_SOURCE_URL=https://github.com/your-org/your-node/blob/<deployed-ref>/FAIR-SOURCE.md
+```
+
 Operators who want a separate commercial relationship, official status, or promoted listing should contact the maintainers before presenting themselves as part of the official SignalForge network.
