@@ -32,11 +32,13 @@ The following changes require extra maintainer review:
 - Changes that expose ports, secrets, logs, call audio, or private metadata.
 - License, governance, security policy, or contributor terms.
 
-## License And Fair Source Intent
+## License And Fair Source Alignment
 
 SignalForge Node is licensed AGPL-3.0-or-later. The practical intent is simple: people can run and improve community nodes, but modified network services should give their users the corresponding source code.
 
-AGPL does not make every commercial use impossible, but it does prevent closed proprietary forks from being run as network services without source availability. Operators who want a separate commercial arrangement should contact the maintainers first.
+SignalForge is fair-source aligned in spirit, but it is not licensed under a proprietary Fair Source License. The public node stack stays open source under AGPLv3-or-later. See [FAIR-SOURCE.md](FAIR-SOURCE.md) for the project posture.
+
+AGPL does not make every commercial use impossible, but it does prevent closed proprietary forks from being run as network services without source availability. Operators who want a separate commercial arrangement, promoted listing, verified status, or official status should contact the maintainers first.
 
 ## Official And Verified Status
 

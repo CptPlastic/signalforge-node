@@ -6,9 +6,11 @@ This repo is the clean public mirror of the node stack: Go API server, React web
 
 ## License
 
-SignalForge Node is licensed under the GNU Affero General Public License v3.0 or later. See [LICENSE](LICENSE) and [GOVERNANCE.md](GOVERNANCE.md).
+SignalForge Node is licensed under the GNU Affero General Public License v3.0 or later. See [LICENSE](LICENSE), [GOVERNANCE.md](GOVERNANCE.md), and [FAIR-SOURCE.md](FAIR-SOURCE.md).
 
 The intent is community infrastructure, not closed resale. If you run a modified network service from this code, AGPL requires you to offer the corresponding source code to users of that service.
+
+SignalForge is fair-source aligned in spirit, but the code license remains AGPLv3-or-later so the public node stack stays open source.
 
 ## What Is Included
 
@@ -114,7 +116,7 @@ SignalForge is open source and peer-to-peer first, but trust is explicit:
 
 ## Contributions
 
-Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and [GOVERNANCE.md](GOVERNANCE.md) before submitting changes. Security issues should be reported privately through [SECURITY.md](SECURITY.md).
+Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), [GOVERNANCE.md](GOVERNANCE.md), and [FAIR-SOURCE.md](FAIR-SOURCE.md) before submitting changes. Security issues should be reported privately through [SECURITY.md](SECURITY.md).
 
 ## Upstream
 
