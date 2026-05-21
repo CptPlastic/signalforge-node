@@ -8,6 +8,20 @@ SignalHub is the planned peer-to-peer pub/sub federation layer for P7 Scanner hu
 - SignalForge is the public downstream surface for docs, releases, operator onboarding, and verified hub discovery.
 - Downstream SignalForge builds should be generated from the root P7 Scanner codebase, not maintained as a separate fork of the core logic.
 
+## Image And Trust Model
+
+All normal deployments should pull from one official runtime image source, currently `ghcr.io/signalforge-org`. Main hubs, peer hubs, Cloudron-style installs, Portainer stacks, and plain Docker Compose deployments should differ by environment variables, not by image namespace or fork.
+
+Hub trust is an application-level concept, not a deployment-source concept. A hub can run the official images and still be only a community hub until it presents trust metadata accepted by the local hub or directory. Recommended trust levels:
+
+- `community`: default for any self-hosted hub.
+- `verified`: hub identity is known by a trusted directory or accepted manually by an admin.
+- `official`: hub identity is signed by the root/super hub authority.
+
+The root/super hub should issue signed hub certificates or invite credentials. Federation handshakes can exchange that certificate metadata, and the UI can show whether a peer is community, verified, or official. This keeps the community open while still making official hubs easy to recognize.
+
+`https://p7scan.projectseven.us/` is the first official hub. It bootstraps as `official` with issuer `signalforge-root`; later certificate signing can replace the bootstrap certificate string with a real signed certificate without changing the trust levels exposed to operators.
+
 ## MVP Goals
 
 1. Let each P7 Scanner instance identify itself as a hub.
@@ -102,6 +116,9 @@ Hub identity:
 - Contact email or handle
 - Public key
 - Directory validation status
+- Trust level: community, verified, or official
+- Certificate issuer hub ID
+- Certificate signature and expiry
 
 Peer subscription:
 

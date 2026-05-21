@@ -1,12 +1,10 @@
 services:
   server:
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-cptplastic}/p7-scanner-server:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/p7-scanner-server:${IMAGE_TAG:-latest}
     restart: unless-stopped
-    env_file:
-      - .env.production
     environment:
       LISTEN_ADDR: :8080
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL:-}
       APP_ENV: ${APP_ENV}
       STACK_ID: ${STACK_ID:-prod-compose}
       DEPLOY_TAG: ${DEPLOY_TAG:-${IMAGE_TAG}}
@@ -16,6 +14,16 @@ services:
       MAILJET_SECRET_KEY: ${MAILJET_SECRET_KEY}
       MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-P7 Scanner}
+      HUB_NAME: ${HUB_NAME:-P7 Scanner Hub}
+      HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-${APP_BASE_URL}}
+      HUB_REGION: ${HUB_REGION:-}
+      HUB_CONTACT: ${HUB_CONTACT:-}
+      HUB_FEDERATION_ENABLED: ${HUB_FEDERATION_ENABLED:-false}
+      HUB_TRUST_LEVEL: ${HUB_TRUST_LEVEL:-community}
+      HUB_TRUST_ISSUER: ${HUB_TRUST_ISSUER:-}
+      HUB_TRUST_CERTIFICATE: ${HUB_TRUST_CERTIFICATE:-}
+      HUB_TRUST_EXPIRES_AT: ${HUB_TRUST_EXPIRES_AT:-0}
+      UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
     ports:
       - "${SERVER_PORT}:8080"
     healthcheck:
@@ -25,7 +33,7 @@ services:
       retries: 5
 
   client:
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-cptplastic}/p7-scanner-client:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/p7-scanner-client:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "${CLIENT_PORT}:8080"
@@ -34,7 +42,7 @@ services:
         condition: service_healthy
 
   mock-call-sender:
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-cptplastic}/p7-scanner-mock-call-sender:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/p7-scanner-mock-call-sender:${IMAGE_TAG:-latest}
     restart: unless-stopped
     profiles: ["mock"]
     environment:

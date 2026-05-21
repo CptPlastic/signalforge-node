@@ -5,6 +5,7 @@ import {
   type AuthUser,
   type AuditLogEntry,
   type Call,
+  type FederationStatus,
   type HubIdentity,
   type HubInvite,
   type HubPeer,
@@ -13,19 +14,32 @@ import {
   type SourceAPIKey,
   type TalkgroupInfo,
   type TalkgroupSetting,
-  type UpdateCheckResponse,
   type UserRecord,
-  type VersionInfo,
 } from './lib/api'
+import { AppHeader } from './components/AppHeader'
+import { AppNav } from './components/AppNav'
+import { ActiveView, AuthenticatedView } from './components/ActiveView'
 import { CallRow } from './components/calls/CallRow'
-import { deploymentFooterLabel, deploymentHeaderLabel, deploymentTitle, fmtDateTime, fmtTime, getErrorMessage } from './lib/format'
+import { RadioSetsView } from './components/radio-sets/RadioSetsView'
+import { SignalForgeLogo } from './components/SignalForgeLogo'
+import { useOverallStatus } from './hooks/useOverallStatus'
+import { useUpdateCheck } from './hooks/useUpdateCheck'
+import { buildFilteredCalls, formatCallLogCount, formatSavedCallCount } from './lib/callFilters'
+import { fmtDateTime, fmtTime, getErrorMessage } from './lib/format'
+import { maybePlayActiveRadioSetCall } from './lib/radioSetPlayback'
+import {
+  getSourceRuntimeStatus,
+  smoothSourceStatusMap,
+  type SmoothedSourceStatus,
+} from './lib/sourceStatus'
 import { WebSocketClient } from './lib/ws'
+import type { AppView } from './types/app'
+import { updateUserRoleDraft, updateUserStatusDraft } from './lib/userDrafts'
 
 type WsCallEvent = { type: 'call'; call: Call; sourceId?: string }
 type WsSourceDeletedEvent = { type: 'source_deleted'; sourceId: string }
 type WsHeartbeatEvent = { type: 'heartbeat'; ts: number }
 type WsEvent = WsCallEvent | WsSourceDeletedEvent | WsHeartbeatEvent
-type AppView = 'monitor' | 'radio-sets' | 'integrations' | 'talkgroups' | 'hub' | 'account'
 
 type HubIdentityDraft = Pick<HubIdentity, 'name' | 'publicUrl' | 'region' | 'contact' | 'federationEnabled'>
 
@@ -34,52 +48,21 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
-const SOURCE_STALE_AFTER_SEC = 12
-const SOURCE_STATUS_MIN_DWELL_SEC = 6
-const SOURCE_OFFLINE_GRACE_SEC = 10
-const WS_RECONNECT_GRACE_SEC = 8
-const API_HEALTH_GRACE_SEC = 8
 const SESSION_WARNING_WINDOW_SEC = 15 * 60
 const CALL_PAGE_SIZE = 50
-const DEFAULT_SOURCE_REPO_URL = 'https://github.com/CptPlastic/signalforge-node'
-
-const sourceRepoURL = (import.meta.env.VITE_SIGNALFORGE_SOURCE_REPO_URL?.trim() || DEFAULT_SOURCE_REPO_URL).replace(/\/+$/, '')
-const configuredSourceURL = import.meta.env.VITE_SIGNALFORGE_SOURCE_URL?.trim()
-const configuredLicenseURL = import.meta.env.VITE_SIGNALFORGE_LICENSE_URL?.trim()
-const configuredFairSourceURL = import.meta.env.VITE_SIGNALFORGE_FAIR_SOURCE_URL?.trim()
-
-type SourceRuntimeStatus = {
-  state: 'live' | 'offline' | 'disabled' | 'error'
-  dotClass: string
-  title: string
-  label: string
-}
-
-type SmoothedSourceStatus = SourceRuntimeStatus & {
-  changedAtUnix: number
-}
 
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text).catch(console.error)
 }
 
-function sourceReference(info: VersionInfo | null): string {
-  const commit = info?.commit?.trim()
-  return commit && commit !== 'unknown' ? commit : 'main'
-}
-
-function sourceLinks(info: VersionInfo | null) {
-  const ref = sourceReference(info)
-  return {
-    source: configuredSourceURL || `${sourceRepoURL}/tree/${ref}`,
-    license: configuredLicenseURL || `${sourceRepoURL}/blob/${ref}/LICENSE`,
-    fairSource: configuredFairSourceURL || `${sourceRepoURL}/blob/${ref}/FAIR-SOURCE.md`,
-  }
-}
-
 function redactKey(key: string): string {
   if (key.length <= 8) return key
   return '*'.repeat(key.length - 4) + key.slice(-4)
+}
+
+function activeHubInvites(invites: HubInvite[]): HubInvite[] {
+  const nowUnix = Math.floor(Date.now() / 1000)
+  return invites.filter((invite) => invite.revokedAt === 0 && invite.usedAt === 0 && (!invite.expiresAt || invite.expiresAt > nowUnix))
 }
 
 function upsertTalkgroupInfo(talkgroups: TalkgroupInfo[], call: Call): TalkgroupInfo[] {
@@ -108,84 +91,6 @@ function removeTalkgroupFromRadioSets(sets: RadioSet[], talkgroup: number): Radi
 function appendSortedGroup(groups: string[], group: string): string[] {
   if (groups.includes(group)) return groups
   return [...groups, group].sort((a, b) => a.localeCompare(b))
-}
-
-function SignalForgeLogo({ className = '' }: Readonly<{ className?: string }>) {
-  return (
-    <svg className={className} viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <path d="M60,15L60,88" stroke="currentColor" strokeWidth="2.5" />
-      <path d="M60,36L38,55" stroke="currentColor" strokeWidth="2" />
-      <path d="M60,36L82,55" stroke="currentColor" strokeWidth="2" />
-      <path d="M60,55L22,80" stroke="currentColor" strokeWidth="2" />
-      <path d="M60,55L98,80" stroke="currentColor" strokeWidth="2" />
-      <path d="M22,80L98,80" stroke="currentColor" strokeWidth="1.5" />
-      <g transform="translate(0,8)"><path d="M46,28C55.333,18.667 64.667,18.667 74,28" stroke="currentColor" strokeWidth="2" /></g>
-      <g transform="translate(0,2)"><path d="M46,28C55.333,18.667 64.667,18.667 74,28" stroke="currentColor" strokeWidth="2" /></g>
-      <g transform="translate(0,-4)"><path d="M46,28C55.333,18.667 64.667,18.667 74,28" stroke="currentColor" strokeWidth="2" /></g>
-    </svg>
-  )
-}
-
-function getSourceRuntimeStatus(source: IngestionSource, nowUnix: number): SourceRuntimeStatus {
-  if (!source.enabled) {
-    return {
-      state: 'disabled',
-      dotClass: 'bg-console-muted',
-      title: 'disabled',
-      label: 'DISABLED',
-    }
-  }
-
-  if (source.lastSeenUnix <= 0) {
-    if (source.errorCount > 0) {
-      return {
-        state: 'error',
-        dotClass: 'bg-console-error',
-        title: `${source.errorCount} errors`,
-        label: 'ERROR',
-      }
-    }
-    return {
-      state: 'offline',
-      dotClass: 'bg-console-amber',
-      title: 'degraded (no calls received yet)',
-      label: 'DEGRADED',
-    }
-  }
-
-  const ageSec = nowUnix - source.lastSeenUnix
-  if (ageSec > SOURCE_STALE_AFTER_SEC) {
-    if (source.errorCount > 0) {
-      return {
-        state: 'error',
-        dotClass: 'bg-console-error',
-        title: `offline — ${source.errorCount} errors`,
-        label: 'ERROR',
-      }
-    }
-    return {
-      state: 'offline',
-      dotClass: 'bg-console-amber',
-      title: `degraded (${ageSec}s since last call)`,
-      label: 'DEGRADED',
-    }
-  }
-
-  if (source.errorCount > 0) {
-    return {
-      state: 'live',
-      dotClass: 'bg-console-accent',
-      title: `live — ${source.errorCount} past errors`,
-      label: 'LIVE',
-    }
-  }
-
-  return {
-    state: 'live',
-    dotClass: 'bg-console-accent',
-    title: 'live',
-    label: 'LIVE',
-  }
 }
 
 function App() {
@@ -224,8 +129,6 @@ function App() {
   const [sourceStatusMap, setSourceStatusMap] = useState<Record<string, SmoothedSourceStatus>>({})
   const [editingSourceLabelID, setEditingSourceLabelID] = useState<string | null>(null)
   const [dirtySourceLabelMap, setDirtySourceLabelMap] = useState<Record<string, true>>({})
-  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
-  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResponse | null>(null)
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isStandalone, setIsStandalone] = useState(() => globalThis.matchMedia('(display-mode: standalone)').matches)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
@@ -242,6 +145,7 @@ function App() {
   const [hubInvites, setHubInvites] = useState<HubInvite[]>([])
   const [hubInviteActionID, setHubInviteActionID] = useState<string | null>(null)
   const [hubPeers, setHubPeers] = useState<HubPeer[]>([])
+  const [federationStatus, setFederationStatus] = useState<FederationStatus | null>(null)
   const [hubPeerActionID, setHubPeerActionID] = useState<string | null>(null)
   const [peerRemoteURL, setPeerRemoteURL] = useState('')
   const [peerInviteToken, setPeerInviteToken] = useState('')
@@ -269,6 +173,21 @@ function App() {
   const [rsError, setRsError] = useState('')
   const [rsLoading, setRsLoading] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  const {
+    updateInfo,
+    refreshUpdateCheck,
+    headerVersionLabel,
+    headerVersionTitle,
+    footerDeploymentLabel,
+    currentDeploymentTag,
+    latestUpdateTag,
+    hasUpdateAvailable,
+    updateTitle,
+    updateStatusLabel,
+    updateStatusClass,
+  } = useUpdateCheck()
+  const isAdmin = authUser?.role === 'admin'
 
   const refreshSources = () =>
     api.ingestionSources().then((sources) => {
@@ -405,7 +324,7 @@ function App() {
       return Promise.resolve()
     }
     return api.hubInvites()
-      .then(setHubInvites)
+      .then((invites) => setHubInvites(activeHubInvites(invites)))
       .catch((err) => {
         console.error(err)
         setHubError(getErrorMessage(err, 'Could not load hub invites'))
@@ -425,12 +344,18 @@ function App() {
       })
   }
 
-  const refreshUpdateCheck = () =>
-    api.updateCheck()
-      .then(setUpdateInfo)
+  const refreshFederationStatus = () => {
+    if (authUser?.role !== 'admin') {
+      setFederationStatus(null)
+      return Promise.resolve()
+    }
+    return api.federationStatus()
+      .then(setFederationStatus)
       .catch((err) => {
         console.error(err)
+        setHubError(getErrorMessage(err, 'Could not load federation status'))
       })
+  }
 
   const refreshAuditLogs = (limit = 100) => {
   if (authUser?.role !== 'admin') {
@@ -464,14 +389,6 @@ function App() {
       })
       .catch(console.error)
 
-    api.version()
-      .then((info) => setVersionInfo(info))
-      .catch(() => {
-        // keep header usable even if version endpoint is briefly unavailable
-      })
-
-    refreshUpdateCheck()
-
   refreshAuthSession()
   }, [])
 
@@ -482,6 +399,7 @@ function App() {
       setHubIdentity(null)
       setHubInvites([])
       setHubPeers([])
+      setFederationStatus(null)
       return
     }
     api.radioSets().then(setRadioSets).catch(console.error)
@@ -489,6 +407,7 @@ function App() {
     refreshHubIdentity()
     refreshHubInvites()
     refreshHubPeers()
+    refreshFederationStatus()
   }, [authUser])
 
   useEffect(() => {
@@ -621,43 +540,7 @@ function App() {
   }
 
   useEffect(() => {
-    setSourceStatusMap((prev) => {
-      const next: Record<string, SmoothedSourceStatus> = {}
-
-      Object.values(sourcesMap).forEach((source) => {
-        const rawStatus = getSourceRuntimeStatus(source, nowUnix)
-        const existing = prev[source.id]
-
-        if (!existing) {
-          next[source.id] = { ...rawStatus, changedAtUnix: nowUnix }
-          return
-        }
-
-        if (existing.state === rawStatus.state) {
-          next[source.id] = existing
-          return
-        }
-
-        const ageSec = nowUnix - source.lastSeenUnix
-        const isLiveOfflineToggle =
-          (existing.state === 'live' && rawStatus.state === 'offline') ||
-          (existing.state === 'offline' && rawStatus.state === 'live')
-
-        // Prevent rapid live/offline flaps around stale thresholds and reconnect churn.
-        if (isLiveOfflineToggle) {
-          const withinMinDwell = (nowUnix - existing.changedAtUnix) < SOURCE_STATUS_MIN_DWELL_SEC
-          const withinOfflineGrace = rawStatus.state === 'offline' && ageSec <= (SOURCE_STALE_AFTER_SEC + SOURCE_OFFLINE_GRACE_SEC)
-          if (withinMinDwell || withinOfflineGrace) {
-            next[source.id] = existing
-            return
-          }
-        }
-
-        next[source.id] = { ...rawStatus, changedAtUnix: nowUnix }
-      })
-
-      return next
-    })
+    setSourceStatusMap((prev) => smoothSourceStatusMap(prev, sourcesMap, nowUnix))
   }, [nowUnix, sourcesMap])
 
   const ws = useMemo(
@@ -682,22 +565,12 @@ function App() {
               setAllGroups((prev) => appendSortedGroup(prev, msg.call.talkgroupGroup))
             }
 
-            setRsPlayingID((activeID) => {
-              if (activeID) {
-                setRadioSets((sets) => {
-                  const activeSet = sets.find((rs) => rs.id === activeID)
-                  if (activeSet?.talkgroups.includes(msg.call.talkgroup)) {
-                    setPlayingId((currentPlaying) => {
-                      if (!currentPlaying) {
-                        playCall(msg.call)
-                      }
-                      return currentPlaying
-                    })
-                  }
-                  return sets
-                })
-              }
-              return activeID
+            maybePlayActiveRadioSetCall({
+              call: msg.call,
+              playCall,
+              setPlayingId,
+              setRadioSets,
+              setRsPlayingID,
             })
 
             if (msg.sourceId) {
@@ -841,6 +714,7 @@ function App() {
     try {
       const saved = await api.updateIngestionSource(source.id, { isShared })
       setSourcesMap((prev) => ({ ...prev, [source.id]: saved }))
+      refreshFederationStatus()
     } catch (err) {
       console.error(err)
       setSourcesMap((prev) => ({ ...prev, [source.id]: source }))
@@ -869,6 +743,7 @@ function App() {
       }
       const saved = await api.updateIngestionSource(source.id, payload)
       setSourcesMap((prev) => ({ ...prev, [source.id]: saved }))
+      refreshFederationStatus()
       setDirtySourceLabelMap((prev) => {
         if (!prev[source.id]) {
           return prev
@@ -922,7 +797,7 @@ function App() {
     setLoadingKeysFor(sourceId)
     try {
       const keys = await api.listSourceKeys(sourceId)
-      setSourceKeys((prev) => ({ ...prev, [sourceId]: keys }))
+      setSourceKeys((prev) => ({ ...prev, [sourceId]: keys.filter((key) => !key.revokedAt) }))
     } catch (err) {
       console.error(err)
     } finally {
@@ -993,6 +868,7 @@ function App() {
         ...prev,
         [sourceId]: (prev[sourceId] || []).filter((k) => k.id !== keyId),
       }))
+      await loadSourceKeys(sourceId)
     } catch (err) {
       console.error(err)
     }
@@ -1002,11 +878,12 @@ function App() {
     if (!requireSourceWriteAccess('Sign in to manage source keys')) {
       return
     }
-    setExpandedSourceID((current) => (current === sourceId ? null : sourceId))
-    if (!sourceKeys[sourceId]) {
+    const isOpen = expandedSourceID === sourceId
+    setExpandedSourceID(isOpen ? null : sourceId)
+    if (!isOpen) {
       await loadSourceKeys(sourceId)
     }
-    if (authUser?.role === 'admin' && !sourceShares[sourceId]) {
+    if (authUser?.role === 'admin' && !isOpen && !sourceShares[sourceId]) {
       await loadSourceShares(sourceId)
     }
   }
@@ -1142,51 +1019,18 @@ function App() {
 
   const [allGroups, setAllGroups] = useState<string[]>([])
 
-  const filteredCalls = useMemo(() => {
-    // When a search or favorites filter is active, use server results (full DB).
-    // Otherwise use the in-memory live stream.
-    let list = serverResults !== null ? [...serverResults] : [...calls]
-    const q = search.trim().toLowerCase()
-    if (q && serverResults === null) {
-      // Fallback client-side filter only used while the server response is loading
-      list = list.filter((call) =>
-        [
-          String(call.talkgroup),
-          call.talkgroupLabel,
-          call.talkgroupGroup,
-          call.systemLabel,
-          call.talkgroupTag,
-        ]
-          .join(' ')
-          .toLowerCase()
-          .includes(q),
-      )
-    }
-
-    if (groupFilter && serverResults === null) {
-      const g = groupFilter.toLowerCase()
-      list = list.filter((call) => call.talkgroupGroup.toLowerCase().includes(g))
-    }
-
-    if (hideMuted) {
-      list = list.filter((call) => !settingsMap[call.talkgroup]?.muted)
-    }
-
-    // Only apply client-side favorites filter when NOT using server results
-    // (when using server results, the server already filtered by talkgroup IDs)
-    if (showFavoritesOnly && serverResults === null) {
-      list = list.filter((call) => settingsMap[call.talkgroup]?.favorite)
-    }
-
-    list.sort((a, b) => {
-      const direction = sortOrder === 'asc' ? 1 : -1
-      if (sortBy === 'datetime') return (a.dateTime - b.dateTime) * direction
-      if (sortBy === 'duration') return (a.duration - b.duration) * direction
-      if (sortBy === 'frequency') return (a.frequency - b.frequency) * direction
-      return (a.talkgroup - b.talkgroup) * direction
-    })
-    return list
-  }, [calls, serverResults, hideMuted, search, groupFilter, settingsMap, showFavoritesOnly, sortBy, sortOrder])
+  const filteredCalls = useMemo(() => buildFilteredCalls({
+    calls,
+    groupFilter,
+    hideMuted,
+    search,
+    serverResults,
+    settingsMap,
+    showFavoritesOnly,
+    sortBy,
+    sortOrder,
+  }), [calls, serverResults, hideMuted, search, groupFilter, settingsMap, showFavoritesOnly, sortBy, sortOrder])
+  const callLogCountLabel = formatCallLogCount(serverLoading, serverResults, filteredCalls.length, calls.length)
 
   useEffect(() => {
     setCallPage(0)
@@ -1301,7 +1145,7 @@ function App() {
     setHubError('')
     try {
       const invite = await api.revokeHubInvite(id)
-      setHubInvites((prev) => prev.map((row) => row.id === id ? invite : row))
+      setHubInvites((prev) => activeHubInvites(prev.map((row) => row.id === id ? invite : row)))
       setHubMessage('Invite revoked')
     } catch (err) {
       console.error(err)
@@ -1320,6 +1164,7 @@ function App() {
       const peer = await api.connectHubPeer(peerRemoteURL, peerInviteToken)
       setHubPeers((prev) => [peer, ...prev.filter((row) => row.hubId !== peer.hubId)])
       setPeerInviteToken('')
+      refreshFederationStatus()
       setHubMessage('Peer hub connected')
     } catch (err) {
       console.error(err)
@@ -1337,10 +1182,29 @@ function App() {
     try {
       const peer = await api.disableHubPeer(id)
       setHubPeers((prev) => prev.map((row) => row.id === id ? peer : row))
+      refreshFederationStatus()
       setHubMessage('Peer disabled')
     } catch (err) {
       console.error(err)
       setHubError(getErrorMessage(err, 'Could not disable peer'))
+    } finally {
+      setHubPeerActionID(null)
+    }
+  }
+
+  async function enableHubPeer(id: string) {
+    if (authUser?.role !== 'admin') return
+    setHubPeerActionID(id)
+    setHubMessage('')
+    setHubError('')
+    try {
+      const peer = await api.enableHubPeer(id)
+      setHubPeers((prev) => prev.map((row) => row.id === id ? peer : row))
+      refreshFederationStatus()
+      setHubMessage('Peer enabled')
+    } catch (err) {
+      console.error(err)
+      setHubError(getErrorMessage(err, 'Could not enable peer'))
     } finally {
       setHubPeerActionID(null)
     }
@@ -1357,7 +1221,7 @@ function App() {
       a.download = call?.audioName || `call-${id}`
       document.body.appendChild(a)
       a.click()
-      document.body.removeChild(a)
+      a.remove()
       await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 500))
     }
   }
@@ -1386,7 +1250,7 @@ function App() {
     a.download = `calls-${new Date().toISOString().slice(0, 10)}.csv`
     document.body.appendChild(a)
     a.click()
-    document.body.removeChild(a)
+    a.remove()
     URL.revokeObjectURL(url)
   }
 
@@ -1486,198 +1350,35 @@ function App() {
      return `curl -X POST "${base}/api/call-upload" \\\n  -F "key=your-api-key" \\\n  -F "system=1" -F "systemLabel=My System" \\\n  -F "talkgroup=1001" -F "talkgroupLabel=Dispatch" \\\n  -F "talkgroupGroup=FIRE" -F "talkgroupTag=PRIMARY" \\\n  -F "dateTime=$(date +%s)" -F "frequency=460325000" \\\n  -F "duration=3" -F "audioName=call.mp3" \\\n  -F "audioType=audio/mpeg" \\\n  -F "audio=@./call.mp3;type=audio/mpeg"`
   }, [])
 
-  const overallStatus = useMemo(() => {
-    const sources = Object.values(sourcesMap)
-    const enabledSources = sources.filter((source) => source.enabled)
-    const sourceStates = new Set(enabledSources.map((source) => (sourceStatusMap[source.id] ?? getSourceRuntimeStatus(source, nowUnix)).state))
-
-    const wsWithinGraceWindow = wsLastDisconnectUnix !== null && (nowUnix - wsLastDisconnectUnix) <= WS_RECONNECT_GRACE_SEC
-    const apiWithinGraceWindow = apiLastHealthyUnix !== null && (nowUnix - apiLastHealthyUnix) <= API_HEALTH_GRACE_SEC
-
-    if (!apiHealthy && apiWithinGraceWindow) {
-      return {
-        dotClass: 'bg-console-muted',
-        label: 'RECONNECTING',
-        title: 'api reconnecting',
-      }
-    }
-
-    if (!apiHealthy) {
-      return {
-        dotClass: 'bg-console-error',
-        label: 'OFFLINE',
-        title: 'api unavailable',
-      }
-    }
-
-    // Guest sessions cannot open /ws by design, so websocket state should not render as an outage.
-    if (!authUser) {
-      return {
-        dotClass: 'bg-console-accent',
-        label: 'OPERATIONAL',
-        title: 'api healthy (sign in required for websocket/live monitor)',
-      }
-    }
-
-    if (!connected && wsWithinGraceWindow) {
-      return {
-        dotClass: 'bg-console-muted',
-        label: 'RECONNECTING',
-        title: 'websocket reconnecting',
-      }
-    }
-
-    if (!connected) {
-      return {
-        dotClass: 'bg-console-muted',
-        label: 'RECONNECTING',
-        title: 'websocket reconnecting',
-      }
-    }
-
-    if (enabledSources.length === 0) {
-      return {
-        dotClass: 'bg-console-muted',
-        label: 'IDLE',
-        title: 'no enabled sources',
-      }
-    }
-
-    if (sourceStates.has('error')) {
-      return {
-        dotClass: 'bg-console-error',
-        label: 'DEGRADED',
-        title: 'one or more enabled sources report errors',
-      }
-    }
-
-    if (sourceStates.has('offline')) {
-      return {
-        dotClass: 'bg-console-amber',
-        label: 'DEGRADED',
-        title: 'one or more enabled sources are inactive',
-      }
-    }
-
-    return {
-      dotClass: 'bg-console-accent',
-      label: 'OPERATIONAL',
-      title: 'api, websocket, and enabled sources are healthy',
-    }
-  }, [apiHealthy, apiLastHealthyUnix, authUser, connected, nowUnix, sourceStatusMap, sourcesMap, wsLastDisconnectUnix])
-
-  const headerVersionLabel = useMemo(() => {
-    return deploymentHeaderLabel(versionInfo)
-  }, [versionInfo])
-
-  const headerVersionTitle = useMemo(() => {
-    return deploymentTitle(versionInfo)
-  }, [versionInfo])
-
-  const footerDeploymentLabel = useMemo(() => {
-    return deploymentFooterLabel(versionInfo)
-  }, [versionInfo])
-
-  const footerSourceLinks = useMemo(() => {
-    return sourceLinks(versionInfo)
-  }, [versionInfo])
-
-  const updateTitle = useMemo(() => {
-    if (!updateInfo?.latest) return updateInfo?.error || 'update check unavailable'
-    const latest = updateInfo.latest
-    return [
-      `latest tag: ${latest.imageTag || latest.shortCommit || 'unknown'}`,
-      latest.commit ? `latest commit: ${latest.commit}` : '',
-      latest.publishedAt ? `published: ${latest.publishedAt}` : '',
-      `current tag: ${versionInfo?.deployTag || 'unknown'}`,
-    ].filter(Boolean).join('\n')
-  }, [updateInfo, versionInfo])
-
-  let updateStatusLabel = 'current'
-  if (updateInfo?.error) updateStatusLabel = 'check failed'
-  if (updateInfo?.updateAvailable) updateStatusLabel = 'update available'
-  const updateStatusClass = updateInfo?.updateAvailable ? 'text-console-amber' : 'text-console-accent'
-
-  let pwaInstallControl: JSX.Element | null = null
-  if (installPrompt && !isStandalone) {
-    pwaInstallControl = (
-      <button
-        onClick={installApp}
-        className="px-2 py-1 border border-console-accent text-console-accent rounded uppercase tracking-wider hover:bg-console-accent hover:bg-opacity-10"
-        title="Install P7 Scanner as an app"
-      >
-        INSTALL APP
-      </button>
-    )
-  } else if (isStandalone) {
-    pwaInstallControl = <span className="console-label" title="running as an installed app">APP MODE</span>
-  }
+  const overallStatus = useOverallStatus({
+    apiHealthy,
+    apiLastHealthyUnix,
+    authUser,
+    connected,
+    nowUnix,
+    sourceStatusMap,
+    sourcesMap,
+    wsLastDisconnectUnix,
+  })
 
   return (
     <div className="min-h-screen bg-console-bg text-console-text font-mono px-3 py-3 sm:px-6 sm:py-5 flex flex-col gap-3 sm:gap-4 overflow-x-hidden">
-      <header className="console-panel flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3 min-w-0">
-          <SignalForgeLogo className="h-10 w-10 flex-shrink-0 text-white drop-shadow-[0_0_10px_rgba(0,255,65,0.18)]" />
-          <div className="min-w-0">
-            <div className="text-lg font-bold tracking-widest truncate">P7 // SCAN</div>
-            <div className="console-label text-[9px]">SIGNALFORGE NODE CONSOLE</div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-4 text-xs flex-wrap min-w-0">
-          <span className="console-label" title={headerVersionTitle}>{headerVersionLabel}</span>
-          {updateInfo?.updateAvailable && (
-            <button
-              onClick={() => setActiveView('hub')}
-              className="px-2 py-1 border border-console-amber text-console-amber rounded uppercase tracking-wider hover:bg-console-amber hover:bg-opacity-10"
-              title={updateTitle}
-            >
-              UPDATE AVAILABLE
-            </button>
-          )}
-          {pwaInstallControl}
-          <span className="flex items-center gap-2">
-            <span
-              className={`inline-block h-2.5 w-2.5 rounded-full ${overallStatus.dotClass}`}
-              aria-hidden
-              title={overallStatus.title}
-            />
-            {overallStatus.label}
-          </span>
-          <span 
-            className={`flex items-center gap-1 px-2 py-1 border rounded min-w-0 max-w-full ${authUser ? 'border-console-accent text-console-accent' : 'border-console-border text-console-muted'}`}
-            title={authUser ? `Logged in as ${authUser.email}` : 'Not logged in'}
-          >
-            <span>{authUser ? '[●]' : '[○]'}</span>
-            <span className="text-[10px] truncate">{authUser ? authUser.email : 'GUEST'}</span>
-          </span>
-        </div>
-      </header>
+      <AppHeader
+        authUser={authUser}
+        headerVersionLabel={headerVersionLabel}
+        headerVersionTitle={headerVersionTitle}
+        hasUpdateAvailable={hasUpdateAvailable}
+        hubIdentity={hubIdentity}
+        isStandalone={isStandalone}
+        onInstallApp={installApp}
+        onShowHub={() => setActiveView('hub')}
+        overallStatus={overallStatus}
+        showInstallButton={Boolean(installPrompt && !isStandalone)}
+        updateError={updateInfo?.error}
+        updateTitle={updateTitle}
+      />
 
-      <div className="console-panel grid grid-cols-2 gap-2 text-xs sm:flex sm:items-center sm:flex-wrap">
-        {(['monitor', 'radio-sets', 'integrations', 'talkgroups', 'hub', 'account'] as AppView[]).map((view) => {
-          const viewLabel: Record<AppView, string> = { monitor: 'CALL LOG', 'radio-sets': 'RADIO SETS', integrations: 'INTEGRATIONS', talkgroups: 'TALKGROUPS', hub: 'HUB', account: 'ACCOUNT' }
-          const isAvailable = authUser || view === 'account'
-          const isAccountWhenLoggedOut = view === 'account' && !authUser
-          return (
-            <button
-              key={view}
-              onClick={() => isAvailable && setActiveView(view)}
-              className={`min-w-0 px-2.5 py-1 border rounded uppercase tracking-wider transition-all text-[10px] sm:text-xs ${
-                isAccountWhenLoggedOut
-                  ? 'border-console-accent text-console-accent bg-console-accent bg-opacity-5 account-tab-attn font-bold'
-                  : !isAvailable
-                  ? 'border-console-border text-console-muted opacity-50 cursor-not-allowed'
-                  : activeView === view
-                  ? 'border-console-accent text-console-accent bg-console-surface'
-                  : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
-              }`}
-              disabled={!isAvailable}
-            >
-              {viewLabel[view]}
-            </button>
-          )
-        })}
-      </div>
+      <AppNav activeView={activeView} authUser={authUser} onViewChange={setActiveView} />
 
     {sessionWarning && (
     <div className="console-panel border border-console-error text-console-error text-xs px-3 py-2">
@@ -1724,7 +1425,7 @@ function App() {
     </div>
     )}
 
-      {authUser && activeView === 'monitor' && (
+      <AuthenticatedView activeView={activeView} authUser={authUser} view="monitor">
         <div className="flex flex-col gap-3">
           {/* Sources strip */}
           <div className="console-panel">
@@ -1770,11 +1471,7 @@ function App() {
             <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
               <span className="console-label text-xs">CALL LOG</span>
               <span className="text-xs text-console-muted tabular-nums">
-                {serverLoading
-                  ? 'searching…'
-                  : serverResults !== null
-                    ? `${filteredCalls.length} results`
-                    : `${filteredCalls.length}/${calls.length} calls`}
+                {callLogCountLabel}
                 {totalCallPages > 1 && (
                   <span className="ml-2 text-[10px]">· pg {callPage + 1}/{totalCallPages}</span>
                 )}
@@ -1855,7 +1552,7 @@ function App() {
               <div className="mb-2 flex items-center gap-2 sm:gap-3 flex-wrap px-2 py-1.5 border border-console-accent/50 rounded text-[10px]">
                 <span className="text-console-accent font-semibold">[■] CALL BOX</span>
                 <span className="text-console-muted">
-                  {savedCallIds.size} call{savedCallIds.size !== 1 ? 's' : ''} saved
+                  {formatSavedCallCount(savedCallIds.size)}
                 </span>
                 <div className="hidden sm:block flex-1" />
                 <button
@@ -1972,270 +1669,43 @@ function App() {
             )}
           </main>
         </div>
-      )}
+      </AuthenticatedView>
 
-      {authUser && activeView === 'radio-sets' && (
-        <main className="console-panel flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <span className="console-label text-xs">RADIO SETS</span>
-            <span className="text-xs text-console-muted tabular-nums">{radioSets.length} sets</span>
-          </div>
+      <AuthenticatedView activeView={activeView} authUser={authUser} view="radio-sets">
+        <RadioSetsView
+          authUser={authUser}
+          audioDevices={audioDevices}
+          audioRef={audioRef}
+          distinctTalkgroups={distinctTalkgroups}
+          enumerateAudioDevices={enumerateAudioDevices}
+          radioSets={radioSets}
+          rsCreateTGs={rsCreateTGs}
+          rsEditID={rsEditID}
+          rsEditName={rsEditName}
+          rsEditTGs={rsEditTGs}
+          rsError={rsError}
+          rsLoading={rsLoading}
+          rsName={rsName}
+          rsPlayingID={rsPlayingID}
+          rsTGSearch={rsTGSearch}
+          selectedDeviceId={selectedDeviceId}
+          selectedSetID={selectedSetID}
+          setRadioSets={setRadioSets}
+          setRsCreateTGs={setRsCreateTGs}
+          setRsEditID={setRsEditID}
+          setRsEditName={setRsEditName}
+          setRsEditTGs={setRsEditTGs}
+          setRsError={setRsError}
+          setRsLoading={setRsLoading}
+          setRsName={setRsName}
+          setRsPlayingID={setRsPlayingID}
+          setRsTGSearch={setRsTGSearch}
+          setSelectedDeviceId={setSelectedDeviceId}
+          setSelectedSetID={setSelectedSetID}
+        />
+      </AuthenticatedView>
 
-          {rsError && (
-            <p className="text-xs text-console-error border border-console-error rounded px-2 py-1">{rsError}</p>
-          )}
-
-          <div className="border border-console-border rounded p-3 flex flex-col gap-3">
-            <p className="console-label text-xs">{rsEditID ? 'EDIT RADIO SET' : 'CREATE RADIO SET'}</p>
-            <input
-              value={rsEditID ? rsEditName : rsName}
-              onChange={(e) => rsEditID ? setRsEditName(e.target.value) : setRsName(e.target.value)}
-              placeholder="Set name..."
-              className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
-            />
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <span className="text-[10px] text-console-muted uppercase tracking-wider">Talkgroups</span>
-                <input
-                  value={rsTGSearch}
-                  onChange={(e) => setRsTGSearch(e.target.value)}
-                  placeholder="Filter..."
-                  className="bg-console-bg border border-console-border rounded px-2 py-0.5 text-[10px] outline-none focus:border-console-accent w-full sm:w-32"
-                />
-              </div>
-              <div className="max-h-48 overflow-y-auto border border-console-border rounded divide-y divide-console-border/50">
-                {distinctTalkgroups
-                  .filter((tg) => {
-                    const q = rsTGSearch.trim().toLowerCase()
-                    if (!q) return true
-                    return [String(tg.talkgroup), tg.talkgroupLabel, tg.talkgroupGroup].join(' ').toLowerCase().includes(q)
-                  })
-                  .map((tg) => {
-                    const selectedTGs = rsEditID ? rsEditTGs : rsCreateTGs
-                    const setSelected = rsEditID ? setRsEditTGs : setRsCreateTGs
-                    const checked = selectedTGs.includes(tg.talkgroup)
-                    return (
-                      <label key={tg.talkgroup} className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-console-surface text-xs">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() =>
-                            setSelected((prev) =>
-                              checked ? prev.filter((id) => id !== tg.talkgroup) : [...prev, tg.talkgroup]
-                            )
-                          }
-                        />
-                        <span className="text-console-accent tabular-nums">{tg.talkgroup}</span>
-                        {tg.talkgroupLabel && <span>{tg.talkgroupLabel}</span>}
-                        {tg.talkgroupGroup && <span className="text-console-muted">{tg.talkgroupGroup}</span>}
-                      </label>
-                    )
-                  })}
-                {distinctTalkgroups.length === 0 && (
-                  <p className="text-[10px] text-console-muted px-2 py-2">No talkgroups seen yet</p>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={async () => {
-                  if (rsEditID) {
-                    const name = rsEditName.trim()
-                    if (!name) { setRsError('Name is required'); return }
-                    setRsLoading(true); setRsError('')
-                    try {
-                      const updated = await api.updateRadioSet(rsEditID, name, rsEditTGs)
-                      setRadioSets((prev) => prev.map((rs) => rs.id === rsEditID ? updated : rs))
-                      setRsEditID(null); setRsEditName(''); setRsEditTGs([])
-                    } catch (err) { setRsError('Could not update radio set') }
-                    finally { setRsLoading(false) }
-                  } else {
-                    const name = rsName.trim()
-                    if (!name) { setRsError('Name is required'); return }
-                    setRsLoading(true); setRsError('')
-                    try {
-                      const created = await api.createRadioSet(name, rsCreateTGs)
-                      setRadioSets((prev) => [...prev, created])
-                      setRsName(''); setRsCreateTGs([])
-                    } catch (err) { setRsError('Could not create radio set') }
-                    finally { setRsLoading(false) }
-                  }
-                }}
-                disabled={rsLoading}
-                className="px-3 py-1 border border-console-accent text-console-accent rounded text-[10px] uppercase tracking-widest hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50 flex-1 sm:flex-none"
-              >
-                {rsLoading ? 'SAVING...' : rsEditID ? 'SAVE' : 'CREATE'}
-              </button>
-              {rsEditID && (
-                <button
-                  onClick={() => { setRsEditID(null); setRsEditName(''); setRsEditTGs([]) }}
-                  className="px-3 py-1 border border-console-border text-console-muted rounded text-[10px] uppercase tracking-widest hover:border-console-accent hover:text-console-accent flex-1 sm:flex-none"
-                >
-                  CANCEL
-                </button>
-              )}
-            </div>
-          </div>
-
-          {radioSets.length === 0 ? (
-            <p className="text-xs text-console-muted">No radio sets created yet</p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {radioSets.map((rs) => {
-                const canManageRadioSet = rs.userId === authUser?.id
-                return (
-                <div key={rs.id} className="border border-console-border rounded p-2.5 flex flex-col gap-2">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-col gap-0.5 min-w-0">
-                      <span className="text-xs font-semibold">{rs.name}</span>
-                      <span className="text-[10px] text-console-muted">{rs.talkgroups.length} talkgroup{rs.talkgroups.length !== 1 ? 's' : ''}</span>
-                      {authUser?.role === 'admin' && (
-                        <span className="text-[10px] text-console-muted">
-                          owner {rs.userId || 'unknown'} | sources {(rs.sourceIds && rs.sourceIds.length > 0) ? rs.sourceIds.join(', ') : 'none'}
-                        </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-shrink-0 sm:flex-wrap sm:justify-end">
-                      <button
-                        onClick={() => {
-                          setRsPlayingID((prev) => {
-                            const next = prev === rs.id ? null : rs.id
-                            if (next) enumerateAudioDevices()
-                            return next
-                          })
-                        }}
-                        className={`px-2 py-1 sm:py-0.5 border rounded text-[10px] ${
-                          rsPlayingID === rs.id
-                            ? 'border-console-accent text-console-accent bg-console-accent/10'
-                            : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
-                        }`}
-                      >
-                        {rsPlayingID === rs.id ? '■ SCANNING' : '▶ SCAN'}
-                      </button>
-                      {rsPlayingID === rs.id && audioDevices.length > 0 && (
-                        <select
-                          value={selectedDeviceId}
-                          onChange={(e) => {
-                            const id = e.target.value
-                            setSelectedDeviceId(id)
-                            if (audioRef.current && 'setSinkId' in audioRef.current) {
-                              (audioRef.current as HTMLAudioElement & { setSinkId(id: string): Promise<void> })
-                                .setSinkId(id)
-                                .catch(console.error)
-                            }
-                          }}
-                          className="col-span-2 bg-console-bg border border-console-border rounded px-2 py-1 sm:py-0.5 text-[10px] text-console-muted outline-none focus:border-console-accent min-w-0"
-                          title="Audio output device"
-                        >
-                          <option value="">Output: Default</option>
-                          {audioDevices.map((d) => (
-                            <option key={d.deviceId} value={d.deviceId}>
-                              {d.label || `Device ${d.deviceId.slice(0, 6)}`}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      <button
-                        onClick={async () => {
-                          try {
-                            const updated = await api.generateShareToken(rs.id)
-                            setRadioSets((prev) => prev.map((r) => r.id === rs.id ? updated : r))
-                          } catch { setRsError('Could not generate share link') }
-                        }}
-                        className="px-2 py-1 sm:py-0.5 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent"
-                        disabled={!canManageRadioSet}
-                      >
-                        SHARE
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (!rs.shareToken) return
-                          globalThis.window.open(`/public/player/${rs.shareToken}`, '_blank', 'noopener,noreferrer')
-                        }}
-                        className="px-2 py-1 sm:py-0.5 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent disabled:opacity-30 disabled:cursor-not-allowed"
-                        disabled={!rs.shareToken}
-                        title={rs.shareToken ? 'Open public player' : 'Generate a share link first'}
-                      >
-                        OPEN
-                      </button>
-                      <button
-                        onClick={() => {
-                          setRsEditID(rs.id)
-                          setRsEditName(rs.name)
-                          setRsEditTGs([...rs.talkgroups])
-                        }}
-                        className="px-2 py-1 sm:py-0.5 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent"
-                        disabled={!canManageRadioSet}
-                      >
-                        EDIT
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (!globalThis.window.confirm(`Delete radio set "${rs.name}"?`)) return
-                          try {
-                            await api.deleteRadioSet(rs.id)
-                            setRadioSets((prev) => prev.filter((r) => r.id !== rs.id))
-                            if (selectedSetID === rs.id) setSelectedSetID('')
-                            if (rsPlayingID === rs.id) setRsPlayingID(null)
-                          } catch { setRsError('Could not delete radio set') }
-                        }}
-                        className="px-2 py-1 sm:py-0.5 border border-console-error text-console-error rounded text-[10px] hover:bg-console-error hover:bg-opacity-10"
-                        disabled={!canManageRadioSet}
-                      >
-                        DEL
-                      </button>
-                    </div>
-                  </div>
-
-                  {rs.shareToken && (
-                    <div className="border border-console-border/50 rounded p-2 flex flex-col gap-1.5 bg-console-bg/40">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-[10px] text-console-muted uppercase tracking-wider">Share links</span>
-                        <button
-                          onClick={async () => {
-                            try {
-                              const updated = await api.revokeShareToken(rs.id)
-                              setRadioSets((prev) => prev.map((r) => r.id === rs.id ? updated : r))
-                            } catch { setRsError('Could not revoke share link') }
-                          }}
-                          className="px-1.5 py-0.5 border border-console-error text-console-error rounded text-[10px] hover:bg-console-error hover:bg-opacity-10"
-                          disabled={!canManageRadioSet}
-                        >
-                          REVOKE
-                        </button>
-                      </div>
-                      {[
-                        { label: 'Player', url: `/public/player/${rs.shareToken}` },
-                      ].map(({ label, url }) => (
-                        <div key={label} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                          <span className="text-[10px] text-console-muted w-10 flex-shrink-0">{label}</span>
-                          <input
-                            readOnly
-                            value={`${globalThis.window.location.origin}${url}`}
-                            onClick={(e) => (e.target as HTMLInputElement).select()}
-                            className="flex-1 bg-console-bg border border-console-border/50 rounded px-1.5 py-0.5 text-[10px] text-console-accent outline-none min-w-0"
-                          />
-                          <button
-                            onClick={() =>
-                              navigator.clipboard?.writeText(`${globalThis.window.location.origin}${url}`)
-                            }
-                            className="px-1.5 py-1 sm:py-0.5 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent flex-shrink-0"
-                          >
-                            COPY
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                )
-              })}
-            </div>
-          )}
-        </main>
-      )}
-
-      {authUser && activeView === 'integrations' && (
+      <AuthenticatedView activeView={activeView} authUser={authUser} view="integrations">
         <main className="console-panel flex flex-col gap-4">
           <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
             <div className="border border-console-border rounded p-3">
@@ -2281,7 +1751,7 @@ function App() {
                   <th className="py-1.5 px-2 text-left font-normal">Source</th>
                   <th className="py-1.5 px-2 text-left font-normal">Label</th>
                   <th className="py-1.5 px-2 text-left font-normal">Enabled</th>
-                  <th className="py-1.5 px-2 text-left font-normal">Shared</th>
+                  <th className="py-1.5 px-2 text-left font-normal">Federation</th>
                   <th className="py-1.5 px-2 text-left font-normal">API Keys</th>
                   <th className="py-1.5 px-2 text-left font-normal">Actions</th>
                 </tr>
@@ -2377,7 +1847,7 @@ function App() {
                             checked={source.isShared}
                             disabled={authUser?.role !== 'admin'}
                             onChange={(e) => toggleSourceShared(source, e.target.checked)}
-                            title={source.isShared ? 'Shared with users' : 'Private integration'}
+                            title={source.isShared ? 'Exported to connected hubs' : 'Not exported to connected hubs'}
                           />
                         </td>
                         <td className="py-2 px-2">
@@ -2471,9 +1941,9 @@ function App() {
             <pre className="text-[11px] text-console-muted whitespace-pre-wrap">{uploadExample}</pre>
           </div>
         </main>
-      )}
+      </AuthenticatedView>
 
-      {authUser && activeView === 'talkgroups' && (
+      <AuthenticatedView activeView={activeView} authUser={authUser} view="talkgroups">
         <main className="console-panel flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="console-label text-xs">TALKGROUP VIEWER</span>
@@ -2496,7 +1966,7 @@ function App() {
                   <th className="py-1.5 px-3 text-left font-normal">Calls</th>
                   <th className="py-1.5 px-3 text-left font-normal">Last Seen</th>
                   <th className="py-1.5 px-3 text-left font-normal">Flags</th>
-                  {authUser.role === 'admin' && <th className="py-1.5 px-3 text-left font-normal">Admin</th>}
+                  {isAdmin && <th className="py-1.5 px-3 text-left font-normal">Admin</th>}
                 </tr>
               </thead>
               <tbody>
@@ -2548,7 +2018,7 @@ function App() {
                         </button>
                       </div>
                     </td>
-                    {authUser.role === 'admin' && (
+                    {isAdmin && (
                       <td className="py-2 px-3">
                         <button
                           onClick={() => removeTalkgroup(row.talkgroup)}
@@ -2566,9 +2036,9 @@ function App() {
             </table>
           </div>
         </main>
-      )}
+      </AuthenticatedView>
 
-      {authUser && activeView === 'hub' && (
+      <AuthenticatedView activeView={activeView} authUser={authUser} view="hub">
         <main className="console-panel flex flex-col gap-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <span className="console-label text-xs">HUB IDENTITY</span>
@@ -2584,7 +2054,7 @@ function App() {
                   onChange={(event) => setHubDraft((prev) => ({ ...prev, name: event.target.value }))}
                   className="w-full bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent disabled:opacity-60"
                   placeholder="P7 Scanner Hub"
-                  disabled={authUser.role !== 'admin' || hubLoading}
+                  disabled={!isAdmin || hubLoading}
                 />
               </div>
               <div>
@@ -2594,7 +2064,7 @@ function App() {
                   onChange={(event) => setHubDraft((prev) => ({ ...prev, publicUrl: event.target.value }))}
                   className="w-full bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent disabled:opacity-60"
                   placeholder="https://scanner.example.com"
-                  disabled={authUser.role !== 'admin' || hubLoading}
+                  disabled={!isAdmin || hubLoading}
                 />
               </div>
               <div>
@@ -2604,7 +2074,7 @@ function App() {
                   onChange={(event) => setHubDraft((prev) => ({ ...prev, region: event.target.value }))}
                   className="w-full bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent disabled:opacity-60"
                   placeholder="Yukon, OK"
-                  disabled={authUser.role !== 'admin' || hubLoading}
+                  disabled={!isAdmin || hubLoading}
                 />
               </div>
               <div>
@@ -2614,7 +2084,7 @@ function App() {
                   onChange={(event) => setHubDraft((prev) => ({ ...prev, contact: event.target.value }))}
                   className="w-full bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent disabled:opacity-60"
                   placeholder="info@example.com"
-                  disabled={authUser.role !== 'admin' || hubLoading}
+                  disabled={!isAdmin || hubLoading}
                 />
               </div>
               <label className="flex items-center gap-2 text-xs text-console-muted">
@@ -2622,11 +2092,11 @@ function App() {
                   type="checkbox"
                   checked={hubDraft.federationEnabled}
                   onChange={(event) => setHubDraft((prev) => ({ ...prev, federationEnabled: event.target.checked }))}
-                  disabled={authUser.role !== 'admin' || hubLoading}
+                  disabled={!isAdmin || hubLoading}
                 />
                 <span>Federation enabled</span>
               </label>
-              {authUser.role === 'admin' && (
+              {isAdmin && (
                 <div className="flex gap-2 flex-wrap">
                   <button
                     onClick={saveHubIdentity}
@@ -2636,7 +2106,10 @@ function App() {
                     {hubLoading ? 'SAVING...' : 'SAVE HUB'}
                   </button>
                   <button
-                    onClick={refreshHubIdentity}
+                    onClick={() => {
+                      refreshHubIdentity()
+                      refreshFederationStatus()
+                    }}
                     className="w-fit px-2 py-1 border border-console-border text-console-muted rounded text-xs hover:border-console-accent hover:text-console-accent disabled:opacity-50"
                     disabled={hubLoading}
                   >
@@ -2650,15 +2123,46 @@ function App() {
               <p className="console-label text-xs">FEDERATION STATUS</p>
               <div className="text-console-muted">Hub ID: <span className="text-console-text break-all">{hubIdentity?.hubId || '—'}</span></div>
               <div className="text-console-muted">Directory: <span className="text-console-accent uppercase">{hubIdentity?.directoryValidationStatus || 'unverified'}</span></div>
+              <div className="text-console-muted">Trust: <span className="text-console-accent uppercase">{hubIdentity?.trustLevel || 'community'}</span></div>
+              <div className="text-console-muted">Trust issuer: <span className="text-console-text break-all">{hubIdentity?.trustIssuerHubId || '—'}</span></div>
+              <div className="text-console-muted">Trust verified: <span className="text-console-text">{hubIdentity?.trustVerifiedAt ? fmtDateTime(hubIdentity.trustVerifiedAt) : '—'}</span></div>
+              {isAdmin && (
+                <>
+                  <div className="text-console-muted">Pull peers: <span className={federationStatus?.pullPeerCount ? 'text-console-accent' : 'text-console-error'}>{federationStatus?.pullPeerCount ?? '—'}</span></div>
+                  <div className="text-console-muted">Local shared sources: <span className={federationStatus?.sharedSources.length ? 'text-console-accent' : 'text-console-error'}>{federationStatus?.sharedSources.length ?? '—'}</span></div>
+                  <div className="text-console-muted">Local exportable calls: <span className={federationStatus?.exportableCallCount ? 'text-console-accent' : 'text-console-error'}>{federationStatus?.exportableCallCount ?? '—'}</span></div>
+                  <div className="text-console-muted">Imported remote sources: <span className={federationStatus?.importedSourceCount ? 'text-console-accent' : 'text-console-muted'}>{federationStatus?.importedSourceCount ?? '—'}</span></div>
+                  <div className="text-console-muted">Imported remote calls: <span className={federationStatus?.importedCallCount ? 'text-console-accent' : 'text-console-muted'}>{federationStatus?.importedCallCount ?? '—'}</span></div>
+                  {(federationStatus?.peerStatuses.length || 0) > 0 && (
+                    <div className="flex flex-col gap-1 pt-1">
+                      {federationStatus?.peerStatuses.map((peerStatus) => (
+                        <div key={peerStatus.peerId} className="text-[11px] text-console-muted">
+                          <span className="text-console-text">{peerStatus.name || peerStatus.hubId}</span>
+                          {' '}remote shared: <span className={peerStatus.remoteSharedSources ? 'text-console-accent' : 'text-console-error'}>{peerStatus.remoteSharedSources}</span>
+                          {' '}sample calls: <span className={peerStatus.remoteSampleCalls ? 'text-console-accent' : 'text-console-muted'}>{peerStatus.remoteSampleCalls}</span>
+                          {peerStatus.error && <span className="text-console-error"> {peerStatus.error}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {(federationStatus?.warnings.length || 0) > 0 && (
+                    <div className="flex flex-col gap-1 pt-1">
+                      {federationStatus?.warnings.map((warning) => (
+                        <div key={warning} className="text-console-error">{warning}</div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
               <div className="text-console-muted">Public key: <span className="text-console-text break-all">{hubIdentity?.publicKey || 'not generated yet'}</span></div>
               <div className="text-console-muted">Updated: <span className="text-console-text">{hubIdentity?.updatedAt ? fmtDateTime(hubIdentity.updatedAt) : '—'}</span></div>
-              {authUser.role !== 'admin' && (
+              {!isAdmin && (
                 <p className="text-[11px] text-console-muted mt-2">Admin access is required to change hub identity.</p>
               )}
             </div>
           </div>
 
-          {authUser.role === 'admin' && (
+          {isAdmin && (
             <div className="border border-console-border rounded p-3 flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
@@ -2673,12 +2177,12 @@ function App() {
                 </button>
               </div>
               <div className="grid gap-2 md:grid-cols-2 text-xs">
-                <div className="text-console-muted">Current: <span className="text-console-text">{versionInfo?.deployTag || versionInfo?.commit?.slice(0, 8) || 'unknown'}</span></div>
-                <div className="text-console-muted">Latest: <span className={updateStatusClass}>{updateInfo?.latest?.imageTag || updateInfo?.latest?.shortCommit || 'unknown'}</span></div>
+                <div className="text-console-muted">Current: <span className="text-console-text">{currentDeploymentTag}</span></div>
+                <div className="text-console-muted">Latest: <span className={updateStatusClass}>{latestUpdateTag || 'unknown'}</span></div>
                 <div className="text-console-muted">Namespace: <span className="text-console-text">{updateInfo?.latest?.imageNamespace || 'unknown'}</span></div>
                 <div className="text-console-muted">Status: <span className={updateStatusClass}>{updateStatusLabel}</span></div>
               </div>
-              {updateInfo?.updateAvailable && updateInfo.latest && (
+              {hasUpdateAvailable && updateInfo?.latest && (
                 <div className="border border-console-amber rounded p-2 text-[11px] text-console-muted">
                   Set <span className="text-console-text">IMAGE_NAMESPACE={updateInfo.latest.imageNamespace}</span> and <span className="text-console-text">IMAGE_TAG={updateInfo.latest.imageTag}</span>, then redeploy with image pull enabled.
                 </div>
@@ -2687,7 +2191,7 @@ function App() {
             </div>
           )}
 
-          {authUser.role === 'admin' && (
+          {isAdmin && (
             <div className="border border-console-border rounded p-3 flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
@@ -2745,6 +2249,7 @@ function App() {
                   <tbody>
                     {hubPeers.map((peer) => {
                       const connectedPeer = peer.status === 'connected'
+                      const disabledPeer = peer.status === 'disabled'
                       return (
                         <tr key={peer.id} className="border-b border-console-border/70">
                           <td className="py-2 px-2">
@@ -2753,16 +2258,27 @@ function App() {
                             {peer.region && <div className="text-[10px] text-console-muted">{peer.region}</div>}
                           </td>
                           <td className={`py-2 px-2 uppercase ${connectedPeer ? 'text-console-accent' : 'text-console-muted'}`}>{peer.status}</td>
-                          <td className="py-2 px-2 uppercase text-console-muted">{peer.direction}</td>
+                          <td className="py-2 px-2 uppercase text-console-muted">{peer.status === 'connected' ? 'bidirectional' : peer.direction}</td>
                           <td className="py-2 px-2 text-console-muted tabular-nums">{peer.lastSeenAt ? fmtDateTime(peer.lastSeenAt) : '—'}</td>
                           <td className="py-2 px-2">
-                            <button
-                              onClick={() => disableHubPeer(peer.id)}
-                              className="text-[10px] px-1.5 py-0.5 border border-console-error text-console-error rounded hover:bg-console-error hover:bg-opacity-10 disabled:opacity-50"
-                              disabled={!connectedPeer || hubPeerActionID === peer.id}
-                            >
-                              {hubPeerActionID === peer.id ? '...' : 'DISABLE'}
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {disabledPeer && (
+                                <button
+                                  onClick={() => enableHubPeer(peer.id)}
+                                  className="text-[10px] px-1.5 py-0.5 border border-console-accent text-console-accent rounded hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+                                  disabled={hubPeerActionID === peer.id}
+                                >
+                                  {hubPeerActionID === peer.id ? '...' : 'ENABLE'}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => disableHubPeer(peer.id)}
+                                className="text-[10px] px-1.5 py-0.5 border border-console-error text-console-error rounded hover:bg-console-error hover:bg-opacity-10 disabled:opacity-50"
+                                disabled={!connectedPeer || hubPeerActionID === peer.id}
+                              >
+                                {hubPeerActionID === peer.id ? '...' : 'DISABLE'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       )
@@ -2778,7 +2294,7 @@ function App() {
             </div>
           )}
 
-          {authUser.role === 'admin' && (
+          {isAdmin && (
             <div className="border border-console-border rounded p-3 flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
@@ -2865,9 +2381,9 @@ function App() {
           {hubMessage && <div className="text-[11px] text-console-accent">{hubMessage}</div>}
           {hubError && <div className="text-[11px] text-console-error">{hubError}</div>}
         </main>
-      )}
+      </AuthenticatedView>
 
-    {activeView === 'account' && (
+    <ActiveView activeView={activeView} view="account">
     <main className="console-panel flex flex-col gap-4">
       <div className="grid gap-3 md:grid-cols-2">
       <div className="border border-console-border rounded p-3">
@@ -2964,7 +2480,7 @@ function App() {
             <td className="py-2 px-2">
             <select
               value={user.role}
-              onChange={(e) => setUsers((prev) => prev.map((row) => row.id === user.id ? { ...row, role: e.target.value as UserRecord['role'] } : row))}
+              onChange={(e) => setUsers(updateUserRoleDraft(user.id, e.target.value as UserRecord['role']))}
               className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs"
             >
               <option value="admin">admin</option>
@@ -2975,7 +2491,7 @@ function App() {
             <td className="py-2 px-2">
             <select
               value={user.status}
-              onChange={(e) => setUsers((prev) => prev.map((row) => row.id === user.id ? { ...row, status: e.target.value as UserRecord['status'] } : row))}
+              onChange={(e) => setUsers(updateUserStatusDraft(user.id, e.target.value as UserRecord['status']))}
               className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs"
             >
               <option value="active">active</option>
@@ -3054,19 +2570,10 @@ function App() {
     </div>
     )}
     </main>
-    )}
+    </ActiveView>
 
       <footer className="text-xs text-console-muted border-t border-console-border pt-3 flex flex-col gap-1">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <span>projectseven .Co .Ltd © {new Date().getFullYear()} — ALL SYSTEMS OPERATIONAL</span>
-          <span className="flex flex-wrap gap-2 text-[10px] uppercase tracking-widest">
-            <a className="hover:text-console-accent" href={footerSourceLinks.source} target="_blank" rel="noopener noreferrer">Source</a>
-            <span aria-hidden>/</span>
-            <a className="hover:text-console-accent" href={footerSourceLinks.license} target="_blank" rel="noopener noreferrer">AGPLv3</a>
-            <span aria-hidden>/</span>
-            <a className="hover:text-console-accent" href={footerSourceLinks.fairSource} target="_blank" rel="noopener noreferrer">Fair Source</a>
-          </span>
-        </div>
+        <div>projectseven .Co .Ltd © {new Date().getFullYear()} — ALL SYSTEMS OPERATIONAL</div>
         <div className="text-[10px] tabular-nums break-all">{footerDeploymentLabel}</div>
       </footer>
     </div>

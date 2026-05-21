@@ -11,6 +11,8 @@ import (
 	"github.com/projectseven-co-ltd/p7-scanner/server/internal/database"
 )
 
+const radioSetByIDRoute = "/api/v1/radio-sets/{id}"
+
 func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -21,6 +23,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 	h := newHub(logger)
 	sh := newStreamHub(logger)
 	handle := newHandler(cfg, db, h, sh, logger)
+	handle.startFederationSyncLoop()
 	r.Use(handle.withUserContext)
 
 	// Long-lived connections — no request timeout.
@@ -47,7 +50,11 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Delete("/api/v1/hub/invites/{id}", handle.handleRevokeHubInvite)
 		r.Get("/api/v1/hub/peers", handle.handleListHubPeers)
 		r.Post("/api/v1/hub/peers", handle.handleConnectHubPeer)
+		r.Patch("/api/v1/hub/peers/{id}/enable", handle.handleEnableHubPeer)
 		r.Delete("/api/v1/hub/peers/{id}", handle.handleDisableHubPeer)
+		r.Get("/api/v1/hub/federation/status", handle.handleFederationStatus)
+		r.Get("/api/v1/federation/sources", handle.handleFederationSources)
+		r.Get("/api/v1/federation/calls", handle.handleFederationCalls)
 		r.Get("/api/v1/users", handle.handleListUsers)
 		r.Patch("/api/v1/users/{id}", handle.handleUpdateUser)
 		r.Delete("/api/v1/users/{id}", handle.handleDeleteUser)
@@ -61,9 +68,9 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Delete("/api/v1/talkgroups/{talkgroup}", handle.handleDeleteTalkgroup)
 		r.Get("/api/v1/radio-sets", handle.handleListRadioSets)
 		r.Post("/api/v1/radio-sets", handle.handleCreateRadioSet)
-		r.Get("/api/v1/radio-sets/{id}", handle.handleGetRadioSet)
-		r.Put("/api/v1/radio-sets/{id}", handle.handleUpdateRadioSet)
-		r.Delete("/api/v1/radio-sets/{id}", handle.handleDeleteRadioSet)
+		r.Get(radioSetByIDRoute, handle.handleGetRadioSet)
+		r.Put(radioSetByIDRoute, handle.handleUpdateRadioSet)
+		r.Delete(radioSetByIDRoute, handle.handleDeleteRadioSet)
 		r.Post("/api/v1/radio-sets/{id}/share", handle.handleGenerateShareToken)
 		r.Delete("/api/v1/radio-sets/{id}/share", handle.handleRevokeShareToken)
 		r.Get("/api/v1/sources", handle.handleListIngestionSources)

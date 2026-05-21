@@ -1,5 +1,7 @@
 .RECIPEPREFIX := >
-.PHONY: dev-server dev-client build-server build-client build lint-server lint-client lint test-server test clean
+.PHONY: dev-server dev-client build-server build-client build lint-server lint-client lint test-server test clean sync-signalforge-node
+
+SIGNALFORGE_NODE_DIR ?= ../signalforge-node
 
 dev-server:
 >cd server && go run ./main.go
@@ -30,3 +32,6 @@ test: test-server
 
 clean:
 >rm -rf client/node_modules client/dist
+
+sync-signalforge-node:
+>./tools/sync-signalforge-node.sh . $(SIGNALFORGE_NODE_DIR)

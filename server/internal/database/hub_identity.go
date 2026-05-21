@@ -9,7 +9,9 @@ import (
 func (d *DB) GetHubIdentity() (*HubIdentity, bool, error) {
 	row := d.db.QueryRow(`
 		SELECT hub_id, name, public_url, region, contact, public_key,
-		       federation_enabled, directory_validation_status, created_at, updated_at
+		       federation_enabled, directory_validation_status, trust_level,
+		       trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
+		       created_at, updated_at
 		FROM hub_identity
 		WHERE id = 'local'`)
 
@@ -23,6 +25,11 @@ func (d *DB) GetHubIdentity() (*HubIdentity, bool, error) {
 		&identity.PublicKey,
 		&identity.FederationEnabled,
 		&identity.DirectoryValidationStatus,
+		&identity.TrustLevel,
+		&identity.TrustIssuerHubID,
+		&identity.TrustCertificate,
+		&identity.TrustExpiresAt,
+		&identity.TrustVerifiedAt,
 		&identity.CreatedAt,
 		&identity.UpdatedAt,
 	); err != nil {
@@ -44,12 +51,19 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 	if identity.DirectoryValidationStatus == "" {
 		identity.DirectoryValidationStatus = "unverified"
 	}
+	if identity.TrustLevel == "" {
+		identity.TrustLevel = "community"
+	}
+	if identity.TrustVerifiedAt == 0 && (identity.TrustLevel == "verified" || identity.TrustLevel == "official") {
+		identity.TrustVerifiedAt = now
+	}
 
 	row := d.db.QueryRow(`
 		INSERT INTO hub_identity
 			(id, hub_id, name, public_url, region, contact, public_key,
-			 federation_enabled, directory_validation_status, created_at, updated_at)
-		VALUES ('local', $1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+			 federation_enabled, directory_validation_status, trust_level, trust_issuer_hub_id,
+			 trust_certificate, trust_expires_at, trust_verified_at, created_at, updated_at)
+		VALUES ('local', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
 		ON CONFLICT (id) DO UPDATE SET
 			name = excluded.name,
 			public_url = excluded.public_url,
@@ -58,9 +72,16 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 			public_key = excluded.public_key,
 			federation_enabled = excluded.federation_enabled,
 			directory_validation_status = excluded.directory_validation_status,
+			trust_level = excluded.trust_level,
+			trust_issuer_hub_id = excluded.trust_issuer_hub_id,
+			trust_certificate = excluded.trust_certificate,
+			trust_expires_at = excluded.trust_expires_at,
+			trust_verified_at = excluded.trust_verified_at,
 			updated_at = excluded.updated_at
 		RETURNING hub_id, name, public_url, region, contact, public_key,
-		          federation_enabled, directory_validation_status, created_at, updated_at`,
+		          federation_enabled, directory_validation_status, trust_level,
+		          trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
+		          created_at, updated_at`,
 		identity.HubID,
 		identity.Name,
 		identity.PublicURL,
@@ -69,6 +90,11 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 		identity.PublicKey,
 		identity.FederationEnabled,
 		identity.DirectoryValidationStatus,
+		identity.TrustLevel,
+		identity.TrustIssuerHubID,
+		identity.TrustCertificate,
+		identity.TrustExpiresAt,
+		identity.TrustVerifiedAt,
 		now,
 	)
 
@@ -82,6 +108,11 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 		&saved.PublicKey,
 		&saved.FederationEnabled,
 		&saved.DirectoryValidationStatus,
+		&saved.TrustLevel,
+		&saved.TrustIssuerHubID,
+		&saved.TrustCertificate,
+		&saved.TrustExpiresAt,
+		&saved.TrustVerifiedAt,
 		&saved.CreatedAt,
 		&saved.UpdatedAt,
 	); err != nil {
@@ -352,6 +383,41 @@ func (d *DB) DisableHubPeer(id string) (*HubPeer, bool, error) {
 	row := d.db.QueryRow(`
 		UPDATE hub_peers
 		SET status = 'disabled', updated_at = $1
+		WHERE id = $2
+		RETURNING id, hub_id, name, public_url, region, contact, status, direction, accepted_at, last_seen_at, created_at, updated_at`,
+		time.Now().Unix(),
+		id,
+	)
+
+	var peer HubPeer
+	if err := row.Scan(
+		&peer.ID,
+		&peer.HubID,
+		&peer.Name,
+		&peer.PublicURL,
+		&peer.Region,
+		&peer.Contact,
+		&peer.Status,
+		&peer.Direction,
+		&peer.AcceptedAt,
+		&peer.LastSeenAt,
+		&peer.CreatedAt,
+		&peer.UpdatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	return &peer, true, nil
+}
+
+// EnableHubPeer marks a disabled peer as connected again without requiring a new invite.
+func (d *DB) EnableHubPeer(id string) (*HubPeer, bool, error) {
+	row := d.db.QueryRow(`
+		UPDATE hub_peers
+		SET status = 'connected', updated_at = $1
 		WHERE id = $2
 		RETURNING id, hub_id, name, public_url, region, contact, status, direction, accepted_at, last_seen_at, created_at, updated_at`,
 		time.Now().Unix(),

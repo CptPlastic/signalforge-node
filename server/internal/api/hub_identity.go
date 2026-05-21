@@ -227,7 +227,7 @@ func (h *handler) handleAcceptHubInvite(w http.ResponseWriter, r *http.Request) 
 		Region:    req.Peer.Region,
 		Contact:   req.Peer.Contact,
 		Status:    "connected",
-		Direction: "inbound",
+		Direction: "bidirectional",
 	})
 	if err != nil {
 		h.logger.Error("save inbound hub peer failed", "error", err)
@@ -314,7 +314,7 @@ func (h *handler) handleConnectHubPeer(w http.ResponseWriter, r *http.Request) {
 		Region:    remoteIdentity.Region,
 		Contact:   remoteIdentity.Contact,
 		Status:    "connected",
-		Direction: "outbound",
+		Direction: "bidirectional",
 	})
 	if err != nil {
 		h.logger.Error("save outbound hub peer failed", "error", err)
@@ -356,13 +356,40 @@ func (h *handler) handleDisableHubPeer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, peer)
 }
 
+func (h *handler) handleEnableHubPeer(w http.ResponseWriter, r *http.Request) {
+	admin, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	peerID := strings.TrimSpace(r.PathValue("id"))
+	if peerID == "" {
+		http.Error(w, "missing peer id", http.StatusBadRequest)
+		return
+	}
+
+	peer, found, err := h.db.EnableHubPeer(peerID)
+	if err != nil {
+		h.logger.Error("enable hub peer failed", "error", err)
+		http.Error(w, "enable hub peer", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "peer not found", http.StatusNotFound)
+		return
+	}
+
+	_ = h.db.AppendAuditLog(admin.ID, "hub.peer_enabled", "hub_peer", peer.ID, map[string]any{"hubId": peer.HubID})
+	writeJSON(w, http.StatusOK, peer)
+}
+
 func (h *handler) ensureHubIdentity() (*database.HubIdentity, error) {
 	identity, found, err := h.db.GetHubIdentity()
 	if err != nil {
 		return nil, err
 	}
 	if found {
-		return identity, nil
+		return h.ensureConfiguredHubTrust(identity)
 	}
 
 	return h.db.UpsertHubIdentity(database.HubIdentity{
@@ -373,7 +400,32 @@ func (h *handler) ensureHubIdentity() (*database.HubIdentity, error) {
 		Contact:                   h.cfg.HubContact,
 		FederationEnabled:         h.cfg.HubFederation,
 		DirectoryValidationStatus: "unverified",
+		TrustLevel:                h.cfg.HubTrustLevel,
+		TrustIssuerHubID:          h.cfg.HubTrustIssuer,
+		TrustCertificate:          h.cfg.HubTrustCert,
+		TrustExpiresAt:            h.cfg.HubTrustExpires,
 	})
+}
+
+func (h *handler) ensureConfiguredHubTrust(identity *database.HubIdentity) (*database.HubIdentity, error) {
+	configuredLevel := strings.TrimSpace(h.cfg.HubTrustLevel)
+	if configuredLevel == "" || configuredLevel == "community" {
+		return identity, nil
+	}
+
+	updated := *identity
+	updated.TrustLevel = configuredLevel
+	updated.TrustIssuerHubID = h.cfg.HubTrustIssuer
+	updated.TrustCertificate = h.cfg.HubTrustCert
+	updated.TrustExpiresAt = h.cfg.HubTrustExpires
+	if updated.TrustLevel == identity.TrustLevel &&
+		updated.TrustIssuerHubID == identity.TrustIssuerHubID &&
+		updated.TrustCertificate == identity.TrustCertificate &&
+		updated.TrustExpiresAt == identity.TrustExpiresAt {
+		return identity, nil
+	}
+
+	return h.db.UpsertHubIdentity(updated)
 }
 
 func normalizeHubURL(raw string) (string, error) {

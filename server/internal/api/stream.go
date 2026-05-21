@@ -22,6 +22,7 @@ type streamCallMeta struct {
 	Duration       float64 `json:"duration"`
 	Frequency      int     `json:"frequency"`
 	SystemLabel    string  `json:"systemLabel"`
+	AudioType      string  `json:"audioType"`
 }
 
 type streamChunk struct {
@@ -32,6 +33,7 @@ type streamChunk struct {
 type streamListener struct {
 	ownerUserID string
 	talkgroups  map[int]struct{}
+	sourceIDs   map[string]struct{}
 	ch          chan streamChunk
 }
 
@@ -58,37 +60,65 @@ func (sh *streamHub) push(call *database.Call, audio []byte) {
 		Duration:       call.Duration,
 		Frequency:      call.Frequency,
 		SystemLabel:    call.SystemLabel,
+		AudioType:      call.AudioType,
 	}
 	chunk := streamChunk{audio: audio, meta: meta}
 
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
+	delivered := 0
 	for _, l := range sh.listeners {
-		if l.ownerUserID != call.UserID {
+		if _, ok := l.talkgroups[call.Talkgroup]; !ok {
 			continue
 		}
-		if _, ok := l.talkgroups[call.Talkgroup]; !ok {
+		if !l.matchesCall(call) {
 			continue
 		}
 		select {
 		case l.ch <- chunk:
+			delivered++
 		default:
 			sh.logger.Debug("stream listener channel full, dropping chunk",
 				"talkgroup", call.Talkgroup,
 			)
 		}
 	}
+	sh.logger.Debug("public stream fanout evaluated",
+		"call_id", call.ID,
+		"source_id", call.SourceID,
+		"call_user_id", call.UserID,
+		"talkgroup", call.Talkgroup,
+		"listeners", len(sh.listeners),
+		"delivered", delivered,
+	)
+}
+
+func (l *streamListener) matchesCall(call *database.Call) bool {
+	if l.ownerUserID != "" && l.ownerUserID == call.UserID {
+		return true
+	}
+	if call.SourceID != "" {
+		_, ok := l.sourceIDs[call.SourceID]
+		return ok
+	}
+	return false
 }
 
 // subscribe registers a listener. Returns a receive-only channel and an
 // unsubscribe function that must be called (typically via defer).
-func (sh *streamHub) subscribe(ownerUserID string, talkgroups []int) (<-chan streamChunk, func()) {
+func (sh *streamHub) subscribe(ownerUserID string, talkgroups []int, sourceIDs []string) (<-chan streamChunk, func()) {
 	tgSet := make(map[int]struct{}, len(talkgroups))
 	for _, tg := range talkgroups {
 		tgSet[tg] = struct{}{}
 	}
+	sourceIDSet := make(map[string]struct{}, len(sourceIDs))
+	for _, sourceID := range sourceIDs {
+		if sourceID != "" {
+			sourceIDSet[sourceID] = struct{}{}
+		}
+	}
 	ch := make(chan streamChunk, 32)
-	l := &streamListener{ownerUserID: ownerUserID, talkgroups: tgSet, ch: ch}
+	l := &streamListener{ownerUserID: ownerUserID, talkgroups: tgSet, sourceIDs: sourceIDSet, ch: ch}
 
 	sh.mu.Lock()
 	sh.listeners = append(sh.listeners, l)
@@ -120,6 +150,7 @@ type playerWSCallMsg struct {
 	Duration       float64 `json:"duration"`
 	Frequency      int     `json:"frequency"`
 	SystemLabel    string  `json:"systemLabel"`
+	AudioType      string  `json:"audioType"`
 	Audio          []byte  `json:"audio"` // base64-encoded in JSON output
 }
 
@@ -145,9 +176,22 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 	defer conn.CloseNow()
 
 	ctx := r.Context()
+	sourceIDs, err := h.db.ListReadableSourceIDsForUser(rs.UserID)
+	if err != nil {
+		h.logger.Error("list public stream readable sources failed", "error", err)
+		http.Error(w, "query sources", http.StatusInternalServerError)
+		return
+	}
+	h.logger.Info("public stream connected",
+		"radio_set_id", rs.ID,
+		"radio_set_name", rs.Name,
+		"owner_user_id", rs.UserID,
+		"talkgroups", len(rs.Talkgroups),
+		"readable_sources", len(sourceIDs),
+	)
 
 	// Subscribe before seeding so no live calls are missed during the seed phase.
-	ch, unsubscribe := h.streamHub.subscribe(rs.UserID, rs.Talkgroups)
+	ch, unsubscribe := h.streamHub.subscribe(rs.UserID, rs.Talkgroups, sourceIDs)
 	defer unsubscribe()
 
 	sendCall := func(meta streamCallMeta, audio []byte) error {
@@ -161,6 +205,7 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 			Duration:       meta.Duration,
 			Frequency:      meta.Frequency,
 			SystemLabel:    meta.SystemLabel,
+			AudioType:      meta.AudioType,
 			Audio:          audio,
 		}
 		data, err := json.Marshal(msg)
@@ -173,10 +218,14 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 	// Seed with recent calls so the client has audio to play immediately on connect.
 	if len(rs.Talkgroups) > 0 {
 		seedCalls, seedErr := h.db.GetRecentCallsForTalkgroups(rs.UserID, rs.Talkgroups, 5)
-		if seedErr == nil {
+		if seedErr != nil {
+			h.logger.Error("public stream seed query failed", "radio_set_id", rs.ID, "error", seedErr)
+		} else {
+			h.logger.Info("public stream seed query completed", "radio_set_id", rs.ID, "calls", len(seedCalls))
 			for _, c := range seedCalls {
 				audio, _, _, _, _, dbErr := h.db.GetCallAudio(c.ID)
 				if dbErr != nil {
+					h.logger.Error("public stream seed audio load failed", "radio_set_id", rs.ID, "call_id", c.ID, "error", dbErr)
 					continue
 				}
 				meta := streamCallMeta{
@@ -188,6 +237,7 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 					Duration:       c.Duration,
 					Frequency:      c.Frequency,
 					SystemLabel:    c.SystemLabel,
+					AudioType:      c.AudioType,
 				}
 				if err := sendCall(meta, audio); err != nil {
 					return
@@ -342,7 +392,8 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
   var ws = null;
   var queue = [];       // [{meta, blobURL}]
   var playing = false;
-  var liveActive = true;
+	var liveActive = true;
+	var playbackBlocked = false;
   var seenIDs = {};
   var curBlobURL = null;
   var prevBlobURL = null;
@@ -441,12 +492,18 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     if (prevBlobURL) URL.revokeObjectURL(prevBlobURL);
     prevBlobURL = curBlobURL;
     curBlobURL = item.blobURL;
-    playing = true;
+		playing = true;
+		playbackBlocked = false;
+		document.getElementById('live-btn').textContent = 'LIVE ON';
+		document.getElementById('live-btn').className = 'btn on';
     setStatus('live', 'LIVE');
     showCall(item.meta);
     audio.src = curBlobURL;
-    audio.play().catch(function() {
-      setStatus('err', 'BLOCKED — TAP PLAY');
+		audio.play().catch(function() {
+			playbackBlocked = true;
+			document.getElementById('live-btn').textContent = 'PLAY';
+			document.getElementById('live-btn').className = 'btn';
+			setStatus('err', 'TAP PLAY');
       playing = false;
     });
   }
@@ -467,8 +524,8 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     if (queue.length >= MAX_QUEUE) {
       var dropped = queue.shift();
       URL.revokeObjectURL(dropped.blobURL);
-    }
-    var blob = new Blob([base64ToArrayBuffer(msg.audio)], {type: 'audio/mpeg'});
+		}
+		var blob = new Blob([base64ToArrayBuffer(msg.audio)], {type: msg.audioType || 'audio/mpeg'});
     queue.push({meta: msg, blobURL: URL.createObjectURL(blob)});
     if (!playing) playNext();
   }
@@ -500,13 +557,30 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
   }
 
   window.toggleLive = function() {
-    var btn = document.getElementById('live-btn');
+		var btn = document.getElementById('live-btn');
+		if (liveActive && playbackBlocked) {
+			playbackBlocked = false;
+			playing = true;
+			audio.play().then(function() {
+				btn.textContent = 'LIVE ON';
+				btn.className = 'btn on';
+				setStatus('live', 'LIVE');
+			}).catch(function() {
+				playbackBlocked = true;
+				playing = false;
+				btn.textContent = 'PLAY';
+				btn.className = 'btn';
+				setStatus('err', 'TAP PLAY');
+			});
+			return;
+		}
     if (liveActive) {
       liveActive = false;
       if (ws) { try { ws.close(); } catch(_){} ws = null; }
       audio.pause();
       audio.src = '';
       playing = false;
+	playbackBlocked = false;
       queue.forEach(function(item) { URL.revokeObjectURL(item.blobURL); });
       queue = [];
       btn.textContent = 'LIVE OFF';
@@ -596,12 +670,15 @@ func (h *handler) handlePublicLastCall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no calls", http.StatusNotFound)
 		return
 	}
-	audio, _, _, _, _, err := h.db.GetCallAudio(ids[0])
+	audio, audioType, _, _, _, err := h.db.GetCallAudio(ids[0])
 	if err != nil {
 		http.Error(w, "audio not found", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "audio/mpeg")
+	if audioType == "" {
+		audioType = "audio/mpeg"
+	}
+	w.Header().Set("Content-Type", audioType)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Write(audio) //nolint:errcheck

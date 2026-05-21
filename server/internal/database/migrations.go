@@ -55,6 +55,11 @@ func (d *DB) migrate() error {
 			created_at                  BIGINT NOT NULL,
 			updated_at                  BIGINT NOT NULL
 		);
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS trust_level TEXT NOT NULL DEFAULT 'community';
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS trust_issuer_hub_id TEXT NOT NULL DEFAULT '';
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS trust_certificate TEXT NOT NULL DEFAULT '';
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS trust_expires_at BIGINT NOT NULL DEFAULT 0;
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS trust_verified_at BIGINT NOT NULL DEFAULT 0;
 		CREATE TABLE IF NOT EXISTS hub_invites (
 			id                 TEXT PRIMARY KEY,
 			token              TEXT NOT NULL UNIQUE,
@@ -105,6 +110,15 @@ func (d *DB) migrate() error {
 			muted       BOOLEAN NOT NULL DEFAULT FALSE,
 			updated_at  BIGINT NOT NULL
 		);
+		CREATE TABLE IF NOT EXISTS federation_call_imports (
+			peer_hub_id    TEXT   NOT NULL,
+			remote_call_id BIGINT NOT NULL,
+			local_call_id  BIGINT NOT NULL,
+			created_at     BIGINT NOT NULL,
+			PRIMARY KEY (peer_hub_id, remote_call_id),
+			FOREIGN KEY (local_call_id) REFERENCES calls(id) ON DELETE CASCADE
+		);
+		CREATE INDEX IF NOT EXISTS idx_federation_call_imports_peer_remote ON federation_call_imports(peer_hub_id, remote_call_id DESC);
 		CREATE INDEX IF NOT EXISTS idx_calls_datetime ON calls(datetime DESC);
 		CREATE INDEX IF NOT EXISTS idx_calls_talkgroup ON calls(talkgroup);
 		CREATE TABLE IF NOT EXISTS ingestion_sources (
