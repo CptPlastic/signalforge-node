@@ -44,9 +44,9 @@ docker-compose --env-file .env -f docker-compose.plesk.yml up -d
 Current public image names:
 
 ```text
-ghcr.io/cptplastic/p7-scanner-server:<tag>
-ghcr.io/cptplastic/p7-scanner-client:<tag>
-ghcr.io/cptplastic/p7-scanner-mock-call-sender:<tag>
+ghcr.io/signalforge-org/p7-scanner-server:<tag>
+ghcr.io/signalforge-org/p7-scanner-client:<tag>
+ghcr.io/signalforge-org/p7-scanner-mock-call-sender:<tag>
 ```
 
 The latest public tag is published at:
