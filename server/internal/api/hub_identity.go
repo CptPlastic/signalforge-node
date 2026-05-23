@@ -358,11 +358,19 @@ func (h *handler) handleDeleteHubPeer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) cleanupDeletedHubPeer(peerHubID string) {
-	if err := h.db.DeleteFederatedPeerImports(peerHubID); err != nil {
+	h.logger.Info("delete federated peer imports started", "peer_hub_id", peerHubID)
+	stats, err := h.db.DeleteFederatedPeerImports(peerHubID)
+	if err != nil {
 		h.logger.Error("delete federated peer imports failed", "peer_hub_id", peerHubID, "error", err)
 		return
 	}
-	h.logger.Info("deleted federated peer imports", "peer_hub_id", peerHubID)
+	h.logger.Info(
+		"deleted federated peer imports",
+		"peer_hub_id", peerHubID,
+		"calls_deleted", stats.CallsDeleted,
+		"sources_deleted", stats.SourcesDeleted,
+		"imports_deleted", stats.ImportsDeleted,
+	)
 }
 
 func (h *handler) handleEnableHubPeer(w http.ResponseWriter, r *http.Request) {
@@ -398,7 +406,7 @@ func (h *handler) ensureHubIdentity() (*database.HubIdentity, error) {
 		return nil, err
 	}
 	if found {
-		return h.ensureConfiguredHubTrust(identity)
+		return h.ensureConfiguredHubIdentity(identity)
 	}
 
 	return h.db.UpsertHubIdentity(database.HubIdentity{
@@ -416,18 +424,14 @@ func (h *handler) ensureHubIdentity() (*database.HubIdentity, error) {
 	})
 }
 
-func (h *handler) ensureConfiguredHubTrust(identity *database.HubIdentity) (*database.HubIdentity, error) {
-	configuredLevel := strings.TrimSpace(h.cfg.HubTrustLevel)
-	if configuredLevel == "" || configuredLevel == "community" {
-		return identity, nil
-	}
-
-	updated := *identity
-	updated.TrustLevel = configuredLevel
-	updated.TrustIssuerHubID = h.cfg.HubTrustIssuer
-	updated.TrustCertificate = h.cfg.HubTrustCert
-	updated.TrustExpiresAt = h.cfg.HubTrustExpires
-	if updated.TrustLevel == identity.TrustLevel &&
+func (h *handler) ensureConfiguredHubIdentity(identity *database.HubIdentity) (*database.HubIdentity, error) {
+	updated := h.configuredHubIdentity(identity)
+	if updated.Name == identity.Name &&
+		updated.PublicURL == identity.PublicURL &&
+		updated.Region == identity.Region &&
+		updated.Contact == identity.Contact &&
+		updated.FederationEnabled == identity.FederationEnabled &&
+		updated.TrustLevel == identity.TrustLevel &&
 		updated.TrustIssuerHubID == identity.TrustIssuerHubID &&
 		updated.TrustCertificate == identity.TrustCertificate &&
 		updated.TrustExpiresAt == identity.TrustExpiresAt {
@@ -435,6 +439,34 @@ func (h *handler) ensureConfiguredHubTrust(identity *database.HubIdentity) (*dat
 	}
 
 	return h.db.UpsertHubIdentity(updated)
+}
+
+func (h *handler) configuredHubIdentity(identity *database.HubIdentity) database.HubIdentity {
+	updated := *identity
+	if h.cfg.HubName != "" && updated.Name != h.cfg.HubName {
+		updated.Name = h.cfg.HubName
+	}
+	if h.cfg.HubPublicURL != "" && updated.PublicURL != h.cfg.HubPublicURL {
+		updated.PublicURL = h.cfg.HubPublicURL
+	}
+	if h.cfg.HubRegion != "" && updated.Region != h.cfg.HubRegion {
+		updated.Region = h.cfg.HubRegion
+	}
+	if h.cfg.HubContact != "" && updated.Contact != h.cfg.HubContact {
+		updated.Contact = h.cfg.HubContact
+	}
+	if h.cfg.HubFederation && !updated.FederationEnabled {
+		updated.FederationEnabled = true
+	}
+
+	configuredLevel := strings.TrimSpace(h.cfg.HubTrustLevel)
+	if configuredLevel != "" && configuredLevel != "community" {
+		updated.TrustLevel = configuredLevel
+		updated.TrustIssuerHubID = h.cfg.HubTrustIssuer
+		updated.TrustCertificate = h.cfg.HubTrustCert
+		updated.TrustExpiresAt = h.cfg.HubTrustExpires
+	}
+	return updated
 }
 
 func normalizeHubURL(raw string) (string, error) {

@@ -47,7 +47,7 @@ services:
       MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-SignalForge Peer Hub}
       HUB_NAME: ${HUB_NAME:-SignalForge Peer Hub}
-      HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-}
+      HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-${APP_BASE_URL}}
       HUB_REGION: ${HUB_REGION:-Peer Test}
       HUB_CONTACT: ${HUB_CONTACT:-}
       HUB_FEDERATION_ENABLED: ${HUB_FEDERATION_ENABLED:-true}

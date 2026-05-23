@@ -6,6 +6,15 @@ import (
 	"time"
 )
 
+const federatedImportDeleteBatchSize = 1000
+
+// FederatedPeerImportDeleteStats reports cleanup work completed for a deleted peer.
+type FederatedPeerImportDeleteStats struct {
+	CallsDeleted   int64
+	SourcesDeleted int64
+	ImportsDeleted int64
+}
+
 // GetHubIdentity returns the local hub identity, if it has been initialized.
 func (d *DB) GetHubIdentity() (*HubIdentity, bool, error) {
 	row := d.db.QueryRow(`
@@ -449,24 +458,46 @@ func (d *DB) DeleteHubPeer(id string) (*HubPeer, bool, error) {
 }
 
 // DeleteFederatedPeerImports removes imported calls, remote sources, and cursor rows for a deleted peer.
-func (d *DB) DeleteFederatedPeerImports(peerHubID string) error {
-	tx, err := d.db.Begin()
+func (d *DB) DeleteFederatedPeerImports(peerHubID string) (FederatedPeerImportDeleteStats, error) {
+	stats := FederatedPeerImportDeleteStats{}
+
+	importsResult, err := d.db.Exec(`DELETE FROM federation_call_imports WHERE peer_hub_id = $1`, peerHubID)
 	if err != nil {
-		return err
+		return stats, err
 	}
-	defer tx.Rollback()
+	stats.ImportsDeleted, _ = importsResult.RowsAffected()
 
 	remoteSourcePattern := federatedPeerSourceLikePattern(peerHubID)
-	if _, err := tx.Exec(`DELETE FROM calls WHERE source_id LIKE $1 ESCAPE '\'`, remoteSourcePattern); err != nil {
-		return err
+	for {
+		callsResult, err := d.db.Exec(`
+			WITH doomed AS (
+				SELECT id
+				FROM calls
+				WHERE source_id LIKE $1 ESCAPE '\'
+				LIMIT $2
+			)
+			DELETE FROM calls
+			WHERE id IN (SELECT id FROM doomed)`,
+			remoteSourcePattern,
+			federatedImportDeleteBatchSize,
+		)
+		if err != nil {
+			return stats, err
+		}
+
+		deleted, _ := callsResult.RowsAffected()
+		stats.CallsDeleted += deleted
+		if deleted == 0 {
+			break
+		}
 	}
-	if _, err := tx.Exec(`DELETE FROM ingestion_sources WHERE id LIKE $1 ESCAPE '\'`, remoteSourcePattern); err != nil {
-		return err
+
+	sourcesResult, err := d.db.Exec(`DELETE FROM ingestion_sources WHERE id LIKE $1 ESCAPE '\'`, remoteSourcePattern)
+	if err != nil {
+		return stats, err
 	}
-	if _, err := tx.Exec(`DELETE FROM federation_call_imports WHERE peer_hub_id = $1`, peerHubID); err != nil {
-		return err
-	}
-	return tx.Commit()
+	stats.SourcesDeleted, _ = sourcesResult.RowsAffected()
+	return stats, nil
 }
 
 func federatedPeerSourceLikePattern(peerHubID string) string {
