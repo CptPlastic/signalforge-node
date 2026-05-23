@@ -1208,19 +1208,19 @@ function App() {
     }
   }
 
-  async function disableHubPeer(id: string) {
+  async function deleteHubPeer(id: string) {
     if (authUser?.role !== 'admin') return
     setHubPeerActionID(id)
     setHubMessage('')
     setHubError('')
     try {
-      const peer = await api.disableHubPeer(id)
-      setHubPeers((prev) => prev.map((row) => row.id === id ? peer : row))
+    await api.deleteHubPeer(id)
+    setHubPeers((prev) => prev.filter((row) => row.id !== id))
       refreshFederationStatus()
-      setHubMessage('Peer disabled')
+    setHubMessage('Peer removed')
     } catch (err) {
       console.error(err)
-      setHubError(getErrorMessage(err, 'Could not disable peer'))
+    setHubError(getErrorMessage(err, 'Could not remove peer'))
     } finally {
       setHubPeerActionID(null)
     }
@@ -2321,11 +2321,11 @@ function App() {
                                 </button>
                               )}
                               <button
-                                onClick={() => disableHubPeer(peer.id)}
+                              onClick={() => deleteHubPeer(peer.id)}
                                 className="text-[10px] px-1.5 py-0.5 border border-console-error text-console-error rounded hover:bg-console-error hover:bg-opacity-10 disabled:opacity-50"
-                                disabled={!connectedPeer || hubPeerActionID === peer.id}
+                              disabled={hubPeerActionID === peer.id}
                               >
-                                {hubPeerActionID === peer.id ? '...' : 'DISABLE'}
+                              {hubPeerActionID === peer.id ? '...' : 'REMOVE'}
                               </button>
                             </div>
                           </td>

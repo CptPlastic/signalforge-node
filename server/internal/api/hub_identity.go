@@ -329,7 +329,7 @@ func (h *handler) handleConnectHubPeer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, peer)
 }
 
-func (h *handler) handleDisableHubPeer(w http.ResponseWriter, r *http.Request) {
+func (h *handler) handleDeleteHubPeer(w http.ResponseWriter, r *http.Request) {
 	admin, ok := h.requireAdmin(w, r)
 	if !ok {
 		return
@@ -341,10 +341,10 @@ func (h *handler) handleDisableHubPeer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	peer, found, err := h.db.DisableHubPeer(peerID)
+	peer, found, err := h.db.DeleteHubPeer(peerID)
 	if err != nil {
-		h.logger.Error("disable hub peer failed", "error", err)
-		http.Error(w, "disable hub peer", http.StatusInternalServerError)
+		h.logger.Error("delete hub peer failed", "error", err)
+		http.Error(w, "delete hub peer", http.StatusInternalServerError)
 		return
 	}
 	if !found {
@@ -352,8 +352,8 @@ func (h *handler) handleDisableHubPeer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.db.AppendAuditLog(admin.ID, "hub.peer_disabled", "hub_peer", peer.ID, map[string]any{"hubId": peer.HubID})
-	writeJSON(w, http.StatusOK, peer)
+	_ = h.db.AppendAuditLog(admin.ID, "hub.peer_deleted", "hub_peer", peer.ID, map[string]any{"hubId": peer.HubID})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *handler) handleEnableHubPeer(w http.ResponseWriter, r *http.Request) {

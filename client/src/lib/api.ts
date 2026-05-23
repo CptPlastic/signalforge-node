@@ -303,7 +303,7 @@ export const api = {
       body: JSON.stringify({ remoteUrl, inviteToken }),
     }),
   enableHubPeer: (id: string) => request<HubPeer>(`/api/v1/hub/peers/${encodeURIComponent(id)}/enable`, { method: 'PATCH' }),
-  disableHubPeer: (id: string) => request<HubPeer>(`/api/v1/hub/peers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteHubPeer: (id: string) => request<void>(`/api/v1/hub/peers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   calls: (params?: CallQuery) => request<Call[]>(`/api/v1/calls${buildQuery(params ?? { limit: 100 })}`),
   callGroups: () => request<string[]>('/api/v1/calls/groups'),
   talkgroupSettings: () => request<TalkgroupSetting[]>('/api/v1/talkgroups/settings'),

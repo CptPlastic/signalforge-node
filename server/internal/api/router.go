@@ -51,7 +51,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Get("/api/v1/hub/peers", handle.handleListHubPeers)
 		r.Post("/api/v1/hub/peers", handle.handleConnectHubPeer)
 		r.Patch("/api/v1/hub/peers/{id}/enable", handle.handleEnableHubPeer)
-		r.Delete("/api/v1/hub/peers/{id}", handle.handleDisableHubPeer)
+		r.Delete("/api/v1/hub/peers/{id}", handle.handleDeleteHubPeer)
 		r.Get("/api/v1/hub/federation/status", handle.handleFederationStatus)
 		r.Get("/api/v1/federation/sources", handle.handleFederationSources)
 		r.Get("/api/v1/federation/calls", handle.handleFederationCalls)

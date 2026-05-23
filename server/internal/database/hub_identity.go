@@ -413,6 +413,52 @@ func (d *DB) DisableHubPeer(id string) (*HubPeer, bool, error) {
 	return &peer, true, nil
 }
 
+// DeleteHubPeer removes a peer and its federation import cursor so the hubs can be paired again.
+func (d *DB) DeleteHubPeer(id string) (*HubPeer, bool, error) {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return nil, false, err
+	}
+	defer tx.Rollback()
+
+	row := tx.QueryRow(`
+		DELETE FROM hub_peers
+		WHERE id = $1
+		RETURNING id, hub_id, name, public_url, region, contact, status, direction, accepted_at, last_seen_at, created_at, updated_at`,
+		id,
+	)
+
+	var peer HubPeer
+	if err := row.Scan(
+		&peer.ID,
+		&peer.HubID,
+		&peer.Name,
+		&peer.PublicURL,
+		&peer.Region,
+		&peer.Contact,
+		&peer.Status,
+		&peer.Direction,
+		&peer.AcceptedAt,
+		&peer.LastSeenAt,
+		&peer.CreatedAt,
+		&peer.UpdatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	if _, err := tx.Exec(`DELETE FROM federation_call_imports WHERE peer_hub_id = $1`, peer.HubID); err != nil {
+		return nil, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, false, err
+	}
+
+	return &peer, true, nil
+}
+
 // EnableHubPeer marks a disabled peer as connected again without requiring a new invite.
 func (d *DB) EnableHubPeer(id string) (*HubPeer, bool, error) {
 	row := d.db.QueryRow(`
