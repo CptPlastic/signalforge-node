@@ -353,7 +353,16 @@ func (h *handler) handleDeleteHubPeer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = h.db.AppendAuditLog(admin.ID, "hub.peer_deleted", "hub_peer", peer.ID, map[string]any{"hubId": peer.HubID})
+	go h.cleanupDeletedHubPeer(peer.HubID)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *handler) cleanupDeletedHubPeer(peerHubID string) {
+	if err := h.db.DeleteFederatedPeerImports(peerHubID); err != nil {
+		h.logger.Error("delete federated peer imports failed", "peer_hub_id", peerHubID, "error", err)
+		return
+	}
+	h.logger.Info("deleted federated peer imports", "peer_hub_id", peerHubID)
 }
 
 func (h *handler) handleEnableHubPeer(w http.ResponseWriter, r *http.Request) {

@@ -414,15 +414,10 @@ func (d *DB) DisableHubPeer(id string) (*HubPeer, bool, error) {
 	return &peer, true, nil
 }
 
-// DeleteHubPeer removes a peer and its imported federation data so the hubs can be paired again.
+// DeleteHubPeer removes the peer relationship quickly. Imported call cleanup can be slow,
+// so callers should run DeleteFederatedPeerImports outside the request path.
 func (d *DB) DeleteHubPeer(id string) (*HubPeer, bool, error) {
-	tx, err := d.db.Begin()
-	if err != nil {
-		return nil, false, err
-	}
-	defer tx.Rollback()
-
-	row := tx.QueryRow(`
+	row := d.db.QueryRow(`
 		DELETE FROM hub_peers
 		WHERE id = $1
 		RETURNING id, hub_id, name, public_url, region, contact, status, direction, accepted_at, last_seen_at, created_at, updated_at`,
@@ -450,21 +445,28 @@ func (d *DB) DeleteHubPeer(id string) (*HubPeer, bool, error) {
 		return nil, false, err
 	}
 
-	remoteSourcePattern := federatedPeerSourceLikePattern(peer.HubID)
+	return &peer, true, nil
+}
+
+// DeleteFederatedPeerImports removes imported calls, remote sources, and cursor rows for a deleted peer.
+func (d *DB) DeleteFederatedPeerImports(peerHubID string) error {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	remoteSourcePattern := federatedPeerSourceLikePattern(peerHubID)
 	if _, err := tx.Exec(`DELETE FROM calls WHERE source_id LIKE $1 ESCAPE '\'`, remoteSourcePattern); err != nil {
-		return nil, false, err
+		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM ingestion_sources WHERE id LIKE $1 ESCAPE '\'`, remoteSourcePattern); err != nil {
-		return nil, false, err
+		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM federation_call_imports WHERE peer_hub_id = $1`, peer.HubID); err != nil {
-		return nil, false, err
+	if _, err := tx.Exec(`DELETE FROM federation_call_imports WHERE peer_hub_id = $1`, peerHubID); err != nil {
+		return err
 	}
-	if err := tx.Commit(); err != nil {
-		return nil, false, err
-	}
-
-	return &peer, true, nil
+	return tx.Commit()
 }
 
 func federatedPeerSourceLikePattern(peerHubID string) string {
