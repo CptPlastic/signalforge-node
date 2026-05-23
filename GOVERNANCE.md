@@ -28,6 +28,12 @@ Small documentation and bug-fix pull requests are welcome without prior discussi
 - Feature branches should be short-lived and merge through pull requests.
 - Direct pushes to protected branches should be avoided except for repository administration.
 
+## Release Promotions
+
+Maintainers promote `dev` to `main` through release pull requests when tested changes are ready for public operators. Release PR titles should use `SignalForge Node YYYY.MM.DD` for normal batches, or `SignalForge Node YYYY.MM.DD Patch N` for same-day follow-up fixes.
+
+Only maintainers should open `dev` to `main` promotion PRs. These PRs are the public release gate: CI must pass, security alerts should be reviewed, and operator-facing notes should be captured before merge.
+
 ## Protected Areas
 
 The following changes require extra maintainer review:

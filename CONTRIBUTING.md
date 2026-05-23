@@ -19,6 +19,8 @@ SignalForge Node is the public buildable node stack for community scanner hubs.
 - Be extra careful with auth, upload keys, federation trust, database migrations, and anything that changes official or verified status.
 - Destructive migrations, public deployment defaults, and trust-model changes require maintainer review even if CI passes.
 
+Community pull requests should target `dev`. Maintainer release promotions from `dev` to `main` use the release PR template and titles like `SignalForge Node YYYY.MM.DD`.
+
 ## Mirrored Source Changes
 
 Most runtime source paths in this repository are mirrored from `p7-scanner`, including `client/`, `server/`, `docker/`, `docs/`, `tools/`, compose files, and the main build files. Community PRs should still start here against `dev`.
