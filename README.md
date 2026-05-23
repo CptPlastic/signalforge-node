@@ -4,6 +4,9 @@
 
 Buildable public source for running a SignalForge/P7 Scanner community node.
 
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/signalforge-hub)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/CptPlastic/signalforge-node)
+
 This repo is the clean public mirror of the node stack: Go API server, React web console, recorder clients, Dockerfiles, compose files, database migrations, and operator docs. It is meant for people who want to run their own scanner hub, test SignalHub federation, or inspect how the public containers are built.
 
 ## License
