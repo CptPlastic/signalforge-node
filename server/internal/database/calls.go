@@ -122,7 +122,7 @@ func (d *DB) RecordFederatedCallImport(peerHubID string, remoteCallID, localCall
 // ListCalls returns calls without audio blobs using validated sort and optional search.
 func (d *DB) ListCalls(params ListCallsParams) ([]Call, error) {
 	limit, offset := normalizeListCallsPaging(params)
-	orderByClause := normalizeListCallsSort(params)
+	sortBy, order := normalizeListCallsSort(params)
 
 	baseQuery := `
 		SELECT id, COALESCE(user_id, ''), COALESCE(source_id, ''), datetime, system, system_label, talkgroup, talkgroup_label,
@@ -146,7 +146,7 @@ func (d *DB) ListCalls(params ListCallsParams) ([]Call, error) {
 		baseQuery += " WHERE " + strings.Join(filters, " AND ")
 	}
 
-	query := fmt.Sprintf("%s ORDER BY %s LIMIT $%d OFFSET $%d", baseQuery, orderByClause, argPos, argPos+1)
+	query := fmt.Sprintf("%s ORDER BY %s %s LIMIT $%d OFFSET $%d", baseQuery, sortBy, order, argPos, argPos+1)
 	args = append(args, limit, offset)
 
 	rows, err := d.db.Query(query, args...)
@@ -182,7 +182,7 @@ func normalizeListCallsPaging(params ListCallsParams) (int, int) {
 	return limit, offset
 }
 
-func normalizeListCallsSort(params ListCallsParams) string {
+func normalizeListCallsSort(params ListCallsParams) (string, string) {
 	sortBy := map[string]string{
 		"datetime":  "datetime",
 		"duration":  "duration",
@@ -193,29 +193,11 @@ func normalizeListCallsSort(params ListCallsParams) string {
 		sortBy = "datetime"
 	}
 
-	if strings.ToUpper(params.Order) == "ASC" {
-		switch sortBy {
-		case "duration":
-			return "duration ASC"
-		case "frequency":
-			return "frequency ASC"
-		case "talkgroup":
-			return "talkgroup ASC"
-		default:
-			return "datetime ASC"
-		}
+	order := strings.ToUpper(params.Order)
+	if order != "ASC" {
+		order = "DESC"
 	}
-
-	switch sortBy {
-	case "duration":
-		return "duration DESC"
-	case "frequency":
-		return "frequency DESC"
-	case "talkgroup":
-		return "talkgroup DESC"
-	default:
-		return "datetime DESC"
-	}
+	return sortBy, order
 }
 
 func appendSearchFilter(search string, filters *[]string, args *[]any, argPos *int) {
