@@ -47,3 +47,40 @@ func TestCanPullFederatedPeerUsesConnectedReachablePeers(t *testing.T) {
 		})
 	}
 }
+
+func TestFederatedSourcesAreReadableButNotSharedForRelay(t *testing.T) {
+	peer := database.HubPeer{HubID: "hub-a", Name: "Hub A"}
+	remoteID := federatedSourceID(peer.HubID, "dispatch")
+
+	h := &handler{}
+	allowed := h.canReadCall(
+		authUser{ID: "hub-b-user"},
+		database.Call{SourceID: remoteID},
+		map[string]database.IngestionSource{
+			remoteID: {ID: remoteID, Enabled: true, IsShared: false},
+		},
+		map[string]bool{},
+	)
+	if !allowed {
+		t.Fatalf("remote federated source should be readable on the receiving hub")
+	}
+
+	if !database.IsFederatedSourceID(remoteID) {
+		t.Fatalf("expected %q to be recognized as federated", remoteID)
+	}
+}
+
+func TestLocalUnsharedSourceStillRequiresOwnershipOrShare(t *testing.T) {
+	h := &handler{}
+	allowed := h.canReadCall(
+		authUser{ID: "other-user"},
+		database.Call{SourceID: "local-source"},
+		map[string]database.IngestionSource{
+			"local-source": {ID: "local-source", UserID: "owner-user", Enabled: true, IsShared: false},
+		},
+		map[string]bool{},
+	)
+	if allowed {
+		t.Fatalf("local unshared source should not be readable by unrelated users")
+	}
+}

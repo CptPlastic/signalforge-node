@@ -285,6 +285,10 @@ func (d *DB) ListReadableSourceIDsForUser(userID string) ([]string, error) {
 			SELECT id
 			FROM ingestion_sources
 			WHERE is_shared = TRUE AND deleted_at = 0
+			UNION
+			SELECT id
+			FROM ingestion_sources
+			WHERE id LIKE 'remote\_%' ESCAPE '\' AND enabled = TRUE AND deleted_at = 0
 		) readable_sources
 		WHERE id <> ''
 		ORDER BY id ASC`, userID)

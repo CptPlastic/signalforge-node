@@ -402,7 +402,7 @@ func (h *handler) upsertFederatedSources(peer database.HubPeer, sources []databa
 			ID:            federatedSourceID(peer.HubID, source.ID),
 			Label:         fmt.Sprintf("%s / %s", peer.Name, label),
 			Enabled:       true,
-			IsShared:      true,
+			IsShared:      false,
 			SystemID:      source.SystemID,
 			SystemLabel:   source.SystemLabel,
 			LastSeenUnix:  source.LastSeenUnix,
@@ -458,7 +458,7 @@ func (h *handler) upsertFallbackFederatedSource(peer database.HubPeer, remoteSou
 		ID:       localSourceID,
 		Label:    fmt.Sprintf("%s / remote source", peer.Name),
 		Enabled:  true,
-		IsShared: true,
+		IsShared: false,
 	}); err != nil {
 		return fmt.Errorf("upsert fallback remote source %s: %w", remoteSourceID, err)
 	}

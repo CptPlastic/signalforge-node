@@ -278,7 +278,7 @@ func (d *DB) GetRecentCallIDsForTalkgroups(userID string, talkgroups []int, limi
 		 ) OR EXISTS (
 			 SELECT 1 FROM ingestion_source_user_shares sh
 			 WHERE sh.source_id = c.source_id AND sh.user_id = $1
-		 ))
+		 ) OR (s.id LIKE 'remote\_%%' ESCAPE '\' AND s.enabled = TRUE AND s.deleted_at = 0))
 		 AND c.talkgroup IN (%s)
 		 ORDER BY c.datetime DESC
 		 LIMIT $%d`,
@@ -334,7 +334,7 @@ func (d *DB) GetRecentCallsForTalkgroups(userID string, talkgroups []int, limit 
 		 ) OR EXISTS (
 			 SELECT 1 FROM ingestion_source_user_shares sh
 			 WHERE sh.source_id = c.source_id AND sh.user_id = $1
-		 ))
+		 ) OR (s.id LIKE 'remote\_%%' ESCAPE '\' AND s.enabled = TRUE AND s.deleted_at = 0))
 		 AND c.talkgroup IN (%s)
 		 ORDER BY c.datetime DESC
 		 LIMIT $%d`,
