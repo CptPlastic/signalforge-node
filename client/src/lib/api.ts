@@ -292,6 +292,7 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(identity),
     }),
+  refreshHubDirectory: () => request<HubIdentity>('/api/v1/hub/directory/refresh', { method: 'POST' }),
   hubInvites: () => request<HubInvite[]>('/api/v1/hub/invites'),
   createHubInvite: () => request<HubInvite>('/api/v1/hub/invites', { method: 'POST' }),
   revokeHubInvite: (id: string) => request<HubInvite>(`/api/v1/hub/invites/${encodeURIComponent(id)}`, { method: 'DELETE' }),

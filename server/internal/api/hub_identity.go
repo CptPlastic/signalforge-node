@@ -44,6 +44,27 @@ type acceptHubInviteResponse struct {
 	Peer     database.HubPeer     `json:"peer"`
 }
 
+type hubDirectoryFeed struct {
+	Version   int                 `json:"version"`
+	UpdatedAt int64               `json:"updatedAt"`
+	Issuer    string              `json:"issuer"`
+	Hubs      []hubDirectoryEntry `json:"hubs"`
+}
+
+type hubDirectoryEntry struct {
+	HubID            string `json:"hubId"`
+	Name             string `json:"name"`
+	PublicURL        string `json:"publicUrl"`
+	Region           string `json:"region"`
+	DirectoryStatus  string `json:"directoryStatus"`
+	TrustLevel       string `json:"trustLevel"`
+	TrustIssuerHubID string `json:"trustIssuerHubId"`
+	TrustCertificate string `json:"trustCertificate"`
+	TrustExpiresAt   int64  `json:"trustExpiresAt"`
+	TrustVerifiedAt  int64  `json:"trustVerifiedAt"`
+	LastSeenAt       int64  `json:"lastSeenAt"`
+}
+
 func (h *handler) handleGetHubIdentity(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAuthenticated(w, r); !ok {
 		return
@@ -100,6 +121,58 @@ func (h *handler) handleUpdateHubIdentity(w http.ResponseWriter, r *http.Request
 		"publicUrl":         saved.PublicURL,
 		"region":            saved.Region,
 		"federationEnabled": saved.FederationEnabled,
+	})
+	writeJSON(w, http.StatusOK, saved)
+}
+
+func (h *handler) handleRefreshHubDirectory(w http.ResponseWriter, r *http.Request) {
+	admin, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	identity, err := h.ensureHubIdentity()
+	if err != nil {
+		h.logger.Error("load hub identity before directory refresh failed", "error", err)
+		http.Error(w, errLoadHubIdentity, http.StatusInternalServerError)
+		return
+	}
+
+	entry, found, err := h.fetchHubDirectoryEntry(r, identity.HubID)
+	if err != nil {
+		h.logger.Error("refresh hub directory failed", "error", err)
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	updated := *identity
+	if !found {
+		updated.DirectoryValidationStatus = "unlisted"
+		updated.TrustLevel = "community"
+		updated.TrustIssuerHubID = ""
+		updated.TrustCertificate = ""
+		updated.TrustExpiresAt = 0
+		updated.TrustVerifiedAt = 0
+	} else {
+		updated.DirectoryValidationStatus = normalizeDirectoryStatus(entry.DirectoryStatus)
+		updated.TrustLevel = normalizeDirectoryTrustLevel(entry.TrustLevel)
+		updated.TrustIssuerHubID = strings.TrimSpace(entry.TrustIssuerHubID)
+		updated.TrustCertificate = strings.TrimSpace(entry.TrustCertificate)
+		updated.TrustExpiresAt = entry.TrustExpiresAt
+		updated.TrustVerifiedAt = entry.TrustVerifiedAt
+	}
+
+	saved, err := h.db.UpsertHubIdentity(updated)
+	if err != nil {
+		h.logger.Error("save hub identity after directory refresh failed", "error", err)
+		http.Error(w, "save hub identity", http.StatusInternalServerError)
+		return
+	}
+
+	_ = h.db.AppendAuditLog(admin.ID, "hub.directory_refreshed", "hub", saved.HubID, map[string]any{
+		"found":           found,
+		"directoryStatus": saved.DirectoryValidationStatus,
+		"trustLevel":      saved.TrustLevel,
 	})
 	writeJSON(w, http.StatusOK, saved)
 }
@@ -495,6 +568,83 @@ func normalizeHubURL(raw string) (string, error) {
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
 	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func normalizeDirectoryURL(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", fmt.Errorf("missing hub directory url")
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("invalid hub directory url")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("hub directory url must use http or https")
+	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("hub directory url must not include credentials")
+	}
+	if err := validateRemoteHubHost(parsed.Hostname()); err != nil {
+		return "", err
+	}
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
+func normalizeDirectoryStatus(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "listed", "verified", "suspended", "unlisted":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "unverified"
+	}
+}
+
+func normalizeDirectoryTrustLevel(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "listed", "verified", "trusted", "official", "suspended":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "community"
+	}
+}
+
+func (h *handler) fetchHubDirectoryEntry(r *http.Request, hubID string) (hubDirectoryEntry, bool, error) {
+	directoryURL, err := normalizeDirectoryURL(h.cfg.HubDirectoryURL)
+	if err != nil {
+		return hubDirectoryEntry{}, false, err
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, directoryURL, nil)
+	if err != nil {
+		return hubDirectoryEntry{}, false, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	client := newRemoteHubHTTPClient(8 * time.Second)
+	resp, err := client.Do(req)
+	if err != nil {
+		return hubDirectoryEntry{}, false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return hubDirectoryEntry{}, false, fmt.Errorf("hub directory returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+
+	var feed hubDirectoryFeed
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&feed); err != nil {
+		return hubDirectoryEntry{}, false, err
+	}
+	for _, entry := range feed.Hubs {
+		if strings.TrimSpace(entry.HubID) == hubID {
+			if entry.TrustIssuerHubID == "" {
+				entry.TrustIssuerHubID = feed.Issuer
+			}
+			return entry, true, nil
+		}
+	}
+	return hubDirectoryEntry{}, false, nil
 }
 
 func validateRemoteHubHost(host string) error {

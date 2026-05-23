@@ -162,6 +162,7 @@ HUB_TRUST_LEVEL=community
 HUB_TRUST_ISSUER=
 HUB_TRUST_CERTIFICATE=
 HUB_TRUST_EXPIRES_AT=0
+HUB_DIRECTORY_URL=https://signalforge.org/directory/hubs.json
 
 # Magic-link email delivery through Mailjet
 MAILJET_API_KEY=$mailjet_api_key

@@ -78,6 +78,31 @@ func TestNormalizeHubURLRejectsUnresolvedHosts(t *testing.T) {
 	}
 }
 
+func TestNormalizeDirectoryURLPreservesFeedPath(t *testing.T) {
+	got, err := normalizeDirectoryURL("https://signalforge.org/directory/hubs.json?cache=1#ignored")
+	if err != nil {
+		t.Fatalf("normalizeDirectoryURL returned error: %v", err)
+	}
+	if got != "https://signalforge.org/directory/hubs.json?cache=1" {
+		t.Fatalf("normalizeDirectoryURL = %q, want feed URL without fragment", got)
+	}
+}
+
+func TestNormalizeDirectoryURLRejectsUnsafeHosts(t *testing.T) {
+	tests := []string{
+		"http://localhost/directory/hubs.json",
+		"http://127.0.0.1/directory/hubs.json",
+		"https://user:pass@signalforge.org/directory/hubs.json",
+		"file:///tmp/hubs.json",
+	}
+
+	for _, raw := range tests {
+		if got, err := normalizeDirectoryURL(raw); err == nil {
+			t.Fatalf("normalizeDirectoryURL(%q) = %q, want error", raw, got)
+		}
+	}
+}
+
 func TestRemoteHubHTTPClientRejectsUnsafeRedirect(t *testing.T) {
 	client := newRemoteHubHTTPClient(time.Second)
 	redirectURL, err := url.Parse("http://127.0.0.1:8080/api/v1/hub/invites/accept")

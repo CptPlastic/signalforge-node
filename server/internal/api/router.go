@@ -44,6 +44,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Get("/api/v1/auth/me", handle.handleMe)
 		r.Get("/api/v1/hub/identity", handle.handleGetHubIdentity)
 		r.Put("/api/v1/hub/identity", handle.handleUpdateHubIdentity)
+		r.Post("/api/v1/hub/directory/refresh", handle.handleRefreshHubDirectory)
 		r.Get("/api/v1/hub/invites", handle.handleListHubInvites)
 		r.Post("/api/v1/hub/invites", handle.handleCreateHubInvite)
 		r.Post("/api/v1/hub/invites/accept", handle.handleAcceptHubInvite)

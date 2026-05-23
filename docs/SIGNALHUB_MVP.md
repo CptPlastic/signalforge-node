@@ -80,6 +80,7 @@ SignalHub-specific deployment variables should be minimal:
 - `HUB_NAME`: display name for discovery and remote source labels.
 - `HUB_REGION`: rough region such as `Yukon, OK` or `Canadian County, OK`.
 - `HUB_FEDERATION_ENABLED`: `true` or `false`.
+- `HUB_DIRECTORY_URL`: public directory feed, defaulting to `https://signalforge.org/directory/hubs.json`.
 
 Hosted deployments should expose only the client/public app through the reverse proxy. Federation endpoints can still route through the client-facing domain if the frontend proxy passes `/api` requests to the server.
 

@@ -27,6 +27,7 @@ type Config struct {
 	HubTrustIssuer   string
 	HubTrustCert     string
 	HubTrustExpires  int64
+	HubDirectoryURL  string
 	UpdateCheckURL   string
 	LogLevel         slog.Level
 }
@@ -53,6 +54,7 @@ func Load() (Config, error) {
 		HubTrustIssuer:   strings.TrimSpace(getEnv("HUB_TRUST_ISSUER", "")),
 		HubTrustCert:     strings.TrimSpace(getEnv("HUB_TRUST_CERTIFICATE", "")),
 		HubTrustExpires:  getInt64Env("HUB_TRUST_EXPIRES_AT", 0),
+		HubDirectoryURL:  strings.TrimSpace(getEnv("HUB_DIRECTORY_URL", "https://signalforge.org/directory/hubs.json")),
 		UpdateCheckURL:   strings.TrimSpace(getEnv("UPDATE_CHECK_URL", "https://signalforge.org/p7-scanner-update.json")),
 	}
 
@@ -109,7 +111,7 @@ func getInt64Env(key string, fallback int64) int64 {
 
 func normalizeHubTrustLevel(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "verified", "official":
+	case "listed", "verified", "trusted", "official", "suspended":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "community"

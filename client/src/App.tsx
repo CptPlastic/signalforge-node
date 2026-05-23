@@ -1268,6 +1268,23 @@ function App() {
     }
   }
 
+  async function refreshHubDirectory() {
+    if (authUser?.role !== 'admin') return
+    setHubLoading(true)
+    setHubMessage('')
+    setHubError('')
+    try {
+      const saved = await api.refreshHubDirectory()
+      applyHubIdentity(saved)
+      setHubMessage('Directory trust refreshed')
+    } catch (err) {
+      console.error(err)
+      setHubError(getErrorMessage(err, 'Could not refresh directory trust'))
+    } finally {
+      setHubLoading(false)
+    }
+  }
+
   async function createHubInvite() {
     if (authUser?.role !== 'admin') return
     setHubInviteActionID('new')
@@ -2301,6 +2318,13 @@ function App() {
                   <div className="text-console-muted">Local exportable calls: <span className={federationStatus?.exportableCallCount ? 'text-console-accent' : 'text-console-error'}>{federationStatus?.exportableCallCount ?? '—'}</span></div>
                   <div className="text-console-muted">Imported remote sources: <span className={federationStatus?.importedSourceCount ? 'text-console-accent' : 'text-console-muted'}>{federationStatus?.importedSourceCount ?? '—'}</span></div>
                   <div className="text-console-muted">Imported remote calls: <span className={federationStatus?.importedCallCount ? 'text-console-accent' : 'text-console-muted'}>{federationStatus?.importedCallCount ?? '—'}</span></div>
+                  <button
+                    onClick={refreshHubDirectory}
+                    disabled={hubLoading}
+                    className="w-fit px-2 py-1 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent disabled:opacity-50"
+                  >
+                    CHECK DIRECTORY
+                  </button>
                   <PublicWSProbeRow probe={publicWSProbe} token={publicWSProbeSet?.shareToken} onProbeChange={setPublicWSProbe} />
                   {(federationStatus?.peerStatuses.length || 0) > 0 && (
                     <div className="flex flex-col gap-1 pt-1">
