@@ -42,6 +42,19 @@ type WsHeartbeatEvent = { type: 'heartbeat'; ts: number }
 type WsEvent = WsCallEvent | WsSourceDeletedEvent | WsHeartbeatEvent
 
 type HubIdentityDraft = Pick<HubIdentity, 'name' | 'publicUrl' | 'region' | 'contact' | 'federationEnabled'>
+type PublicWSProbeStatus = 'idle' | 'checking' | 'ok' | 'failed' | 'missing-token'
+
+type PublicWSProbeState = {
+  status: PublicWSProbeStatus
+  detail: string
+  checkedAt: number | null
+}
+
+type PublicWSProbeRowProps = Readonly<{
+  probe: PublicWSProbeState
+  token?: string
+  onProbeChange: (state: PublicWSProbeState) => void
+}>
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -100,6 +113,106 @@ function appendSortedGroup(groups: string[], group: string): string[] {
   return [...groups, group].sort((a, b) => a.localeCompare(b))
 }
 
+function publicWSURL(token: string): string {
+  const protocol = globalThis.window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${globalThis.window.location.host}/public/ws/${encodeURIComponent(token)}`
+}
+
+function probePublicWebSocket(token: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(publicWSURL(token))
+    let settled = false
+    const timeout = globalThis.window.setTimeout(() => {
+      if (settled) return
+      settled = true
+      ws.close()
+      reject(new Error('timeout waiting for public websocket upgrade'))
+    }, 5000)
+
+    ws.addEventListener('open', () => {
+      if (settled) return
+      settled = true
+      globalThis.window.clearTimeout(timeout)
+      ws.close(1000, 'probe complete')
+      resolve()
+    })
+
+    ws.addEventListener('error', () => {
+      if (settled) return
+      settled = true
+      globalThis.window.clearTimeout(timeout)
+      reject(new Error('public websocket upgrade failed'))
+    })
+
+    ws.addEventListener('close', (event) => {
+      if (settled) return
+      settled = true
+      globalThis.window.clearTimeout(timeout)
+      reject(new Error(`closed before upgrade (${event.code || 'no-code'})`))
+    })
+  })
+}
+
+function publicWSProbeLabel(status: PublicWSProbeStatus): string {
+  const labels: Record<PublicWSProbeStatus, string> = {
+    idle: 'NOT CHECKED',
+    checking: 'CHECKING',
+    ok: 'OK',
+    failed: 'FAILED',
+    'missing-token': 'NO TOKEN',
+  }
+  return labels[status]
+}
+
+function publicWSProbeClass(status: PublicWSProbeStatus): string {
+  if (status === 'ok') return 'text-console-accent'
+  if (status === 'failed' || status === 'missing-token') return 'text-console-error'
+  return 'text-console-muted'
+}
+
+async function runPublicWSProbe(token: string | undefined, setPublicWSProbe: (state: PublicWSProbeState) => void) {
+  if (!token) {
+    setPublicWSProbe({ status: 'missing-token', detail: 'no shared radio set token available', checkedAt: Math.floor(Date.now() / 1000) })
+    return
+  }
+
+  setPublicWSProbe({ status: 'checking', detail: `checking ${publicWSURL(token)}`, checkedAt: null })
+  try {
+    await probePublicWebSocket(token)
+    setPublicWSProbe({ status: 'ok', detail: `upgrade ok: ${publicWSURL(token)}`, checkedAt: Math.floor(Date.now() / 1000) })
+  } catch (err) {
+    setPublicWSProbe({ status: 'failed', detail: getErrorMessage(err, 'public websocket upgrade failed'), checkedAt: Math.floor(Date.now() / 1000) })
+  }
+}
+
+function PublicWSProbeRow({
+  probe,
+  token,
+  onProbeChange,
+}: PublicWSProbeRowProps) {
+  return (
+    <>
+      <div className="flex items-center gap-2 flex-wrap pt-1">
+        <span className="text-console-muted">Public WS:</span>
+        <span className={publicWSProbeClass(probe.status)}>
+          {publicWSProbeLabel(probe.status)}
+        </span>
+        <button
+          onClick={() => runPublicWSProbe(token, onProbeChange)}
+          disabled={probe.status === 'checking'}
+          className="px-1.5 py-0.5 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent disabled:opacity-50"
+        >
+          {probe.status === 'checking' ? '...' : 'CHECK'}
+        </button>
+      </div>
+      <div className="text-[10px] text-console-muted break-all">
+        {probe.detail}
+        {probe.checkedAt && ` · ${fmtTime(probe.checkedAt)}`}
+      </div>
+    </>
+  )
+}
+
 function App() {
   const [connected, setConnected] = useState(false)
   const [wsLastDisconnectUnix, setWSLastDisconnectUnix] = useState<number | null>(null)
@@ -153,6 +266,7 @@ function App() {
   const [hubInviteActionID, setHubInviteActionID] = useState<string | null>(null)
   const [hubPeers, setHubPeers] = useState<HubPeer[]>([])
   const [federationStatus, setFederationStatus] = useState<FederationStatus | null>(null)
+  const [publicWSProbe, setPublicWSProbe] = useState<PublicWSProbeState>({ status: 'idle', detail: 'not checked', checkedAt: null })
   const [hubPeerActionID, setHubPeerActionID] = useState<string | null>(null)
   const [peerRemoteURL, setPeerRemoteURL] = useState('')
   const [peerInviteToken, setPeerInviteToken] = useState('')
@@ -1384,6 +1498,11 @@ function App() {
      return `curl -X POST "${base}/api/call-upload" \\\n  -F "key=your-api-key" \\\n  -F "system=1" -F "systemLabel=My System" \\\n  -F "talkgroup=1001" -F "talkgroupLabel=Dispatch" \\\n  -F "talkgroupGroup=FIRE" -F "talkgroupTag=PRIMARY" \\\n  -F "dateTime=$(date +%s)" -F "frequency=460325000" \\\n  -F "duration=3" -F "audioName=call.mp3" \\\n  -F "audioType=audio/mpeg" \\\n  -F "audio=@./call.mp3;type=audio/mpeg"`
   }, [])
 
+  const publicWSProbeSet = useMemo(
+    () => radioSets.find((set) => Boolean(set.shareToken)),
+    [radioSets],
+  )
+
   const overallStatus = useOverallStatus({
     apiHealthy,
     apiLastHealthyUnix,
@@ -2182,6 +2301,7 @@ function App() {
                   <div className="text-console-muted">Local exportable calls: <span className={federationStatus?.exportableCallCount ? 'text-console-accent' : 'text-console-error'}>{federationStatus?.exportableCallCount ?? '—'}</span></div>
                   <div className="text-console-muted">Imported remote sources: <span className={federationStatus?.importedSourceCount ? 'text-console-accent' : 'text-console-muted'}>{federationStatus?.importedSourceCount ?? '—'}</span></div>
                   <div className="text-console-muted">Imported remote calls: <span className={federationStatus?.importedCallCount ? 'text-console-accent' : 'text-console-muted'}>{federationStatus?.importedCallCount ?? '—'}</span></div>
+                  <PublicWSProbeRow probe={publicWSProbe} token={publicWSProbeSet?.shareToken} onProbeChange={setPublicWSProbe} />
                   {(federationStatus?.peerStatuses.length || 0) > 0 && (
                     <div className="flex flex-col gap-1 pt-1">
                       {federationStatus?.peerStatuses.map((peerStatus) => (
