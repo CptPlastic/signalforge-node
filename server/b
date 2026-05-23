@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+version="${BUILD_VERSION:-${GIT_SHA:-unknown}}"
+commit="${GIT_SHA:-unknown}"
+build_date="${BUILD_DATE:-unknown}"
+
+ldflags="-X main.V=${version}"
+ldflags="${ldflags} -X main.C=${commit}"
+ldflags="${ldflags} -X main.D=${build_date}"
+
+CGO_ENABLED=0 GOOS=linux go build \
+	-ldflags "${ldflags}" \
+	-o /out/server \
+	./main.go

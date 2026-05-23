@@ -1,0 +1,47 @@
+name: release-pr-guard
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    env:
+      PR_BASE: ${{ github.event.pull_request.base.ref }}
+      PR_HEAD: ${{ github.event.pull_request.head.ref }}
+      PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+    steps:
+      - name: Validate release promotion PR
+        run: |
+          set -euo pipefail
+
+          if [ "$PR_BASE" != "main" ]; then
+            echo "This guard only applies to main-targeting PRs."
+            exit 0
+          fi
+
+          if [ "$PR_HEAD" != "dev" ]; then
+            echo "Only dev-to-main release promotion PRs are accepted. Got head: $PR_HEAD" >&2
+            exit 1
+          fi
+
+          case "$PR_AUTHOR_ASSOCIATION" in
+            OWNER|MEMBER|COLLABORATOR)
+              ;;
+            *)
+              echo "Release promotion PRs must be opened by a maintainer or collaborator. Author association: $PR_AUTHOR_ASSOCIATION" >&2
+              exit 1
+              ;;
+          esac
+
+          if ! [[ "$PR_TITLE" =~ ^SignalForge\ Node\ [0-9]{4}\.[0-9]{2}\.[0-9]{2}(\ Patch\ [0-9]+)?$ ]]; then
+            echo "Release PR title must be: SignalForge Node YYYY.MM.DD or SignalForge Node YYYY.MM.DD Patch N" >&2
+            exit 1
+          fi

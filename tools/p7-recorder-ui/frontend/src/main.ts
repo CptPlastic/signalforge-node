@@ -104,7 +104,7 @@ app.innerHTML = `
       <aside class="side">
         <section class="panel compact">
           <div class="panel-head"><span>// links</span></div>
-          <button type="button" class="wide" data-link="https://p7scan.projectseven.us/">OPEN P7</button>
+          <button type="button" class="wide" data-link="https://p7hub.projectseven.us/">OPEN HUB</button>
           <button type="button" class="wide" data-link="https://signalforge.org/#recorder">RECORDER DOWNLOADS</button>
           <button type="button" class="wide" data-link="https://github.com/CptPlastic/signalforge.org/issues/new">FEEDBACK</button>
           <button type="button" class="wide" data-link="https://github.com/sponsors/CptPlastic">DONATE</button>

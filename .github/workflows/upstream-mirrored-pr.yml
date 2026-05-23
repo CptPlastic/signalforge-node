@@ -1,0 +1,59 @@
+name: upstream-mirrored-pr
+
+on:
+  pull_request_target:
+    branches: [dev]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPSTREAM_TOKEN: ${{ secrets.P7_SCANNER_UPSTREAM_TOKEN }}
+      UPSTREAM_REPOSITORY: CptPlastic/p7-scanner
+      UPSTREAM_WORKFLOW: upstream-signalforge-node-pr.yml
+      SOURCE_REPOSITORY: ${{ github.repository }}
+      SOURCE_PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Detect mirrored path changes
+        id: mirrored
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${SOURCE_REPOSITORY}/pulls/${SOURCE_PR_NUMBER}/files" --jq '.[].filename' > changed-files.txt
+
+          if grep -Eq '^(client/|server/|docker/|docs/|tools/|AUTH_GATING\.md$|Dockerfile\.server$|Makefile$|docker-compose(\..*)?\.yml$|\.env\.(peer|production)\.example$|\.gitattributes$|\.gitignore$)' changed-files.txt; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip non-mirrored PR
+        if: steps.mirrored.outputs.changed != 'true'
+        run: echo "No mirrored source paths changed; no p7-scanner upstream PR needed."
+
+      - name: Validate upstream token
+        if: steps.mirrored.outputs.changed == 'true'
+        run: |
+          if [ -z "${UPSTREAM_TOKEN:-}" ]; then
+            echo "Missing required secret: P7_SCANNER_UPSTREAM_TOKEN" >&2
+            echo "Create a PAT that can run workflows and open PR branches in ${UPSTREAM_REPOSITORY}." >&2
+            exit 1
+          fi
+
+      - name: Dispatch p7-scanner upstream review
+        if: steps.mirrored.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          GH_TOKEN="$UPSTREAM_TOKEN" gh workflow run "$UPSTREAM_WORKFLOW" \
+            --repo "$UPSTREAM_REPOSITORY" \
+            -f signalforge_pr_number="$SOURCE_PR_NUMBER" \
+            -f source_repository="$SOURCE_REPOSITORY" \
+            -f base_branch="main" \
+            -f draft="true"
+
+          echo "Requested p7-scanner upstream review for ${SOURCE_REPOSITORY}#${SOURCE_PR_NUMBER}."

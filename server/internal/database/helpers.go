@@ -22,6 +22,11 @@ func nullableString(value string) any {
 	return value
 }
 
+// IsFederatedSourceID reports whether a source was imported from a peer hub.
+func IsFederatedSourceID(sourceID string) bool {
+	return strings.HasPrefix(strings.TrimSpace(sourceID), "remote_")
+}
+
 // NewShareToken generates a new cryptographically random share token.
 func NewShareToken() string {
 	return randomToken("share_")

@@ -2,7 +2,7 @@ package database
 
 import "encoding/json"
 
-// HubIdentity identifies this P7 Scanner instance for future SignalHub federation.
+// HubIdentity identifies this SignalForge Hub instance for future SignalHub federation.
 type HubIdentity struct {
 	HubID                     string `json:"hubId"`
 	Name                      string `json:"name"`
@@ -12,6 +12,11 @@ type HubIdentity struct {
 	PublicKey                 string `json:"publicKey"`
 	FederationEnabled         bool   `json:"federationEnabled"`
 	DirectoryValidationStatus string `json:"directoryValidationStatus"`
+	TrustLevel                string `json:"trustLevel"`
+	TrustIssuerHubID          string `json:"trustIssuerHubId"`
+	TrustCertificate          string `json:"trustCertificate"`
+	TrustExpiresAt            int64  `json:"trustExpiresAt"`
+	TrustVerifiedAt           int64  `json:"trustVerifiedAt"`
 	CreatedAt                 int64  `json:"createdAt"`
 	UpdatedAt                 int64  `json:"updatedAt"`
 }
@@ -27,7 +32,7 @@ type HubInvite struct {
 	CreatedAt       int64  `json:"createdAt"`
 }
 
-// HubPeer is a trusted remote P7 Scanner hub known to this SignalHub instance.
+// HubPeer is a trusted remote SignalForge Hub known to this SignalHub instance.
 type HubPeer struct {
 	ID         string `json:"id"`
 	HubID      string `json:"hubId"`
@@ -155,4 +160,12 @@ type ListCallsParams struct {
 	UserID      string
 	OnlyUnowned bool
 	Talkgroups  []int
+}
+
+// FederatedCall is a call payload shared between trusted hubs.
+type FederatedCall struct {
+	Call      Call   `json:"call"`
+	Source    string `json:"sourceId"`
+	Audio     []byte `json:"-"`
+	AudioBase string `json:"audioBase64,omitempty"`
 }

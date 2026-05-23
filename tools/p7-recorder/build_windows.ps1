@@ -66,7 +66,7 @@ function Write-BuildInfo {
     $repository = $env:P7_RECORDER_REPOSITORY
     $defaultServerURL = $env:P7_RECORDER_DEFAULT_SERVER_URL
     if ([string]::IsNullOrWhiteSpace($defaultServerURL)) {
-        $defaultServerURL = "https://p7scan.projectseven.us/"
+        $defaultServerURL = "https://p7hub.projectseven.us/"
     }
     $apiURL = ""
     $pageURL = ""

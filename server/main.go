@@ -15,7 +15,17 @@ import (
 	"github.com/projectseven-co-ltd/p7-scanner/server/internal/database"
 )
 
+var (
+	V = "0.1.0"
+	C = "unknown"
+	D = "unknown"
+)
+
 func main() {
+	api.BuildVersion = V
+	api.BuildCommit = C
+	api.BuildDate = D
+
 	cfg, err := config.Load()
 	if err != nil {
 		slog.New(slog.NewJSONHandler(os.Stdout, nil)).Error("failed to load config", "error", err)

@@ -18,7 +18,7 @@ from pathlib import Path
 
 version = os.environ.get("P7_RECORDER_VERSION") or "dev"
 repository = os.environ.get("P7_RECORDER_REPOSITORY") or ""
-default_server_url = os.environ.get("P7_RECORDER_DEFAULT_SERVER_URL") or "https://p7scan.projectseven.us/"
+default_server_url = os.environ.get("P7_RECORDER_DEFAULT_SERVER_URL") or "https://p7hub.projectseven.us/"
 api_url = f"https://api.github.com/repos/{repository}/releases/latest" if repository else ""
 page_url = f"https://github.com/{repository}/releases/latest" if repository else ""
 

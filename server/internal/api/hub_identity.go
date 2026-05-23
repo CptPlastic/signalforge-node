@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -41,6 +42,27 @@ type acceptHubInviteRequest struct {
 type acceptHubInviteResponse struct {
 	Identity database.HubIdentity `json:"identity"`
 	Peer     database.HubPeer     `json:"peer"`
+}
+
+type hubDirectoryFeed struct {
+	Version   int                 `json:"version"`
+	UpdatedAt int64               `json:"updatedAt"`
+	Issuer    string              `json:"issuer"`
+	Hubs      []hubDirectoryEntry `json:"hubs"`
+}
+
+type hubDirectoryEntry struct {
+	HubID            string `json:"hubId"`
+	Name             string `json:"name"`
+	PublicURL        string `json:"publicUrl"`
+	Region           string `json:"region"`
+	DirectoryStatus  string `json:"directoryStatus"`
+	TrustLevel       string `json:"trustLevel"`
+	TrustIssuerHubID string `json:"trustIssuerHubId"`
+	TrustCertificate string `json:"trustCertificate"`
+	TrustExpiresAt   int64  `json:"trustExpiresAt"`
+	TrustVerifiedAt  int64  `json:"trustVerifiedAt"`
+	LastSeenAt       int64  `json:"lastSeenAt"`
 }
 
 func (h *handler) handleGetHubIdentity(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +106,7 @@ func (h *handler) handleUpdateHubIdentity(w http.ResponseWriter, r *http.Request
 	updated.Contact = strings.TrimSpace(req.Contact)
 	updated.FederationEnabled = req.FederationEnabled
 	if updated.Name == "" {
-		updated.Name = "P7 Scanner Hub"
+		updated.Name = "SignalForge Hub"
 	}
 
 	saved, err := h.db.UpsertHubIdentity(updated)
@@ -99,6 +121,58 @@ func (h *handler) handleUpdateHubIdentity(w http.ResponseWriter, r *http.Request
 		"publicUrl":         saved.PublicURL,
 		"region":            saved.Region,
 		"federationEnabled": saved.FederationEnabled,
+	})
+	writeJSON(w, http.StatusOK, saved)
+}
+
+func (h *handler) handleRefreshHubDirectory(w http.ResponseWriter, r *http.Request) {
+	admin, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	identity, err := h.ensureHubIdentity()
+	if err != nil {
+		h.logger.Error("load hub identity before directory refresh failed", "error", err)
+		http.Error(w, errLoadHubIdentity, http.StatusInternalServerError)
+		return
+	}
+
+	entry, found, err := h.fetchHubDirectoryEntry(r, identity.HubID)
+	if err != nil {
+		h.logger.Error("refresh hub directory failed", "error", err)
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	updated := *identity
+	if !found {
+		updated.DirectoryValidationStatus = "unlisted"
+		updated.TrustLevel = "community"
+		updated.TrustIssuerHubID = ""
+		updated.TrustCertificate = ""
+		updated.TrustExpiresAt = 0
+		updated.TrustVerifiedAt = 0
+	} else {
+		updated.DirectoryValidationStatus = normalizeDirectoryStatus(entry.DirectoryStatus)
+		updated.TrustLevel = normalizeDirectoryTrustLevel(entry.TrustLevel)
+		updated.TrustIssuerHubID = strings.TrimSpace(entry.TrustIssuerHubID)
+		updated.TrustCertificate = strings.TrimSpace(entry.TrustCertificate)
+		updated.TrustExpiresAt = entry.TrustExpiresAt
+		updated.TrustVerifiedAt = entry.TrustVerifiedAt
+	}
+
+	saved, err := h.db.UpsertHubIdentity(updated)
+	if err != nil {
+		h.logger.Error("save hub identity after directory refresh failed", "error", err)
+		http.Error(w, "save hub identity", http.StatusInternalServerError)
+		return
+	}
+
+	_ = h.db.AppendAuditLog(admin.ID, "hub.directory_refreshed", "hub", saved.HubID, map[string]any{
+		"found":           found,
+		"directoryStatus": saved.DirectoryValidationStatus,
+		"trustLevel":      saved.TrustLevel,
 	})
 	writeJSON(w, http.StatusOK, saved)
 }
@@ -227,7 +301,7 @@ func (h *handler) handleAcceptHubInvite(w http.ResponseWriter, r *http.Request) 
 		Region:    req.Peer.Region,
 		Contact:   req.Peer.Contact,
 		Status:    "connected",
-		Direction: "inbound",
+		Direction: "bidirectional",
 	})
 	if err != nil {
 		h.logger.Error("save inbound hub peer failed", "error", err)
@@ -314,7 +388,7 @@ func (h *handler) handleConnectHubPeer(w http.ResponseWriter, r *http.Request) {
 		Region:    remoteIdentity.Region,
 		Contact:   remoteIdentity.Contact,
 		Status:    "connected",
-		Direction: "outbound",
+		Direction: "bidirectional",
 	})
 	if err != nil {
 		h.logger.Error("save outbound hub peer failed", "error", err)
@@ -329,7 +403,7 @@ func (h *handler) handleConnectHubPeer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, peer)
 }
 
-func (h *handler) handleDisableHubPeer(w http.ResponseWriter, r *http.Request) {
+func (h *handler) handleDeleteHubPeer(w http.ResponseWriter, r *http.Request) {
 	admin, ok := h.requireAdmin(w, r)
 	if !ok {
 		return
@@ -341,10 +415,10 @@ func (h *handler) handleDisableHubPeer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	peer, found, err := h.db.DisableHubPeer(peerID)
+	peer, found, err := h.db.DeleteHubPeer(peerID)
 	if err != nil {
-		h.logger.Error("disable hub peer failed", "error", err)
-		http.Error(w, "disable hub peer", http.StatusInternalServerError)
+		h.logger.Error("delete hub peer failed", "error", err)
+		http.Error(w, "delete hub peer", http.StatusInternalServerError)
 		return
 	}
 	if !found {
@@ -352,7 +426,51 @@ func (h *handler) handleDisableHubPeer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.db.AppendAuditLog(admin.ID, "hub.peer_disabled", "hub_peer", peer.ID, map[string]any{"hubId": peer.HubID})
+	_ = h.db.AppendAuditLog(admin.ID, "hub.peer_deleted", "hub_peer", peer.ID, map[string]any{"hubId": peer.HubID})
+	go h.cleanupDeletedHubPeer(peer.HubID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *handler) cleanupDeletedHubPeer(peerHubID string) {
+	h.logger.Info("delete federated peer imports started", "peer_hub_id", peerHubID)
+	stats, err := h.db.DeleteFederatedPeerImports(peerHubID)
+	if err != nil {
+		h.logger.Error("delete federated peer imports failed", "peer_hub_id", peerHubID, "error", err)
+		return
+	}
+	h.logger.Info(
+		"deleted federated peer imports",
+		"peer_hub_id", peerHubID,
+		"calls_deleted", stats.CallsDeleted,
+		"sources_deleted", stats.SourcesDeleted,
+		"imports_deleted", stats.ImportsDeleted,
+	)
+}
+
+func (h *handler) handleEnableHubPeer(w http.ResponseWriter, r *http.Request) {
+	admin, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	peerID := strings.TrimSpace(r.PathValue("id"))
+	if peerID == "" {
+		http.Error(w, "missing peer id", http.StatusBadRequest)
+		return
+	}
+
+	peer, found, err := h.db.EnableHubPeer(peerID)
+	if err != nil {
+		h.logger.Error("enable hub peer failed", "error", err)
+		http.Error(w, "enable hub peer", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "peer not found", http.StatusNotFound)
+		return
+	}
+
+	_ = h.db.AppendAuditLog(admin.ID, "hub.peer_enabled", "hub_peer", peer.ID, map[string]any{"hubId": peer.HubID})
 	writeJSON(w, http.StatusOK, peer)
 }
 
@@ -362,7 +480,7 @@ func (h *handler) ensureHubIdentity() (*database.HubIdentity, error) {
 		return nil, err
 	}
 	if found {
-		return identity, nil
+		return h.ensureConfiguredHubIdentity(identity)
 	}
 
 	return h.db.UpsertHubIdentity(database.HubIdentity{
@@ -373,7 +491,56 @@ func (h *handler) ensureHubIdentity() (*database.HubIdentity, error) {
 		Contact:                   h.cfg.HubContact,
 		FederationEnabled:         h.cfg.HubFederation,
 		DirectoryValidationStatus: "unverified",
+		TrustLevel:                h.cfg.HubTrustLevel,
+		TrustIssuerHubID:          h.cfg.HubTrustIssuer,
+		TrustCertificate:          h.cfg.HubTrustCert,
+		TrustExpiresAt:            h.cfg.HubTrustExpires,
 	})
+}
+
+func (h *handler) ensureConfiguredHubIdentity(identity *database.HubIdentity) (*database.HubIdentity, error) {
+	updated := h.configuredHubIdentity(identity)
+	if updated.Name == identity.Name &&
+		updated.PublicURL == identity.PublicURL &&
+		updated.Region == identity.Region &&
+		updated.Contact == identity.Contact &&
+		updated.FederationEnabled == identity.FederationEnabled &&
+		updated.TrustLevel == identity.TrustLevel &&
+		updated.TrustIssuerHubID == identity.TrustIssuerHubID &&
+		updated.TrustCertificate == identity.TrustCertificate &&
+		updated.TrustExpiresAt == identity.TrustExpiresAt {
+		return identity, nil
+	}
+
+	return h.db.UpsertHubIdentity(updated)
+}
+
+func (h *handler) configuredHubIdentity(identity *database.HubIdentity) database.HubIdentity {
+	updated := *identity
+	if h.cfg.HubName != "" && updated.Name != h.cfg.HubName {
+		updated.Name = h.cfg.HubName
+	}
+	if h.cfg.HubPublicURL != "" && updated.PublicURL != h.cfg.HubPublicURL {
+		updated.PublicURL = h.cfg.HubPublicURL
+	}
+	if h.cfg.HubRegion != "" && updated.Region != h.cfg.HubRegion {
+		updated.Region = h.cfg.HubRegion
+	}
+	if h.cfg.HubContact != "" && updated.Contact != h.cfg.HubContact {
+		updated.Contact = h.cfg.HubContact
+	}
+	if h.cfg.HubFederation && !updated.FederationEnabled {
+		updated.FederationEnabled = true
+	}
+
+	configuredLevel := strings.TrimSpace(h.cfg.HubTrustLevel)
+	if configuredLevel != "" && configuredLevel != "community" {
+		updated.TrustLevel = configuredLevel
+		updated.TrustIssuerHubID = h.cfg.HubTrustIssuer
+		updated.TrustCertificate = h.cfg.HubTrustCert
+		updated.TrustExpiresAt = h.cfg.HubTrustExpires
+	}
+	return updated
 }
 
 func normalizeHubURL(raw string) (string, error) {
@@ -391,10 +558,150 @@ func normalizeHubURL(raw string) (string, error) {
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return "", fmt.Errorf("remote hub url must use http or https")
 	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("remote hub url must not include credentials")
+	}
+	if err := validateRemoteHubHost(parsed.Hostname()); err != nil {
+		return "", err
+	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
 	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func normalizeDirectoryURL(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", fmt.Errorf("missing hub directory url")
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("invalid hub directory url")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("hub directory url must use http or https")
+	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("hub directory url must not include credentials")
+	}
+	if err := validateRemoteHubHost(parsed.Hostname()); err != nil {
+		return "", err
+	}
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
+func normalizeDirectoryStatus(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "listed", "verified", "suspended", "unlisted":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "unverified"
+	}
+}
+
+func normalizeDirectoryTrustLevel(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "listed", "verified", "trusted", "official", "suspended":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "community"
+	}
+}
+
+func (h *handler) fetchHubDirectoryEntry(r *http.Request, hubID string) (hubDirectoryEntry, bool, error) {
+	directoryURL, err := normalizeDirectoryURL(h.cfg.HubDirectoryURL)
+	if err != nil {
+		return hubDirectoryEntry{}, false, err
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, directoryURL, nil)
+	if err != nil {
+		return hubDirectoryEntry{}, false, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	client := newRemoteHubHTTPClient(8 * time.Second)
+	resp, err := client.Do(req)
+	if err != nil {
+		return hubDirectoryEntry{}, false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return hubDirectoryEntry{}, false, fmt.Errorf("hub directory returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+
+	var feed hubDirectoryFeed
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&feed); err != nil {
+		return hubDirectoryEntry{}, false, err
+	}
+	for _, entry := range feed.Hubs {
+		if strings.TrimSpace(entry.HubID) == hubID {
+			if entry.TrustIssuerHubID == "" {
+				entry.TrustIssuerHubID = feed.Issuer
+			}
+			return entry, true, nil
+		}
+	}
+	return hubDirectoryEntry{}, false, nil
+}
+
+func validateRemoteHubHost(host string) error {
+	host = strings.TrimSpace(strings.TrimSuffix(host, "."))
+	if host == "" {
+		return fmt.Errorf("remote hub url must include a host")
+	}
+	if strings.EqualFold(host, "localhost") {
+		return fmt.Errorf("remote hub url host is not allowed")
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if isBlockedRemoteHubIP(ip) {
+			return fmt.Errorf("remote hub url host is not allowed")
+		}
+		return nil
+	}
+
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("remote hub url host could not be resolved")
+	}
+	for _, ip := range ips {
+		if isBlockedRemoteHubIP(ip) {
+			return fmt.Errorf("remote hub url host resolves to a private or local address")
+		}
+	}
+	return nil
+}
+
+func isBlockedRemoteHubIP(ip net.IP) bool {
+	return ip.IsLoopback() ||
+		ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() ||
+		ip.IsUnspecified()
+}
+
+func newRemoteHubHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("remote hub redirected too many times")
+			}
+			if req.URL == nil || req.URL.Scheme == "" || req.URL.Host == "" {
+				return fmt.Errorf("remote hub redirect url is invalid")
+			}
+			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+				return fmt.Errorf("remote hub redirect must use http or https")
+			}
+			if req.URL.User != nil {
+				return fmt.Errorf("remote hub redirect must not include credentials")
+			}
+			return validateRemoteHubHost(req.URL.Hostname())
+		},
+	}
 }
 
 func (h *handler) acceptRemoteHubInvite(r *http.Request, remoteURL, token string, identity database.HubIdentity) (*database.HubIdentity, error) {
@@ -410,7 +717,7 @@ func (h *handler) acceptRemoteHubInvite(r *http.Request, remoteURL, token string
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := newRemoteHubHTTPClient(10 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

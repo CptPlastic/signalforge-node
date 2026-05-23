@@ -58,6 +58,11 @@ export type HubIdentity = {
   publicKey: string
   federationEnabled: boolean
   directoryValidationStatus: string
+  trustLevel: string
+  trustIssuerHubId: string
+  trustCertificate: string
+  trustExpiresAt: number
+  trustVerifiedAt: number
   createdAt: number
   updatedAt: number
 }
@@ -85,6 +90,29 @@ export type HubPeer = {
   lastSeenAt: number
   createdAt: number
   updatedAt: number
+}
+
+export type FederationStatus = {
+  hub: HubIdentity
+  peers: HubPeer[]
+  sharedSources: IngestionSource[]
+  exportableCallCount: number
+  importedSourceCount: number
+  importedCallCount: number
+  pullPeerCount: number
+  peerStatuses: FederationPeerStatus[]
+  warnings: string[]
+}
+
+export type FederationPeerStatus = {
+  peerId: string
+  hubId: string
+  name: string
+  publicUrl: string
+  canPull: boolean
+  remoteSharedSources: number
+  remoteSampleCalls: number
+  error?: string
 }
 
 export type CallQuery = {
@@ -125,6 +153,7 @@ export type SourceAPIKey = {
   apiKey: string
   createdAt: number
   lastUsedAt: number
+  revokedAt?: number
 }
 
 export type SourceSharesResponse = {
@@ -141,7 +170,7 @@ export type UserRecord = {
   id: string
   email: string
   role: 'admin' | 'user' | 'guest'
-  status: 'active' | 'disabled'
+  status: 'active' | 'pending' | 'disabled'
   createdAt: number
   updatedAt: number
 }
@@ -174,7 +203,7 @@ export type RadioSet = {
 }
 
 export type MagicLinkRequestResponse = {
-  status: string
+  status: 'ok' | 'pending'
   user: AuthUser
   token?: string
   verifyUrl?: string
@@ -263,16 +292,19 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(identity),
     }),
+  refreshHubDirectory: () => request<HubIdentity>('/api/v1/hub/directory/refresh', { method: 'POST' }),
   hubInvites: () => request<HubInvite[]>('/api/v1/hub/invites'),
   createHubInvite: () => request<HubInvite>('/api/v1/hub/invites', { method: 'POST' }),
   revokeHubInvite: (id: string) => request<HubInvite>(`/api/v1/hub/invites/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  federationStatus: () => request<FederationStatus>('/api/v1/hub/federation/status'),
   hubPeers: () => request<HubPeer[]>('/api/v1/hub/peers'),
   connectHubPeer: (remoteUrl: string, inviteToken: string) =>
     request<HubPeer>('/api/v1/hub/peers', {
       method: 'POST',
       body: JSON.stringify({ remoteUrl, inviteToken }),
     }),
-  disableHubPeer: (id: string) => request<HubPeer>(`/api/v1/hub/peers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  enableHubPeer: (id: string) => request<HubPeer>(`/api/v1/hub/peers/${encodeURIComponent(id)}/enable`, { method: 'PATCH' }),
+  deleteHubPeer: (id: string) => request<void>(`/api/v1/hub/peers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   calls: (params?: CallQuery) => request<Call[]>(`/api/v1/calls${buildQuery(params ?? { limit: 100 })}`),
   callGroups: () => request<string[]>('/api/v1/calls/groups'),
   talkgroupSettings: () => request<TalkgroupSetting[]>('/api/v1/talkgroups/settings'),

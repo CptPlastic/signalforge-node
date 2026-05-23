@@ -201,7 +201,7 @@ func (h *handler) canReadCall(user authUser, call database.Call, sourceByID map[
 	}
 	if call.SourceID != "" {
 		if source, ok := sourceByID[call.SourceID]; ok {
-			return source.UserID == user.ID || source.IsShared || sharedSourceIDs[call.SourceID]
+			return source.UserID == user.ID || source.IsShared || (database.IsFederatedSourceID(call.SourceID) && source.Enabled && source.DeletedAt == 0) || sharedSourceIDs[call.SourceID]
 		}
 	}
 	return call.UserID != "" && call.UserID == user.ID

@@ -8,20 +8,17 @@
 #
 # Usage:
 #   cp .env.production.example .env   # fill in your values
-#   docker-compose --env-file .env -f docker-compose.plesk.yml up -d
+#   docker compose --env-file .env -f docker-compose.plesk.yml up -d
 #
 # Minimal vars for first deploy in Portainer/Plesk:
 #   - POSTGRES_PASSWORD
 #   - CLIENT_PORT (optional; defaults to 3000)
 #
-# Optional image overrides (recommended when registry/tag troubleshooting):
-#   - SERVER_IMAGE=ghcr.io/<owner>/p7-scanner-server:<tag>
-#   - CLIENT_IMAGE=ghcr.io/<owner>/p7-scanner-client:<tag>
-#   - MOCK_CALL_SENDER_IMAGE=ghcr.io/<owner>/p7-scanner-mock-call-sender:<tag>
-# If these are set, IMAGE_REGISTRY/IMAGE_NAMESPACE/IMAGE_TAG are ignored for that service.
+# Images are resolved from IMAGE_REGISTRY, IMAGE_NAMESPACE, and IMAGE_TAG.
+# Official runtime images are published under ghcr.io/signalforge-org.
 #
 # With mock radio sidecar (test/staging only):
-#   docker-compose --env-file .env -f docker-compose.plesk.yml --profile mock up -d
+#   docker compose --env-file .env -f docker-compose.plesk.yml --profile mock up -d
 
 services:
   postgres:
@@ -40,8 +37,8 @@ services:
       timeout: 3s
       retries: 10
 
-  server:
-    image: ${SERVER_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-cptplastic}/p7-scanner-server:${IMAGE_TAG:-latest}}
+  api:
+    image: ${API_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-hub-api:${IMAGE_TAG:-latest}}
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -50,18 +47,24 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-p7scanner}:${POSTGRES_PASSWORD:-change-me-strong}@postgres:5432/${POSTGRES_DB:-p7scanner}?sslmode=disable}
       APP_ENV: ${APP_ENV:-production}
       STACK_ID: ${STACK_ID:-plesk-stack}
-      DEPLOY_TAG: ${DEPLOY_TAG:-${IMAGE_TAG:-latest}}
+      IMAGE_TAG: ${IMAGE_TAG:-latest}
+      DEPLOY_TAG: ${DEPLOY_TAG:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       APP_BASE_URL: ${APP_BASE_URL}
       MAILJET_API_KEY: ${MAILJET_API_KEY}
       MAILJET_SECRET_KEY: ${MAILJET_SECRET_KEY}
       MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL}
-      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-P7 Scanner}
-      HUB_NAME: ${HUB_NAME:-P7 Scanner Hub}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-SignalForge Hub}
+      HUB_NAME: ${HUB_NAME:-SignalForge Hub}
       HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-${APP_BASE_URL}}
       HUB_REGION: ${HUB_REGION:-}
       HUB_CONTACT: ${HUB_CONTACT:-}
       HUB_FEDERATION_ENABLED: ${HUB_FEDERATION_ENABLED:-false}
+      HUB_TRUST_LEVEL: ${HUB_TRUST_LEVEL:-community}
+      HUB_TRUST_ISSUER: ${HUB_TRUST_ISSUER:-}
+      HUB_TRUST_CERTIFICATE: ${HUB_TRUST_CERTIFICATE:-}
+      HUB_TRUST_EXPIRES_AT: ${HUB_TRUST_EXPIRES_AT:-0}
+      HUB_DIRECTORY_URL: ${HUB_DIRECTORY_URL:-https://signalforge.org/directory/hubs.json}
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
     depends_on:
       postgres:
@@ -75,22 +78,22 @@ services:
       timeout: 3s
       retries: 5
 
-  client:
-    image: ${CLIENT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-cptplastic}/p7-scanner-client:${IMAGE_TAG:-latest}}
+  web:
+    image: ${WEB_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-hub-web:${IMAGE_TAG:-latest}}
     restart: unless-stopped
     # Point your Plesk reverse proxy rule at this port.
     ports:
       - "${CLIENT_PORT:-3000}:8080"
     depends_on:
-      server:
+      api:
         condition: service_healthy
 
   mock-call-sender:
-    image: ${MOCK_CALL_SENDER_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-cptplastic}/p7-scanner-mock-call-sender:${IMAGE_TAG:-latest}}
+    image: ${MOCK_CALL_SENDER_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-hub-mock-call-sender:${IMAGE_TAG:-latest}}
     restart: unless-stopped
     profiles: ["mock"]
     environment:
-      SCANNER_URL: http://server:8080
+      SCANNER_URL: http://api:8080
       MOCK_INTERVAL_SEC: ${MOCK_INTERVAL_SEC:-5}
       MOCK_DURATION_SEC: ${MOCK_DURATION_SEC:-3}
       MOCK_SYSTEM_ID: ${MOCK_SYSTEM_ID:-1}
@@ -98,7 +101,7 @@ services:
       MOCK_FREQUENCY: ${MOCK_FREQUENCY:-460000000}
       MOCK_SOURCE_API_KEY: ${MOCK_SOURCE_API_KEY:-}
     depends_on:
-      server:
+      api:
         condition: service_healthy
 
 volumes:

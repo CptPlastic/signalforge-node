@@ -23,6 +23,11 @@ type Config struct {
 	HubRegion        string
 	HubContact       string
 	HubFederation    bool
+	HubTrustLevel    string
+	HubTrustIssuer   string
+	HubTrustCert     string
+	HubTrustExpires  int64
+	HubDirectoryURL  string
 	UpdateCheckURL   string
 	LogLevel         slog.Level
 }
@@ -37,14 +42,19 @@ func Load() (Config, error) {
 		DeployTag:        getFirstEnv([]string{"DEPLOY_TAG", "IMAGE_TAG"}, "unknown"),
 		PublicBaseURL:    publicBaseURL,
 		MailFromEmail:    strings.TrimSpace(getEnv("MAIL_FROM_EMAIL", "")),
-		MailFromName:     strings.TrimSpace(getEnv("MAIL_FROM_NAME", "P7 Scanner")),
+		MailFromName:     strings.TrimSpace(getEnv("MAIL_FROM_NAME", "SignalForge Hub")),
 		MailjetAPIKey:    strings.TrimSpace(getEnv("MAILJET_API_KEY", "")),
 		MailjetSecretKey: strings.TrimSpace(getEnv("MAILJET_SECRET_KEY", "")),
-		HubName:          strings.TrimSpace(getEnv("HUB_NAME", "P7 Scanner Hub")),
+		HubName:          strings.TrimSpace(getEnv("HUB_NAME", "SignalForge Hub")),
 		HubPublicURL:     strings.TrimSpace(getEnv("HUB_PUBLIC_URL", publicBaseURL)),
 		HubRegion:        strings.TrimSpace(getEnv("HUB_REGION", "")),
 		HubContact:       strings.TrimSpace(getEnv("HUB_CONTACT", "")),
 		HubFederation:    getBoolEnv("HUB_FEDERATION_ENABLED", false),
+		HubTrustLevel:    normalizeHubTrustLevel(getEnv("HUB_TRUST_LEVEL", "community")),
+		HubTrustIssuer:   strings.TrimSpace(getEnv("HUB_TRUST_ISSUER", "")),
+		HubTrustCert:     strings.TrimSpace(getEnv("HUB_TRUST_CERTIFICATE", "")),
+		HubTrustExpires:  getInt64Env("HUB_TRUST_EXPIRES_AT", 0),
+		HubDirectoryURL:  strings.TrimSpace(getEnv("HUB_DIRECTORY_URL", "https://signalforge.org/directory/hubs.json")),
 		UpdateCheckURL:   strings.TrimSpace(getEnv("UPDATE_CHECK_URL", "https://signalforge.org/p7-scanner-update.json")),
 	}
 
@@ -85,4 +95,25 @@ func getBoolEnv(key string, fallback bool) bool {
 		return fallback
 	}
 	return value == "1" || value == "true" || value == "yes" || value == "on"
+}
+
+func getInt64Env(key string, fallback int64) int64 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	var parsed int64
+	if _, err := fmt.Sscanf(value, "%d", &parsed); err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func normalizeHubTrustLevel(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "listed", "verified", "trusted", "official", "suspended":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "community"
+	}
 }

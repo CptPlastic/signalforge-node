@@ -59,6 +59,44 @@ func (d *DB) ListIngestionSources(includeDeleted bool) ([]IngestionSource, error
 	return sources, rows.Err()
 }
 
+// ListSharedIngestionSources returns sources intentionally published to peer hubs.
+func (d *DB) ListSharedIngestionSources() ([]IngestionSource, error) {
+	rows, err := d.db.Query(`
+		SELECT id, COALESCE(user_id, ''), label, enabled, is_shared, deleted_at, system_id, system_label,
+		       last_seen_unix, error_count, calls_received, updated_at
+		FROM ingestion_sources
+		WHERE deleted_at = 0 AND enabled = TRUE AND is_shared = TRUE
+		  AND id NOT LIKE 'remote\_%' ESCAPE '\'
+		ORDER BY id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	sources := make([]IngestionSource, 0)
+	for rows.Next() {
+		var s IngestionSource
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Label, &s.Enabled, &s.IsShared, &s.DeletedAt, &s.SystemID, &s.SystemLabel,
+			&s.LastSeenUnix, &s.ErrorCount, &s.CallsReceived, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+		sources = append(sources, s)
+	}
+	return sources, rows.Err()
+}
+
+// CountImportedFederatedSources returns enabled remote sources imported from peer hubs.
+func (d *DB) CountImportedFederatedSources() (int64, error) {
+	var count int64
+	err := d.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM ingestion_sources
+		WHERE deleted_at = 0
+		  AND enabled = TRUE
+		  AND id LIKE 'remote\_%' ESCAPE '\'`).Scan(&count)
+	return count, err
+}
+
 // UpsertIngestionSource creates or updates an ingestion source.
 func (d *DB) UpsertIngestionSource(s IngestionSource) error {
 	_, err := d.db.Exec(`
@@ -72,8 +110,13 @@ func (d *DB) UpsertIngestionSource(s IngestionSource) error {
 			enabled = excluded.enabled,
 			is_shared = excluded.is_shared,
 			deleted_at = 0,
+			system_id = excluded.system_id,
+			system_label = excluded.system_label,
+			last_seen_unix = excluded.last_seen_unix,
+			error_count = excluded.error_count,
+			calls_received = excluded.calls_received,
 			updated_at = excluded.updated_at
-	`, s.ID, s.UserID, s.Label, s.Enabled, s.IsShared, s.SystemID, s.SystemLabel,
+	`, s.ID, nullableString(s.UserID), s.Label, s.Enabled, s.IsShared, s.SystemID, s.SystemLabel,
 		s.LastSeenUnix, s.ErrorCount, s.CallsReceived, time.Now().Unix())
 	return err
 }
@@ -142,9 +185,10 @@ func (d *DB) GenerateSourceKey(source IngestionSource) (SourceAPIKey, error) {
 // Returns the source and whether it was found.
 func (d *DB) GetSourceByAPIKey(apiKey string) (IngestionSource, bool, error) {
 	var sourceID string
+	var keyUserID string
 	err := d.db.QueryRow(`
-		SELECT source_id FROM ingestion_source_keys WHERE api_key = $1`,
-		apiKey).Scan(&sourceID)
+		SELECT source_id, COALESCE(user_id, '') FROM ingestion_source_keys WHERE api_key = $1`,
+		apiKey).Scan(&sourceID, &keyUserID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return IngestionSource{}, false, nil
@@ -159,6 +203,10 @@ func (d *DB) GetSourceByAPIKey(apiKey string) (IngestionSource, bool, error) {
 	}
 	if source.DeletedAt > 0 {
 		return IngestionSource{}, false, nil
+	}
+	if source.UserID == "" && keyUserID != "" {
+		source.UserID = keyUserID
+		_ = d.UpsertIngestionSource(source)
 	}
 	return source, true, nil
 }
@@ -184,6 +232,80 @@ func (d *DB) ListSourceKeys(sourceID string) ([]SourceAPIKey, error) {
 		keys = append(keys, k)
 	}
 	return keys, rows.Err()
+}
+
+// ListSourceIDsForOwner returns source IDs owned directly by a user or by one of their source keys.
+func (d *DB) ListSourceIDsForOwner(userID string) ([]string, error) {
+	rows, err := d.db.Query(`
+		SELECT DISTINCT id
+		FROM (
+			SELECT id
+			FROM ingestion_sources
+			WHERE user_id = $1 AND deleted_at = 0
+			UNION
+			SELECT source_id AS id
+			FROM ingestion_source_keys
+			WHERE user_id = $1
+		) owned_sources
+		WHERE id <> ''
+		ORDER BY id ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	sourceIDs := make([]string, 0)
+	for rows.Next() {
+		var sourceID string
+		if err := rows.Scan(&sourceID); err != nil {
+			return nil, err
+		}
+		sourceIDs = append(sourceIDs, sourceID)
+	}
+	return sourceIDs, rows.Err()
+}
+
+// ListReadableSourceIDsForUser returns source IDs whose calls are visible to a user.
+func (d *DB) ListReadableSourceIDsForUser(userID string) ([]string, error) {
+	rows, err := d.db.Query(`
+		SELECT DISTINCT id
+		FROM (
+			SELECT id
+			FROM ingestion_sources
+			WHERE user_id = $1 AND deleted_at = 0
+			UNION
+			SELECT source_id AS id
+			FROM ingestion_source_keys
+			WHERE user_id = $1
+			UNION
+			SELECT source_id AS id
+			FROM ingestion_source_user_shares
+			WHERE user_id = $1
+			UNION
+			SELECT id
+			FROM ingestion_sources
+			WHERE is_shared = TRUE AND deleted_at = 0
+			UNION
+			SELECT id
+			FROM ingestion_sources
+			WHERE id LIKE 'remote\_%' ESCAPE '\' AND enabled = TRUE AND deleted_at = 0
+		) readable_sources
+		WHERE id <> ''
+		ORDER BY id ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	sourceIDs := make([]string, 0)
+	for rows.Next() {
+		var sourceID string
+		if err := rows.Scan(&sourceID); err != nil {
+			return nil, err
+		}
+		sourceIDs = append(sourceIDs, sourceID)
+	}
+	return sourceIDs, rows.Err()
 }
 
 // RevokeSourceKey deletes an API key that belongs to the given source.

@@ -1,7 +1,7 @@
 {
-  "name": "P7 Scanner",
-  "short_name": "P7 Scan",
-  "description": "Console-style scanner monitor for projectseven .Co .Ltd radio traffic.",
+  "name": "SignalForge Hub",
+  "short_name": "SF Hub",
+  "description": "Community radio monitoring node for SignalForge.",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
@@ -23,7 +23,7 @@
       "name": "Monitor",
       "short_name": "Monitor",
       "url": "/?view=monitor",
-      "description": "Open the live scanner monitor"
+      "description": "Open the live monitor"
     },
     {
       "name": "Radio Sets",

@@ -43,7 +43,7 @@ func (h *handler) sendMagicLinkEmail(ctx context.Context, toEmail, verifyURL, to
 	fromName := strings.TrimSpace(h.cfg.MailFromName)
 
 	if fromName == "" {
-		fromName = "P7 Scanner"
+		fromName = "SignalForge Hub"
 	}
 	if apiKey == "" || secretKey == "" || fromEmail == "" {
 		if h.cfg.AppEnv == "production" {
@@ -62,12 +62,12 @@ func (h *handler) sendMagicLinkEmail(ctx context.Context, toEmail, verifyURL, to
 				"To": []map[string]string{{
 					"Email": toEmail,
 				}},
-				"Subject": "Your P7 Scanner sign-in link",
+				"Subject": "Your SignalForge Hub sign-in link",
 				"TextPart": "Use this secure sign-in link (valid for 15 minutes):\n\n" + verifyURL +
 					"\n\nIf your app asks for a token, paste this:\n\n" + token +
 					"\n\nIf you did not request this, you can ignore this email.",
 				"HTMLPart": "<p>Use this secure sign-in link (valid for 15 minutes):</p>" +
-					"<p><a href=\"" + verifyURL + "\">Sign in to P7 Scanner</a></p>" +
+					"<p><a href=\"" + verifyURL + "\">Sign in to SignalForge Hub</a></p>" +
 					"<p>If your app asks for a token, paste this:</p>" +
 					"<p><code>" + token + "</code></p>" +
 					"<p>If you did not request this, you can ignore this email.</p>",

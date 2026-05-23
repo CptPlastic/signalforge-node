@@ -1,16 +1,30 @@
 # SignalHub MVP
 
-SignalHub is the planned peer-to-peer pub/sub federation layer for P7 Scanner hubs.
+SignalHub is the planned peer-to-peer pub/sub federation layer for SignalForge Hub instances.
 
 ## Repository Model
 
 - `p7-scanner` remains the root source of truth for core development.
 - SignalForge is the public downstream surface for docs, releases, operator onboarding, and verified hub discovery.
-- Downstream SignalForge builds should be generated from the root P7 Scanner codebase, not maintained as a separate fork of the core logic.
+- Downstream SignalForge builds should be generated from the root SignalForge Hub codebase, not maintained as a separate fork of the core logic.
+
+## Image And Trust Model
+
+All normal deployments should pull from one official runtime image source, currently `ghcr.io/signalforge-org`. Main hubs, peer hubs, Portainer stacks, and plain Docker Compose deployments should differ by environment variables, not by image namespace or fork.
+
+Hub trust is an application-level concept, not a deployment-source concept. A hub can run the official images and still be only a community hub until it presents trust metadata accepted by the local hub or directory. Recommended trust levels:
+
+- `community`: default for any self-hosted hub.
+- `verified`: hub identity is known by a trusted directory or accepted manually by an admin.
+- `official`: hub identity is signed by the root/super hub authority.
+
+The root/super hub should issue signed hub certificates or invite credentials. Federation handshakes can exchange that certificate metadata, and the UI can show whether a peer is community, verified, or official. This keeps the community open while still making official hubs easy to recognize.
+
+`https://p7hub.projectseven.us/` is the first official hub. It bootstraps as `official` with issuer `signalforge-root`; later certificate signing can replace the bootstrap certificate string with a real signed certificate without changing the trust levels exposed to operators.
 
 ## MVP Goals
 
-1. Let each P7 Scanner instance identify itself as a hub.
+1. Let each SignalForge Hub instance identify itself as a hub.
 2. Let admins generate peer invite tokens.
 3. Let admins subscribe to trusted peer hubs by URL and token.
 4. Import remote sources with clear `REMOTE` origin labeling.
@@ -27,14 +41,14 @@ The first SignalHub implementation should be testable with normal Docker Compose
 Run one local hub with the existing compose file:
 
 ```bash
-docker-compose up --build -d
+docker compose up --build -d
 ```
 
 For hub-to-hub testing, run two local stacks with separate project names and ports:
 
 ```bash
-COMPOSE_PROJECT_NAME=p7hub_a CLIENT_PORT=3000 SERVER_PORT=8080 POSTGRES_PORT=5432 docker-compose up --build -d
-COMPOSE_PROJECT_NAME=p7hub_b CLIENT_PORT=3001 SERVER_PORT=8081 POSTGRES_PORT=5433 docker-compose up --build -d
+COMPOSE_PROJECT_NAME=p7hub_a CLIENT_PORT=3000 SERVER_PORT=8080 POSTGRES_PORT=5432 docker compose up --build -d
+COMPOSE_PROJECT_NAME=p7hub_b CLIENT_PORT=3001 SERVER_PORT=8081 POSTGRES_PORT=5433 docker compose up --build -d
 ```
 
 Each stack gets its own Docker project name and named volume, so identity, peers, sources, and calls stay separate.
@@ -51,31 +65,32 @@ Expected local MVP flow:
 8. Send mock calls into Hub A.
 9. Verify Hub B can pull recent remote call metadata.
 
-### Plesk/Portainer Operator Path
+### Portainer Operator Path
 
-The hosted/operator path should stay close to `docker-compose.plesk.yml`:
+The hosted/operator path should stay close to `docker-compose.prod.yml`:
 
 ```bash
-docker-compose --env-file .env -f docker-compose.plesk.yml up -d
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 ```
 
-SignalHub-specific Plesk variables should be minimal:
+SignalHub-specific deployment variables should be minimal:
 
 - `APP_BASE_URL`: public URL for this hub.
 - `HUB_PUBLIC_URL`: optional explicit federation URL, defaulting to `APP_BASE_URL`.
 - `HUB_NAME`: display name for discovery and remote source labels.
 - `HUB_REGION`: rough region such as `Yukon, OK` or `Canadian County, OK`.
 - `HUB_FEDERATION_ENABLED`: `true` or `false`.
+- `HUB_DIRECTORY_URL`: public directory feed, defaulting to `https://signalforge.org/directory/hubs.json`.
 
-Plesk deployments should expose only the client/public app through the reverse proxy. Federation endpoints can still route through the client-facing domain if the frontend proxy passes `/api` requests to the server.
+Hosted deployments should expose only the client/public app through the reverse proxy. Federation endpoints can still route through the client-facing domain if the frontend proxy passes `/api` requests to the server.
 
-For a second hosted hub, use `docker-compose.peer.yml` with `.env.peer.example`. Give it a separate Plesk/Portainer stack name, a separate public subdomain, and a separate `CLIENT_PORT`. The stack can still use the same published images and image tag as the main hub.
+For a second hosted hub, use `docker-compose.peer.yml` with `.env.peer.example`. Give it a separate Portainer stack name, a separate public subdomain, and a separate `CLIENT_PORT`. The stack can still use the same published images and image tag as the main hub.
 
 Public update discovery uses `https://signalforge.org/p7-scanner-update.json`. CI writes that manifest after public images publish, and each hub exposes `GET /api/v1/update-check` so the UI can warn admins when their deployed tag is behind the current SignalForge image tag.
 
 Second-stack mental model:
 
-- Hub A is your main P7 Scanner deployment.
+- Hub A is your main SignalForge Hub deployment.
 - Hub B is the peer stack from `docker-compose.peer.yml`.
 - Hub A generates the invite token.
 - Hub B connects to Hub A using Hub A's public URL and that token.
@@ -89,7 +104,7 @@ Second-stack mental model:
 - Remote sources are not re-shared by default.
 - Disabling a peer hides or deactivates its remote sources locally.
 - Restarting containers preserves hub identity, peers, and remote source metadata.
-- The same flow works in a Plesk-style compose deployment with only environment changes.
+- The same flow works in a hosted compose deployment with only environment changes.
 
 ## Initial Data Model
 
@@ -102,6 +117,9 @@ Hub identity:
 - Contact email or handle
 - Public key
 - Directory validation status
+- Trust level: community, verified, or official
+- Certificate issuer hub ID
+- Certificate signature and expiry
 
 Peer subscription:
 
@@ -167,4 +185,4 @@ Potential starting endpoints:
 
 ## Launch Positioning
 
-P7 Scanner is the self-hosted scanner hub. SignalHub is the federation protocol. SignalForge is the public community surface for discovery, docs, releases, and trusted validation.
+SignalForge Hub is the self-hosted scanner hub. SignalHub is the federation protocol. SignalForge is the public community surface for discovery, docs, releases, and trusted validation.

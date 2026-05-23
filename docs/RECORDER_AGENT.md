@@ -1,6 +1,6 @@
 # P7 Recorder Agent
 
-The P7 Recorder Agent records local audio with voice activation and uploads each detected call to P7 Scanner through the existing `/api/call-upload` endpoint.
+The P7 Recorder Agent records local audio with voice activation and uploads each detected call to SignalForge Hub through the existing `/api/call-upload` endpoint.
 
 The replacement recorder is the Go implementation in `tools/p7-recorder-go`. It uses the same config format and upload contract as the Python recorder, but packages as a smaller native binary for Windows, macOS, and Linux. The Python/PyInstaller recorder remains in `tools/p7-recorder` only while the Go path is being completed.
 
@@ -76,7 +76,7 @@ You can edit the generated `config.toml` directly:
 
 ```toml
 [p7]
-base_url = "https://p7scan.projectseven.us/"
+base_url = "https://p7hub.projectseven.us/"
 source_key = "sk_live_your_generated_source_key"
 
 [metadata]
@@ -221,7 +221,7 @@ The desktop app provides:
 - start/stop buttons
 - live recorder log
 
-Release builds default the server URL to `https://p7scan.projectseven.us/`. Local development builds can still point at `http://localhost:8080/` by changing the Server URL field before saving.
+Release builds default the server URL to `https://p7hub.projectseven.us/`. Local development builds can still point at `http://localhost:8080/` by changing the Server URL field before saving.
 
 It stores its config under the current user's local app data folder, for example:
 
@@ -338,7 +338,7 @@ p7-recorder-linux-v1.2.3.tar.gz
 
 The workflow also runs when a GitHub Release is published manually. It can be started manually from the Actions tab too; manual runs upload the ZIP as a workflow artifact, which is useful for testing the package before publishing a release.
 
-Release builds stamp the tag, SignalForge release URLs, and default P7 Scanner server URL into the desktop app. The app shows its current version, checks the repository's latest GitHub Release, and keeps a separate downloads button available so users can always open the public release page.
+Release builds stamp the tag, SignalForge release URLs, and default SignalForge Hub server URL into the desktop app. The app shows its current version, checks the repository's latest GitHub Release, and keeps a separate downloads button available so users can always open the public release page.
 
 Packaged builds can be checked without launching the GUI:
 

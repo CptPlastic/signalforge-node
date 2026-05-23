@@ -75,9 +75,10 @@ Added visual login status indicator in the header:
 2. See `🔓 GUEST` indicator and authentication required message
 3. Only `account` tab is clickable
 4. Click "account" to access login form
-5. Enter email and request magic link
-6. Verify magic link and create session
-7. Session cookie is stored and used for all API requests
+5. Enter email and request access or a magic link
+6. New non-bootstrap accounts are created as `pending` and must be approved by an admin before login
+7. Approved users receive a magic link, verify it, and create a session
+8. Session cookie is stored and used for all API requests
 
 ### For Authenticated Users
 1. Logged in indicator shows `🔒 user@example.com`
@@ -88,7 +89,9 @@ Added visual login status indicator in the header:
 ## Security Notes
 
 - **Session-based**: Uses HTTP-only session cookies (configured in Go server)
+- **Approval-gated signup**: The first account bootstraps as active admin; later new accounts are `pending` until an admin approves them
 - **Per-request auth**: `withUserContext` middleware loads user from session cookie for each request
+- **Inactive-account rejection**: Pending and disabled users cannot create active sessions from magic links
 - **Cascading protection**: Each handler explicitly checks `requireAuthenticated()` to ensure no accidental bypasses
 - **WebSocket auth**: WebSocket connections require valid session before upgrade
 - **API key uploads**: `/api/call-upload` still allows unauthenticated requests if valid source API key provided
@@ -104,8 +107,10 @@ To verify login gating:
 
 2. **Request magic link**:
    - Use account tab to request magic link
-   - Should receive email (or see mock token in logs)
-   - Copy token and visit link or paste into form
+   - Existing active users should receive email (or see mock token in logs)
+   - New users should see an approval-pending message and appear in admin user management as `pending`
+   - Admins can approve pending users by changing status to `active` or clicking `APPROVE`
+   - After approval, request a fresh magic link and copy token/visit link
 
 3. **Verify login works**:
    - After magic link verification, should see `🔒 user@example.com`
