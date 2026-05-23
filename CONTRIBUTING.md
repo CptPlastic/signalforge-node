@@ -19,6 +19,14 @@ SignalForge Node is the public buildable node stack for community scanner hubs.
 - Be extra careful with auth, upload keys, federation trust, database migrations, and anything that changes official or verified status.
 - Destructive migrations, public deployment defaults, and trust-model changes require maintainer review even if CI passes.
 
+## Mirrored Source Changes
+
+Most runtime source paths in this repository are mirrored from `p7-scanner`, including `client/`, `server/`, `docker/`, `docs/`, `tools/`, compose files, and the main build files. Community PRs should still start here against `dev`.
+
+When a PR changes mirrored paths, automation opens or updates a matching draft review PR in `p7-scanner`. Maintainers review and merge the source-of-truth PR there first; after that, the normal sync brings the accepted change back to `signalforge-node/dev`.
+
+This keeps `dev` from accepting mirrored code that was not approved upstream while still giving contributors one public place to open PRs.
+
 ## Local Checks
 
 ```bash
