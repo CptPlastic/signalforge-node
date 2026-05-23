@@ -186,7 +186,7 @@ func (h *handler) getFederationJSON(localHubID, endpoint string, target any) err
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-SignalHub-Peer-ID", localHubID)
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := newRemoteHubHTTPClient(5 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -358,7 +358,7 @@ func (h *handler) syncFederatedPeer(localHubID string, peer database.HubPeer) er
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-SignalHub-Peer-ID", localHubID)
 
-	client := &http.Client{Timeout: 20 * time.Second}
+	client := newRemoteHubHTTPClient(20 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

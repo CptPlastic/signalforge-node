@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -484,10 +485,73 @@ func normalizeHubURL(raw string) (string, error) {
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return "", fmt.Errorf("remote hub url must use http or https")
 	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("remote hub url must not include credentials")
+	}
+	if err := validateRemoteHubHost(parsed.Hostname()); err != nil {
+		return "", err
+	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
 	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func validateRemoteHubHost(host string) error {
+	host = strings.TrimSpace(strings.TrimSuffix(host, "."))
+	if host == "" {
+		return fmt.Errorf("remote hub url must include a host")
+	}
+	if strings.EqualFold(host, "localhost") {
+		return fmt.Errorf("remote hub url host is not allowed")
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if isBlockedRemoteHubIP(ip) {
+			return fmt.Errorf("remote hub url host is not allowed")
+		}
+		return nil
+	}
+
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("remote hub url host could not be resolved")
+	}
+	for _, ip := range ips {
+		if isBlockedRemoteHubIP(ip) {
+			return fmt.Errorf("remote hub url host resolves to a private or local address")
+		}
+	}
+	return nil
+}
+
+func isBlockedRemoteHubIP(ip net.IP) bool {
+	return ip.IsLoopback() ||
+		ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() ||
+		ip.IsUnspecified()
+}
+
+func newRemoteHubHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("remote hub redirected too many times")
+			}
+			if req.URL == nil || req.URL.Scheme == "" || req.URL.Host == "" {
+				return fmt.Errorf("remote hub redirect url is invalid")
+			}
+			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+				return fmt.Errorf("remote hub redirect must use http or https")
+			}
+			if req.URL.User != nil {
+				return fmt.Errorf("remote hub redirect must not include credentials")
+			}
+			return validateRemoteHubHost(req.URL.Hostname())
+		},
+	}
 }
 
 func (h *handler) acceptRemoteHubInvite(r *http.Request, remoteURL, token string, identity database.HubIdentity) (*database.HubIdentity, error) {
@@ -503,7 +567,7 @@ func (h *handler) acceptRemoteHubInvite(r *http.Request, remoteURL, token string
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := newRemoteHubHTTPClient(10 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
