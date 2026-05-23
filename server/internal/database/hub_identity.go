@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 )
 
@@ -413,7 +414,7 @@ func (d *DB) DisableHubPeer(id string) (*HubPeer, bool, error) {
 	return &peer, true, nil
 }
 
-// DeleteHubPeer removes a peer and its federation import cursor so the hubs can be paired again.
+// DeleteHubPeer removes a peer and its imported federation data so the hubs can be paired again.
 func (d *DB) DeleteHubPeer(id string) (*HubPeer, bool, error) {
 	tx, err := d.db.Begin()
 	if err != nil {
@@ -449,6 +450,13 @@ func (d *DB) DeleteHubPeer(id string) (*HubPeer, bool, error) {
 		return nil, false, err
 	}
 
+	remoteSourcePattern := federatedPeerSourceLikePattern(peer.HubID)
+	if _, err := tx.Exec(`DELETE FROM calls WHERE source_id LIKE $1 ESCAPE '\'`, remoteSourcePattern); err != nil {
+		return nil, false, err
+	}
+	if _, err := tx.Exec(`DELETE FROM ingestion_sources WHERE id LIKE $1 ESCAPE '\'`, remoteSourcePattern); err != nil {
+		return nil, false, err
+	}
 	if _, err := tx.Exec(`DELETE FROM federation_call_imports WHERE peer_hub_id = $1`, peer.HubID); err != nil {
 		return nil, false, err
 	}
@@ -457,6 +465,16 @@ func (d *DB) DeleteHubPeer(id string) (*HubPeer, bool, error) {
 	}
 
 	return &peer, true, nil
+}
+
+func federatedPeerSourceLikePattern(peerHubID string) string {
+	cleanPeer := strings.NewReplacer(":", "_", "/", "_", " ", "_").Replace(strings.TrimSpace(peerHubID))
+	return "remote_" + escapeSQLLike(cleanPeer) + "_%"
+}
+
+func escapeSQLLike(value string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return replacer.Replace(value)
 }
 
 // EnableHubPeer marks a disabled peer as connected again without requiring a new invite.
