@@ -21,7 +21,7 @@ services:
       dockerfile: Dockerfile.server
       args:
         GIT_SHA: ${GIT_SHA:-dev}
-        BUILD_VERSION: ${BUILD_VERSION:-0.1.0-dev}
+        BUILD_VERSION: ${BUILD_VERSION:-}
         BUILD_DATE: ${BUILD_DATE:-unknown}
     environment:
       LISTEN_ADDR: :8080
