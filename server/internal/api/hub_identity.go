@@ -84,7 +84,7 @@ func (h *handler) handleUpdateHubIdentity(w http.ResponseWriter, r *http.Request
 	updated.Contact = strings.TrimSpace(req.Contact)
 	updated.FederationEnabled = req.FederationEnabled
 	if updated.Name == "" {
-		updated.Name = "P7 Scanner Hub"
+		updated.Name = "SignalForge Hub"
 	}
 
 	saved, err := h.db.UpsertHubIdentity(updated)

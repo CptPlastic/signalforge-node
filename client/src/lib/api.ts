@@ -170,7 +170,7 @@ export type UserRecord = {
   id: string
   email: string
   role: 'admin' | 'user' | 'guest'
-  status: 'active' | 'disabled'
+  status: 'active' | 'pending' | 'disabled'
   createdAt: number
   updatedAt: number
 }
@@ -203,7 +203,7 @@ export type RadioSet = {
 }
 
 export type MagicLinkRequestResponse = {
-  status: string
+  status: 'ok' | 'pending'
   user: AuthUser
   token?: string
   verifyUrl?: string

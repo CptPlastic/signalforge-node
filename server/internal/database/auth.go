@@ -8,23 +8,30 @@ import (
 	"time"
 )
 
+var (
+	ErrInactiveUser = errors.New("inactive user")
+	ErrPendingUser  = errors.New("pending user")
+)
+
 // EnsureUserByEmail finds or creates a user account for the given email.
 func (d *DB) EnsureUserByEmail(email string) (User, error) {
 	now := time.Now().Unix()
 	userID := fmt.Sprintf("usr_%d", time.Now().UnixMilli())
 	role := "user"
+	status := "pending"
 	var userCount int
 	if err := d.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&userCount); err != nil {
 		return User{}, err
 	}
 	if userCount == 0 {
 		role = "admin"
+		status = "active"
 	}
 	_, err := d.db.Exec(`
 		INSERT INTO users (id, email, role, status, created_at, updated_at)
-		VALUES ($1, $2, $3, 'active', $4, $5)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (email) DO NOTHING
-	`, userID, strings.ToLower(strings.TrimSpace(email)), role, now, now)
+	`, userID, strings.ToLower(strings.TrimSpace(email)), role, status, now, now)
 	if err != nil {
 		return User{}, err
 	}
@@ -48,6 +55,12 @@ func (d *DB) CreateMagicLinkToken(email string, ttl time.Duration) (string, User
 	user, err := d.EnsureUserByEmail(email)
 	if err != nil {
 		return "", User{}, err
+	}
+	if user.Status == "pending" {
+		return "", user, ErrPendingUser
+	}
+	if user.Status != "active" {
+		return "", User{}, ErrInactiveUser
 	}
 
 	token := randomToken("ml_")
@@ -114,6 +127,12 @@ func (d *DB) VerifyMagicLinkToken(token string, sessionTTL time.Duration) (User,
 	`, userID).Scan(&user.ID, &user.Email, &user.Role, &user.Status, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return User{}, "", err
+	}
+	if user.Status == "pending" {
+		return User{}, "", ErrPendingUser
+	}
+	if user.Status != "active" {
+		return User{}, "", ErrInactiveUser
 	}
 
 	if err := tx.Commit(); err != nil {

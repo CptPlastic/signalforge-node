@@ -130,24 +130,13 @@ func (h *handler) handleRequestMagicLink(w http.ResponseWriter, r *http.Request)
 
 	token, user, err := h.db.CreateMagicLinkToken(email, 15*time.Minute)
 	if err != nil {
-		h.logger.Error("create magic link failed", "error", err)
-		http.Error(w, "create magic link", http.StatusInternalServerError)
+		h.writeCreateMagicLinkError(w, user, err)
 		return
 	}
 	verifyURL := h.magicLinkVerifyURL(r, token)
 	if err := h.sendMagicLinkEmail(r.Context(), user.Email, verifyURL, token); err != nil {
 		h.logger.Error("send magic link email failed", "error", err, "email", user.Email)
-		message := "send magic link failed"
-		if h.cfg.AppEnv == "production" {
-			if strings.Contains(err.Error(), "not configured") {
-				message = "send magic link failed: email delivery is not configured"
-			} else {
-				message = "send magic link failed: email provider rejected request"
-			}
-		} else {
-			message = "send magic link failed: " + err.Error()
-		}
-		http.Error(w, message, http.StatusInternalServerError)
+		http.Error(w, h.magicLinkSendErrorMessage(err), http.StatusInternalServerError)
 		return
 	}
 
@@ -166,6 +155,35 @@ func (h *handler) handleRequestMagicLink(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, response)
 }
 
+func (h *handler) writeCreateMagicLinkError(w http.ResponseWriter, user database.User, err error) {
+	if err == database.ErrPendingUser {
+		_ = h.db.AppendAuditLog(user.ID, "auth.approval_requested", "user", user.ID, map[string]any{
+			"email": user.Email,
+		})
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"status": "pending",
+			"user":   toAuthUser(user),
+		})
+		return
+	}
+	if err == database.ErrInactiveUser {
+		http.Error(w, "account disabled", http.StatusForbidden)
+		return
+	}
+	h.logger.Error("create magic link failed", "error", err)
+	http.Error(w, "create magic link", http.StatusInternalServerError)
+}
+
+func (h *handler) magicLinkSendErrorMessage(err error) string {
+	if h.cfg.AppEnv != "production" {
+		return "send magic link failed: " + err.Error()
+	}
+	if strings.Contains(err.Error(), "not configured") {
+		return "send magic link failed: email delivery is not configured"
+	}
+	return "send magic link failed: email provider rejected request"
+}
+
 func (h *handler) handleVerifyMagicLink(w http.ResponseWriter, r *http.Request) {
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	if token == "" {
@@ -175,6 +193,14 @@ func (h *handler) handleVerifyMagicLink(w http.ResponseWriter, r *http.Request) 
 
 	user, sessionToken, err := h.db.VerifyMagicLinkToken(token, 24*time.Hour)
 	if err != nil {
+		if err == database.ErrPendingUser {
+			http.Error(w, "account pending approval", http.StatusForbidden)
+			return
+		}
+		if err == database.ErrInactiveUser {
+			http.Error(w, "account disabled", http.StatusForbidden)
+			return
+		}
 		if err == sql.ErrNoRows {
 			http.Error(w, "invalid or expired token", http.StatusUnauthorized)
 			return

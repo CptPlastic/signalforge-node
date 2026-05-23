@@ -3,6 +3,7 @@ import { fmtDur, fmtFreq, fmtTime } from '../../lib/format'
 
 export type CallRowProps = Readonly<{
   call: Call
+  active: boolean
   playing: boolean
   favorite: boolean
   muted: boolean
@@ -13,8 +14,25 @@ export type CallRowProps = Readonly<{
   onToggleSaved: () => void
 }>
 
+function getStatusLabel(active: boolean, playing: boolean): string {
+  if (playing) return 'PLAYING'
+  if (active) return 'ACTIVE'
+  return ''
+}
+
+function getRowClass(active: boolean, playing: boolean): string {
+  if (playing) {
+    return 'border-console-accent/70 bg-console-accent/15 shadow-[inset_3px_0_0_rgba(0,255,65,0.85)]'
+  }
+  if (active) {
+    return 'border-console-accent/50 bg-console-accent/10 shadow-[inset_3px_0_0_rgba(0,255,65,0.45)]'
+  }
+  return 'border-console-border hover:bg-console-surface/60'
+}
+
 export function CallRow({
   call,
+  active,
   playing,
   favorite,
   muted,
@@ -27,9 +45,12 @@ export function CallRow({
   const isRedacted = call.redacted === true
   const playLabel = playing ? '▶ PLAY' : '▶'
   const playAriaLabel = playing ? 'playing' : 'play call'
+  const statusLabel = getStatusLabel(active, playing)
+  const rowClass = getRowClass(active, playing)
+
   return (
     <tr
-      className={`border-b border-console-border text-xs transition-colors ${playing ? 'bg-console-surface' : 'hover:bg-console-surface/60'} ${muted ? 'opacity-50' : ''}`}
+      className={`border-b text-xs transition-colors ${rowClass} ${muted ? 'opacity-50' : ''}`}
     >
       <td className="py-2 px-2">
         <input
@@ -40,7 +61,14 @@ export function CallRow({
         />
       </td>
       <td className="py-2 px-3 text-console-muted tabular-nums whitespace-nowrap">
-        {fmtTime(call.dateTime)}
+        <div className="flex items-center gap-2">
+          <span>{fmtTime(call.dateTime)}</span>
+          {statusLabel && (
+            <span className="px-1.5 py-0.5 border border-console-accent/60 rounded text-[9px] text-console-accent uppercase tracking-widest">
+              {statusLabel}
+            </span>
+          )}
+        </div>
       </td>
       <td className="py-2 px-3 font-semibold text-console-accent tabular-nums">
         <div className="flex items-center gap-2">

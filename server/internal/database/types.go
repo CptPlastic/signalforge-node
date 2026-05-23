@@ -2,7 +2,7 @@ package database
 
 import "encoding/json"
 
-// HubIdentity identifies this P7 Scanner instance for future SignalHub federation.
+// HubIdentity identifies this SignalForge Hub instance for future SignalHub federation.
 type HubIdentity struct {
 	HubID                     string `json:"hubId"`
 	Name                      string `json:"name"`
@@ -32,7 +32,7 @@ type HubInvite struct {
 	CreatedAt       int64  `json:"createdAt"`
 }
 
-// HubPeer is a trusted remote P7 Scanner hub known to this SignalHub instance.
+// HubPeer is a trusted remote SignalForge Hub known to this SignalHub instance.
 type HubPeer struct {
 	ID         string `json:"id"`
 	HubID      string `json:"hubId"`

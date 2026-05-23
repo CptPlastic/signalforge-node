@@ -27,7 +27,7 @@ function PwaInstallControl({ isStandalone, onInstallApp, showInstallButton }: Re
       <button
         onClick={onInstallApp}
         className="px-2 py-1 border border-console-accent text-console-accent rounded uppercase tracking-wider hover:bg-console-accent hover:bg-opacity-10"
-        title="Install P7 Scanner as an app"
+        title="Install SignalForge Hub as an app"
       >
         INSTALL APP
       </button>
@@ -75,7 +75,7 @@ export function AppHeader({
       <div className="flex items-center gap-3 min-w-0">
         <SignalForgeLogo className="h-10 w-10 flex-shrink-0 text-white drop-shadow-[0_0_10px_rgba(0,255,65,0.18)]" />
         <div className="min-w-0">
-          <div className="text-lg font-bold tracking-widest truncate">P7 // SCAN</div>
+          <div className="text-lg font-bold tracking-widest truncate">SIGNALFORGE // HUB</div>
           <div className="flex items-center gap-2 min-w-0">
             <div className="console-label text-[9px] truncate" title={hubTitle}>{hubLabel}</div>
             {(trustLevel === 'official' || trustLevel === 'verified') && (

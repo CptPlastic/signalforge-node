@@ -1,10 +1,25 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-p7scanner}
+      POSTGRES_USER: ${POSTGRES_USER:-p7scanner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-strong}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-p7scanner} -d ${POSTGRES_DB:-p7scanner}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   server:
     image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/p7-scanner-server:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       LISTEN_ADDR: :8080
-      DATABASE_URL: ${DATABASE_URL:-}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-p7scanner}:${POSTGRES_PASSWORD:-change-me-strong}@postgres:5432/${POSTGRES_DB:-p7scanner}?sslmode=disable}
       APP_ENV: ${APP_ENV}
       STACK_ID: ${STACK_ID:-prod-compose}
       DEPLOY_TAG: ${DEPLOY_TAG:-${IMAGE_TAG}}
@@ -13,8 +28,8 @@ services:
       MAILJET_API_KEY: ${MAILJET_API_KEY}
       MAILJET_SECRET_KEY: ${MAILJET_SECRET_KEY}
       MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL}
-      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-P7 Scanner}
-      HUB_NAME: ${HUB_NAME:-P7 Scanner Hub}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-SignalForge Hub}
+      HUB_NAME: ${HUB_NAME:-SignalForge Hub}
       HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-${APP_BASE_URL}}
       HUB_REGION: ${HUB_REGION:-}
       HUB_CONTACT: ${HUB_CONTACT:-}
@@ -24,6 +39,9 @@ services:
       HUB_TRUST_CERTIFICATE: ${HUB_TRUST_CERTIFICATE:-}
       HUB_TRUST_EXPIRES_AT: ${HUB_TRUST_EXPIRES_AT:-0}
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "${SERVER_PORT}:8080"
     healthcheck:
@@ -56,3 +74,6 @@ services:
     depends_on:
       server:
         condition: service_healthy
+
+volumes:
+  postgres_data:

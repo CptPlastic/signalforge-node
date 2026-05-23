@@ -262,7 +262,7 @@ func writeInitialConfig(path string, force bool, audio *AudioContext, in io.Read
 	}
 	fmt.Fprintln(out, "")
 
-	baseURL := promptString(reader, out, "P7 scanner URL", "https://p7scan.projectseven.us/")
+	baseURL := promptString(reader, out, "SignalForge Hub URL", "https://p7scan.projectseven.us/")
 	sourceKey := promptString(reader, out, "Source API key", "sk_live_REPLACE_WITH_GENERATED_SOURCE_KEY")
 	device := promptString(reader, out, "Audio device index or name", "")
 	threshold := promptInt(reader, out, "VOX threshold", 500)

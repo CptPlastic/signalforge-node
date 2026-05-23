@@ -295,7 +295,7 @@ var playerTmpl = template.Must(template.New("player").Parse(`<!DOCTYPE html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="{{.Name}}">
-<title>{{.Name}} // P7 SCAN</title>
+<title>{{.Name}} // SignalForge Hub</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100dvh;background:#0a0a0a;overflow:hidden}
@@ -350,7 +350,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
 <body>
 <div class="panel">
   <div class="hdr">
-    <span class="hdr-logo">P7 // SCAN</span>
+	<span class="hdr-logo">SIGNALFORGE // HUB</span>
     <span class="hdr-name">{{.Name}}</span>
     <div class="hdr-status">
       <span class="dot" id="dot"></span>
@@ -475,7 +475,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: (meta.talkgroupLabel || ('#' + meta.talkgroup)).toUpperCase(),
-        artist: meta.talkgroupGroup || meta.systemLabel || 'P7 Scanner',
+		artist: meta.talkgroupGroup || meta.systemLabel || 'SignalForge Hub',
         album: cfg.name || ''
       });
     }

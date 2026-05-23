@@ -1,6 +1,6 @@
 # P7 Recorder Go
 
-P7 Recorder Go is the replacement recorder core for the Python/PyInstaller recorder. It records local input audio with VOX detection, writes each call to a local queue, and uploads queued WAV clips to P7 Scanner using the existing `/api/call-upload` endpoint.
+P7 Recorder Go is the replacement recorder core for the Python/PyInstaller recorder. It records local input audio with VOX detection, writes each call to a local queue, and uploads queued WAV clips to SignalForge Hub using the existing `/api/call-upload` endpoint.
 
 ## Build
 

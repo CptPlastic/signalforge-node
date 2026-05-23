@@ -34,8 +34,8 @@ services:
       MAILJET_API_KEY: ${MAILJET_API_KEY:-}
       MAILJET_SECRET_KEY: ${MAILJET_SECRET_KEY:-}
       MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-}
-      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-P7 Scanner}
-      HUB_NAME: ${HUB_NAME:-P7 Scanner Local Hub}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-SignalForge Hub}
+      HUB_NAME: ${HUB_NAME:-SignalForge Local Hub}
       HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-${APP_BASE_URL:-http://localhost:3000}}
       HUB_REGION: ${HUB_REGION:-}
       HUB_CONTACT: ${HUB_CONTACT:-}

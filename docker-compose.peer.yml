@@ -1,14 +1,13 @@
-# Second SignalHub/P7 Scanner stack for peer testing.
+# Second SignalForge Hub stack for peer testing.
 #
 # Use this when you want a separate hub to connect to your main hub.
-# It is intentionally close to docker-compose.plesk.yml, but defaults to a
-# different stack name, client port, and hub identity.
+# It defaults to a different stack name, client port, and hub identity.
 #
 # Usage:
 #   cp .env.peer.example .env.peer
 #   docker-compose --env-file .env.peer -f docker-compose.peer.yml up -d
 #
-# In Plesk/Portainer, create this as a second stack and use the values from
+# In Portainer, create this as a second stack and use the values from
 # .env.peer.example as that stack's environment variables.
 
 name: ${COMPOSE_PROJECT_NAME:-p7scanner-peer}
@@ -46,8 +45,8 @@ services:
       MAILJET_API_KEY: ${MAILJET_API_KEY:-}
       MAILJET_SECRET_KEY: ${MAILJET_SECRET_KEY:-}
       MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-}
-      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-P7 Scanner Peer}
-      HUB_NAME: ${HUB_NAME:-P7 Scanner Peer Hub}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-SignalForge Peer Hub}
+      HUB_NAME: ${HUB_NAME:-SignalForge Peer Hub}
       HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-}
       HUB_REGION: ${HUB_REGION:-Peer Test}
       HUB_CONTACT: ${HUB_CONTACT:-}

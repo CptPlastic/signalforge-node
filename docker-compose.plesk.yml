@@ -44,7 +44,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       LISTEN_ADDR: :8080
-      DATABASE_URL: ${DATABASE_URL:-postgres://p7scanner:change-me-strong@postgres:5432/p7scanner?sslmode=disable}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-p7scanner}:${POSTGRES_PASSWORD:-change-me-strong}@postgres:5432/${POSTGRES_DB:-p7scanner}?sslmode=disable}
       APP_ENV: ${APP_ENV:-production}
       STACK_ID: ${STACK_ID:-plesk-stack}
       IMAGE_TAG: ${IMAGE_TAG:-latest}
@@ -54,8 +54,8 @@ services:
       MAILJET_API_KEY: ${MAILJET_API_KEY}
       MAILJET_SECRET_KEY: ${MAILJET_SECRET_KEY}
       MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL}
-      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-P7 Scanner}
-      HUB_NAME: ${HUB_NAME:-P7 Scanner Hub}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-SignalForge Hub}
+      HUB_NAME: ${HUB_NAME:-SignalForge Hub}
       HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-}
       HUB_REGION: ${HUB_REGION:-}
       HUB_CONTACT: ${HUB_CONTACT:-}

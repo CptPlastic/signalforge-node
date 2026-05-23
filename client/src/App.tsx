@@ -18,7 +18,8 @@ import {
 } from './lib/api'
 import { AppHeader } from './components/AppHeader'
 import { AppNav } from './components/AppNav'
-import { ActiveView, AuthenticatedView } from './components/ActiveView'
+import { AuthenticatedView } from './components/ActiveView'
+import { AccountView } from './components/account/AccountView'
 import { CallRow } from './components/calls/CallRow'
 import { RadioSetsView } from './components/radio-sets/RadioSetsView'
 import { SignalForgeLogo } from './components/SignalForgeLogo'
@@ -34,7 +35,6 @@ import {
 } from './lib/sourceStatus'
 import { WebSocketClient } from './lib/ws'
 import type { AppView } from './types/app'
-import { updateUserRoleDraft, updateUserStatusDraft } from './lib/userDrafts'
 
 type WsCallEvent = { type: 'call'; call: Call; sourceId?: string }
 type WsSourceDeletedEvent = { type: 'source_deleted'; sourceId: string }
@@ -49,7 +49,14 @@ type BeforeInstallPromptEvent = Event & {
 }
 
 const SESSION_WARNING_WINDOW_SEC = 15 * 60
-const CALL_PAGE_SIZE = 50
+const CALL_PAGE_SIZE_OPTIONS = [25, 50, 100, 250] as const
+const DEFAULT_CALL_PAGE_SIZE = 50
+const CALL_PAGE_SIZE_STORAGE_KEY = 'p7_call_page_size'
+
+function getStoredCallPageSize(): number {
+  const saved = Number(localStorage.getItem(CALL_PAGE_SIZE_STORAGE_KEY))
+  return CALL_PAGE_SIZE_OPTIONS.includes(saved as typeof CALL_PAGE_SIZE_OPTIONS[number]) ? saved : DEFAULT_CALL_PAGE_SIZE
+}
 
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text).catch(console.error)
@@ -157,6 +164,7 @@ function App() {
   const [usersLoading, setUsersLoading] = useState(false)
   const [userActionID, setUserActionID] = useState<string | null>(null)
   const [callPage, setCallPage] = useState(0)
+  const [callPageSize, setCallPageSize] = useState(getStoredCallPageSize)
   const [savedCallIds, setSavedCallIds] = useState<Set<number>>(new Set())
   const [radioSets, setRadioSets] = useState<RadioSet[]>([])
   const [selectedSetID, setSelectedSetID] = useState('')
@@ -254,6 +262,15 @@ function App() {
     return false
   }
   return true
+  }
+
+  const finalizeVerifiedSession = async (email: string, role: AuthUser['role']) => {
+    setActiveView('account')
+    await refreshAuthSession()
+    setAuthMessage(`Signed in as ${email}`)
+    if (activeView === 'account' && role === 'admin') {
+      await refreshUsers()
+    }
   }
 
   const refreshUsers = () => {
@@ -419,16 +436,17 @@ function App() {
   setAuthMessage('')
   setAuthError('')
   api.verifyMagicLink(token)
-    .then((result) => {
+    .then(async (result) => {
     setAuthUser(result.user)
-    setActiveView('account')
-    setAuthMessage(`Signed in as ${result.user.email}`)
-    globalThis.window.history.replaceState({}, '', globalThis.window.location.pathname)
+    await finalizeVerifiedSession(result.user.email, result.user.role)
     })
     .catch((err) => {
     setAuthError(getErrorMessage(err, 'Magic-link verification failed'))
     })
-    .finally(() => setAuthLoading(false))
+    .finally(() => {
+    globalThis.window.history.replaceState({}, '', globalThis.window.location.pathname)
+    setAuthLoading(false)
+    })
   }, [])
 
   useEffect(() => {
@@ -933,6 +951,10 @@ function App() {
   setAuthMessage('')
   try {
     const result = await api.requestMagicLink(email)
+    if (result.status === 'pending') {
+      setAuthMessage(`Access requested for ${email}. An admin must approve this account before login.`)
+      return
+    }
     setAuthMessage(`Magic link issued for ${email}. Check inbox; in non-production token may be returned inline.`)
     if (result.token) {
       setAuthToken(result.token)
@@ -957,11 +979,7 @@ function App() {
   try {
     const result = await api.verifyMagicLink(token)
     setAuthUser(result.user)
-    await refreshAuthSession()
-    setAuthMessage(`Signed in as ${result.user.email}`)
-    if (activeView === 'account' && result.user.role === 'admin') {
-      await refreshUsers()
-    }
+    await finalizeVerifiedSession(result.user.email, result.user.role)
   } catch (err) {
     setAuthError(getErrorMessage(err, 'Magic-link verification failed'))
   } finally {
@@ -995,6 +1013,21 @@ function App() {
     await refreshUsers()
   } catch (err) {
     setAuthError(getErrorMessage(err, `Could not update ${user.email}`))
+  } finally {
+    setUserActionID(null)
+  }
+  }
+
+  async function approveUser(user: UserRecord) {
+  setUserActionID(user.id)
+  setAuthError('')
+  setAuthMessage('')
+  try {
+    await api.updateUser(user.id, { role: user.role, status: 'active' })
+    await refreshUsers()
+    setAuthMessage(`Approved ${user.email}`)
+  } catch (err) {
+    setAuthError(getErrorMessage(err, `Could not approve ${user.email}`))
   } finally {
     setUserActionID(null)
   }
@@ -1034,7 +1067,7 @@ function App() {
 
   useEffect(() => {
     setCallPage(0)
-  }, [search, groupFilter, sortBy, sortOrder, showFavoritesOnly, hideMuted, selectedSetID])
+  }, [search, groupFilter, sortBy, sortOrder, showFavoritesOnly, hideMuted, selectedSetID, callPageSize])
 
   // Server-side query — fires 300 ms after the user stops typing or toggles favorites.
   // Queries the full DB instead of the capped in-memory stream.
@@ -1077,10 +1110,11 @@ function App() {
   }, [search, groupFilter, showFavoritesOnly, settingsMap, selectedSetID, radioSets])
 
   const pagedCalls = useMemo(
-    () => filteredCalls.slice(callPage * CALL_PAGE_SIZE, (callPage + 1) * CALL_PAGE_SIZE),
-    [filteredCalls, callPage],
+    () => filteredCalls.slice(callPage * callPageSize, (callPage + 1) * callPageSize),
+    [filteredCalls, callPage, callPageSize],
   )
-  const totalCallPages = Math.max(1, Math.ceil(filteredCalls.length / CALL_PAGE_SIZE))
+  const totalCallPages = Math.max(1, Math.ceil(filteredCalls.length / callPageSize))
+  const awaitingMagicLink = !authUser && Boolean(authMessage) && !authError
 
   const allPageSelected = useMemo(
     () => pagedCalls.length > 0 && pagedCalls.every((c) => savedCallIds.has(c.id)),
@@ -1399,7 +1433,7 @@ function App() {
       <div className="mx-auto max-w-3xl text-center space-y-4">
         <SignalForgeLogo className="mx-auto h-24 w-24 text-white drop-shadow-[0_0_16px_rgba(0,255,65,0.2)]" />
         <div className="space-y-2">
-          <p className="text-sm font-bold tracking-widest">[ P7 SCANNER ]</p>
+          <p className="text-sm font-bold tracking-widest">[ SIGNALFORGE HUB ]</p>
           <p className="text-console-muted text-[11px] leading-6">
             Private console for monitoring, organizing, and sharing community radio traffic through SignalForge.
           </p>
@@ -1478,7 +1512,7 @@ function App() {
               </span>
             </div>
 
-            <div className="mb-3 grid gap-2 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto_auto_auto]">
+            <div className="mb-3 grid gap-2 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto_auto_auto]">
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -1522,6 +1556,20 @@ function App() {
               >
                 <option value="desc">Order: Desc</option>
                 <option value="asc">Order: Asc</option>
+              </select>
+              <select
+                value={callPageSize}
+                onChange={(e) => {
+                  const nextSize = Number(e.target.value)
+                  setCallPageSize(nextSize)
+                  localStorage.setItem(CALL_PAGE_SIZE_STORAGE_KEY, String(nextSize))
+                }}
+                className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs"
+                title="Calls shown per page"
+              >
+                {CALL_PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>Show: {size}</option>
+                ))}
               </select>
 
               <label className="text-xs flex items-center gap-2 cursor-pointer min-w-0">
@@ -1608,6 +1656,7 @@ function App() {
                       <CallRow
                         key={call.id}
                         call={call}
+                        active={call.dateTime + Math.max(Math.ceil(call.duration), 8) >= nowUnix}
                         playing={playingId === call.id}
                         favorite={settingsMap[call.talkgroup]?.favorite ?? false}
                         muted={settingsMap[call.talkgroup]?.muted ?? false}
@@ -1656,7 +1705,7 @@ function App() {
                   ← PREV
                 </button>
                 <span className="text-[10px] text-console-muted tabular-nums">
-                  {callPage * CALL_PAGE_SIZE + 1}–{Math.min((callPage + 1) * CALL_PAGE_SIZE, filteredCalls.length)} of {filteredCalls.length}
+                  {callPage * callPageSize + 1}–{Math.min((callPage + 1) * callPageSize, filteredCalls.length)} of {filteredCalls.length}
                 </span>
                 <button
                   onClick={() => setCallPage((p) => Math.min(totalCallPages - 1, p + 1))}
@@ -2053,7 +2102,7 @@ function App() {
                   value={hubDraft.name}
                   onChange={(event) => setHubDraft((prev) => ({ ...prev, name: event.target.value }))}
                   className="w-full bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent disabled:opacity-60"
-                  placeholder="P7 Scanner Hub"
+                  placeholder="SignalForge Hub"
                   disabled={!isAdmin || hubLoading}
                 />
               </div>
@@ -2299,7 +2348,7 @@ function App() {
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
                   <p className="console-label text-xs">PEER INVITES</p>
-                  <p className="text-[11px] text-console-muted">Generate a 7-day token for another P7 Scanner hub.</p>
+                  <p className="text-[11px] text-console-muted">Generate a 7-day token for another SignalForge Hub.</p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   <button
@@ -2383,194 +2432,32 @@ function App() {
         </main>
       </AuthenticatedView>
 
-    <ActiveView activeView={activeView} view="account">
-    <main className="console-panel flex flex-col gap-4">
-      <div className="grid gap-3 md:grid-cols-2">
-      <div className="border border-console-border rounded p-3">
-        <p className="console-label text-xs mb-2">SESSION</p>
-        {!authUser && <p className="text-xs text-console-muted">Not authenticated</p>}
-        {authUser && (
-        <div className="text-xs flex flex-col gap-2">
-          <div className="text-console-muted">Email: <span className="text-console-text">{authUser.email}</span></div>
-          <div className="text-console-muted">Role: <span className="text-console-accent uppercase">{authUser.role}</span></div>
-          <button
-          onClick={logoutSession}
-          className="w-fit px-2 py-1 border border-console-error text-console-error rounded text-[11px] hover:bg-console-error hover:bg-opacity-10"
-          disabled={authLoading}
-          >
-          {authLoading ? 'WORKING...' : 'LOGOUT'}
-          </button>
-        </div>
-        )}
-      </div>
-
-      {!authUser && (
-        <div className="border border-console-border rounded p-3 flex flex-col gap-3">
-        <p className="console-label text-xs">STEP 1: REQUEST LOGIN</p>
-        <p className="text-[11px] text-console-muted">Enter your email address and request a magic link.</p>
-        <input
-          value={authEmail}
-          onChange={(e) => setAuthEmail(e.target.value)}
-          placeholder="your.email@example.com"
-          className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
-          disabled={authLoading}
-        />
-        <button
-          onClick={requestMagicLink}
-          className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
-          disabled={authLoading || !authEmail.trim()}
-        >
-          {authLoading ? 'WORKING...' : 'REQUEST MAGIC LINK'}
-        </button>
-        </div>
-      )}
-
-      {!authUser && (
-        <div className="border border-console-border rounded p-3 flex flex-col gap-3">
-        <p className="console-label text-xs">STEP 2: VERIFY TOKEN</p>
-        <p className="text-[11px] text-console-muted">Check your email for a link. Copy the token and paste it below.</p>
-        <input
-          value={authToken}
-          onChange={(e) => setAuthToken(e.target.value)}
-          placeholder="paste token from email"
-          className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
-          disabled={authLoading}
-        />
-        <button
-          onClick={verifyMagicLinkToken}
-          className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
-          disabled={authLoading || !authToken.trim()}
-        >
-          {authLoading ? 'WORKING...' : 'VERIFY & LOGIN'}
-        </button>
-        </div>
-      )}
-      </div>
-
-      {authMessage && <div className="text-[11px] text-console-accent">{authMessage}</div>}
-      {authError && <div className="text-[11px] text-console-error">{authError}</div>}
-
-      {authUser?.role === 'admin' && (
-      <div className="border border-console-border rounded p-3 overflow-auto">
-        <div className="flex items-center justify-between mb-2">
-        <p className="console-label text-xs">USER MANAGEMENT</p>
-        <button
-          onClick={() => refreshUsers()}
-          className="px-2 py-1 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent"
-          disabled={usersLoading}
-        >
-          {usersLoading ? 'LOADING...' : 'REFRESH'}
-        </button>
-        </div>
-        <table className="w-full border-collapse text-xs">
-        <thead>
-          <tr className="border-b border-console-border text-[10px] uppercase tracking-widest text-console-muted">
-          <th className="py-1.5 px-2 text-left font-normal">Email</th>
-          <th className="py-1.5 px-2 text-left font-normal">Role</th>
-          <th className="py-1.5 px-2 text-left font-normal">Status</th>
-          <th className="py-1.5 px-2 text-left font-normal">Created</th>
-          <th className="py-1.5 px-2 text-left font-normal">Updated</th>
-          <th className="py-1.5 px-2 text-left font-normal">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((user) => (
-          <tr key={user.id} className="border-b border-console-border/70">
-            <td className="py-2 px-2">{user.email}</td>
-            <td className="py-2 px-2">
-            <select
-              value={user.role}
-              onChange={(e) => setUsers(updateUserRoleDraft(user.id, e.target.value as UserRecord['role']))}
-              className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs"
-            >
-              <option value="admin">admin</option>
-              <option value="user">user</option>
-              <option value="guest">guest</option>
-            </select>
-            </td>
-            <td className="py-2 px-2">
-            <select
-              value={user.status}
-              onChange={(e) => setUsers(updateUserStatusDraft(user.id, e.target.value as UserRecord['status']))}
-              className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs"
-            >
-              <option value="active">active</option>
-              <option value="disabled">disabled</option>
-            </select>
-            </td>
-            <td className="py-2 px-2 text-console-muted">{fmtDateTime(user.createdAt)}</td>
-            <td className="py-2 px-2 text-console-muted">{fmtDateTime(user.updatedAt)}</td>
-            <td className="py-2 px-2">
-            <div className="flex items-center gap-2">
-              <button
-              onClick={() => saveUser(user)}
-              className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10"
-              disabled={userActionID === user.id}
-              >
-              SAVE
-              </button>
-              <button
-              onClick={() => removeUser(user)}
-              className="px-2 py-1 border border-console-error text-console-error rounded text-[10px] hover:bg-console-error hover:bg-opacity-10"
-              disabled={userActionID === user.id}
-              >
-              DELETE
-              </button>
-            </div>
-            </td>
-          </tr>
-          ))}
-          {users.length === 0 && (
-          <tr>
-            <td className="py-3 px-2 text-console-muted" colSpan={6}>No users</td>
-          </tr>
-          )}
-        </tbody>
-        </table>
-      </div>
-      )}
-
-    {authUser?.role === 'admin' && (
-    <div className="border border-console-border rounded p-3 overflow-auto">
-      <div className="flex items-center justify-between mb-2">
-      <p className="console-label text-xs">AUDIT LOG</p>
-      <button
-        onClick={() => refreshAuditLogs()}
-        className="px-2 py-1 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent"
-        disabled={auditLoading}
-      >
-        {auditLoading ? 'LOADING...' : 'REFRESH'}
-      </button>
-      </div>
-      <table className="w-full border-collapse text-xs">
-      <thead>
-        <tr className="border-b border-console-border text-[10px] uppercase tracking-widest text-console-muted">
-        <th className="py-1.5 px-2 text-left font-normal">Time</th>
-        <th className="py-1.5 px-2 text-left font-normal">Action</th>
-        <th className="py-1.5 px-2 text-left font-normal">Target</th>
-        <th className="py-1.5 px-2 text-left font-normal">Actor</th>
-        </tr>
-      </thead>
-      <tbody>
-        {auditLogs.map((entry) => (
-        <tr key={entry.id} className="border-b border-console-border/70">
-          <td className="py-2 px-2 text-console-muted">{fmtDateTime(entry.createdAt)}</td>
-          <td className="py-2 px-2">{entry.action}</td>
-          <td className="py-2 px-2 text-console-muted">{entry.targetType}:{entry.targetId}</td>
-          <td className="py-2 px-2 text-console-muted">{entry.userId || 'system'}</td>
-        </tr>
-        ))}
-        {auditLogs.length === 0 && (
-        <tr>
-          <td className="py-3 px-2 text-console-muted" colSpan={4}>No audit entries</td>
-        </tr>
-        )}
-      </tbody>
-      </table>
-    </div>
-    )}
-    </main>
-    </ActiveView>
+      <AccountView
+        activeView={activeView}
+        authUser={authUser}
+        authLoading={authLoading}
+        authEmail={authEmail}
+        authToken={authToken}
+        authMessage={authMessage}
+        authError={authError}
+        awaitingMagicLink={awaitingMagicLink}
+        users={users}
+        setUsers={setUsers}
+        usersLoading={usersLoading}
+        userActionID={userActionID}
+        auditLogs={auditLogs}
+        auditLoading={auditLoading}
+        onAuthEmailChange={setAuthEmail}
+        onAuthTokenChange={setAuthToken}
+        onRequestMagicLink={requestMagicLink}
+        onVerifyMagicLinkToken={verifyMagicLinkToken}
+        onLogoutSession={logoutSession}
+        onRefreshUsers={refreshUsers}
+        onSaveUser={saveUser}
+        onApproveUser={approveUser}
+        onRemoveUser={removeUser}
+        onRefreshAuditLogs={refreshAuditLogs}
+      />
 
       <footer className="text-xs text-console-muted border-t border-console-border pt-3 flex flex-col gap-1">
         <div>projectseven .Co .Ltd © {new Date().getFullYear()} — ALL SYSTEMS OPERATIONAL</div>

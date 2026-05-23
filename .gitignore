@@ -18,6 +18,10 @@ tools/p7-recorder-go/p7-recorder-go.exe
 
 # Environment
 .env
+.env.production
+.env.production.*
+!.env.production.example
+.env.peer
 
 # Databases
 *.db
@@ -45,4 +49,3 @@ GEMINI.md
 CONVENTIONS.md
 *.code-workspace
 *.code-workspace
-.env.peer

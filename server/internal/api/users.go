@@ -4,6 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/projectseven-co-ltd/p7-scanner/server/internal/database"
+)
+
+const (
+	updateUserError  = "update user"
+	deleteUserError  = "delete user"
+	userNotFoundText = "user not found"
 )
 
 type updateUserRequest struct {
@@ -22,11 +30,42 @@ func normalizeUserRole(role string) string {
 
 func normalizeUserStatus(status string) string {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "active", "disabled":
+	case "active", "pending", "disabled":
 		return strings.ToLower(strings.TrimSpace(status))
 	default:
 		return ""
 	}
+}
+
+func findUserByID(users []database.User, userID string) (database.User, bool) {
+	for _, user := range users {
+		if user.ID == userID {
+			return user, true
+		}
+	}
+	return database.User{}, false
+}
+
+func (h *handler) ensureActiveAdminCanChange(w http.ResponseWriter, target database.User, role, status, operation string) bool {
+	keepsActiveAdmin := role == "admin" && status == "active"
+	if target.Role != "admin" || target.Status != "active" || keepsActiveAdmin {
+		return true
+	}
+	return h.ensureMoreThanOneActiveAdmin(w, operation, "cannot remove the last active admin")
+}
+
+func (h *handler) ensureMoreThanOneActiveAdmin(w http.ResponseWriter, operation, message string) bool {
+	adminCount, err := h.db.CountActiveAdmins()
+	if err != nil {
+		h.logger.Error("count admins failed", "error", err)
+		http.Error(w, operation, http.StatusInternalServerError)
+		return false
+	}
+	if adminCount <= 1 {
+		http.Error(w, message, http.StatusBadRequest)
+		return false
+	}
+	return true
 }
 
 func (h *handler) handleListUsers(w http.ResponseWriter, r *http.Request) {
@@ -74,43 +113,26 @@ func (h *handler) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	users, err := h.db.ListUsers()
 	if err != nil {
 		h.logger.Error("list users for validation failed", "error", err)
-		http.Error(w, "update user", http.StatusInternalServerError)
+		http.Error(w, updateUserError, http.StatusInternalServerError)
 		return
 	}
-	var targetRole string
-	var targetStatus string
-	for _, user := range users {
-		if user.ID == userID {
-			targetRole = user.Role
-			targetStatus = user.Status
-			break
-		}
-	}
-	if targetRole == "" {
-		http.Error(w, "user not found", http.StatusNotFound)
+	target, found := findUserByID(users, userID)
+	if !found {
+		http.Error(w, userNotFoundText, http.StatusNotFound)
 		return
 	}
-	if targetRole == "admin" && targetStatus == "active" && (role != "admin" || status != "active") {
-		adminCount, err := h.db.CountActiveAdmins()
-		if err != nil {
-			h.logger.Error("count admins failed", "error", err)
-			http.Error(w, "update user", http.StatusInternalServerError)
-			return
-		}
-		if adminCount <= 1 {
-			http.Error(w, "cannot remove the last active admin", http.StatusBadRequest)
-			return
-		}
+	if !h.ensureActiveAdminCanChange(w, target, role, status, updateUserError) {
+		return
 	}
 
 	updated, err := h.db.UpdateUserRoleStatus(userID, role, status)
 	if err != nil {
 		h.logger.Error("update user failed", "user_id", userID, "error", err)
-		http.Error(w, "update user", http.StatusInternalServerError)
+		http.Error(w, updateUserError, http.StatusInternalServerError)
 		return
 	}
 	if !updated {
-		http.Error(w, "user not found", http.StatusNotFound)
+		http.Error(w, userNotFoundText, http.StatusNotFound)
 		return
 	}
 	_ = h.db.AppendAuditLog(admin.ID, "admin.user_updated", "user", userID, map[string]any{
@@ -139,36 +161,28 @@ func (h *handler) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	users, err := h.db.ListUsers()
 	if err != nil {
 		h.logger.Error("list users for deletion failed", "error", err)
-		http.Error(w, "delete user", http.StatusInternalServerError)
+		http.Error(w, deleteUserError, http.StatusInternalServerError)
 		return
 	}
-	for _, user := range users {
-		if user.ID != userID {
-			continue
+	target, found := findUserByID(users, userID)
+	if !found {
+		http.Error(w, userNotFoundText, http.StatusNotFound)
+		return
+	}
+	if target.Role == "admin" && target.Status == "active" {
+		if !h.ensureMoreThanOneActiveAdmin(w, deleteUserError, "cannot delete the last active admin") {
+			return
 		}
-		if user.Role == "admin" && user.Status == "active" {
-			adminCount, err := h.db.CountActiveAdmins()
-			if err != nil {
-				h.logger.Error("count admins failed", "error", err)
-				http.Error(w, "delete user", http.StatusInternalServerError)
-				return
-			}
-			if adminCount <= 1 {
-				http.Error(w, "cannot delete the last active admin", http.StatusBadRequest)
-				return
-			}
-		}
-		break
 	}
 
 	deleted, err := h.db.DeleteUser(userID)
 	if err != nil {
 		h.logger.Error("delete user failed", "user_id", userID, "error", err)
-		http.Error(w, "delete user", http.StatusInternalServerError)
+		http.Error(w, deleteUserError, http.StatusInternalServerError)
 		return
 	}
 	if !deleted {
-		http.Error(w, "user not found", http.StatusNotFound)
+		http.Error(w, userNotFoundText, http.StatusNotFound)
 		return
 	}
 	_ = h.db.AppendAuditLog(admin.ID, "admin.user_deleted", "user", userID, map[string]any{})
