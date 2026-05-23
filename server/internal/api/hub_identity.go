@@ -2,6 +2,10 @@ package api
 
 import (
 	"bytes"
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,10 +19,12 @@ import (
 )
 
 const (
-	hubInviteTTL       = 7 * 24 * time.Hour
-	errLoadHubIdentity = "load hub identity"
-	errInvalidJSON     = "invalid json"
-	errFederationOff   = "federation disabled"
+	hubInviteTTL                 = 7 * 24 * time.Hour
+	hubDirectorySyncInitialDelay = 15 * time.Minute
+	hubDirectorySyncInterval     = 24 * time.Hour
+	errLoadHubIdentity           = "load hub identity"
+	errInvalidJSON               = "invalid json"
+	errFederationOff             = "federation disabled"
 )
 
 type updateHubIdentityRequest struct {
@@ -56,6 +62,7 @@ type hubDirectoryEntry struct {
 	Name             string `json:"name"`
 	PublicURL        string `json:"publicUrl"`
 	Region           string `json:"region"`
+	PublicKey        string `json:"publicKey"`
 	DirectoryStatus  string `json:"directoryStatus"`
 	TrustLevel       string `json:"trustLevel"`
 	TrustIssuerHubID string `json:"trustIssuerHubId"`
@@ -131,18 +138,30 @@ func (h *handler) handleRefreshHubDirectory(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	identity, err := h.ensureHubIdentity()
-	if err != nil {
-		h.logger.Error("load hub identity before directory refresh failed", "error", err)
-		http.Error(w, errLoadHubIdentity, http.StatusInternalServerError)
-		return
-	}
-
-	entry, found, err := h.fetchHubDirectoryEntry(r, identity.HubID)
+	saved, found, err := h.refreshHubDirectory(r.Context())
 	if err != nil {
 		h.logger.Error("refresh hub directory failed", "error", err)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
+	}
+
+	_ = h.db.AppendAuditLog(admin.ID, "hub.directory_refreshed", "hub", saved.HubID, map[string]any{
+		"found":           found,
+		"directoryStatus": saved.DirectoryValidationStatus,
+		"trustLevel":      saved.TrustLevel,
+	})
+	writeJSON(w, http.StatusOK, saved)
+}
+
+func (h *handler) refreshHubDirectory(ctx context.Context) (*database.HubIdentity, bool, error) {
+	identity, err := h.ensureHubIdentity()
+	if err != nil {
+		return nil, false, fmt.Errorf("%s: %w", errLoadHubIdentity, err)
+	}
+
+	entry, found, err := h.fetchHubDirectoryEntry(ctx, identity.HubID)
+	if err != nil {
+		return nil, false, err
 	}
 
 	updated := *identity
@@ -164,15 +183,62 @@ func (h *handler) handleRefreshHubDirectory(w http.ResponseWriter, r *http.Reque
 
 	saved, err := h.db.UpsertHubIdentity(updated)
 	if err != nil {
-		h.logger.Error("save hub identity after directory refresh failed", "error", err)
-		http.Error(w, "save hub identity", http.StatusInternalServerError)
+		return nil, found, fmt.Errorf("save hub identity: %w", err)
+	}
+	return saved, found, nil
+}
+
+func (h *handler) startHubDirectorySyncLoop() {
+	go func() {
+		timer := time.NewTimer(hubDirectorySyncInitialDelay)
+		defer timer.Stop()
+		for {
+			<-timer.C
+			identity, found, err := h.refreshHubDirectory(context.Background())
+			if err != nil {
+				h.logger.Error("scheduled hub directory refresh failed", "error", err)
+			} else {
+				h.logger.Info("scheduled hub directory refresh complete", "hub_id", identity.HubID, "found", found, "trust_level", identity.TrustLevel)
+			}
+			timer.Reset(hubDirectorySyncInterval)
+		}
+	}()
+}
+
+func (h *handler) handleGenerateHubKeyPair(w http.ResponseWriter, r *http.Request) {
+	admin, ok := h.requireAdmin(w, r)
+	if !ok {
 		return
 	}
 
-	_ = h.db.AppendAuditLog(admin.ID, "hub.directory_refreshed", "hub", saved.HubID, map[string]any{
-		"found":           found,
-		"directoryStatus": saved.DirectoryValidationStatus,
-		"trustLevel":      saved.TrustLevel,
+	identity, err := h.ensureHubIdentity()
+	if err != nil {
+		h.logger.Error("load hub identity before key generation failed", "error", err)
+		http.Error(w, errLoadHubIdentity, http.StatusInternalServerError)
+		return
+	}
+
+	if strings.TrimSpace(identity.PublicKey) != "" && strings.TrimSpace(identity.PrivateKey) != "" {
+		writeJSON(w, http.StatusOK, identity)
+		return
+	}
+
+	publicKey, privateKey, err := generateHubKeyPair()
+	if err != nil {
+		h.logger.Error("generate hub keypair failed", "error", err)
+		http.Error(w, "generate hub keypair", http.StatusInternalServerError)
+		return
+	}
+
+	saved, err := h.db.SetHubIdentityKeyPair(publicKey, privateKey)
+	if err != nil {
+		h.logger.Error("save hub keypair failed", "error", err)
+		http.Error(w, "save hub keypair", http.StatusInternalServerError)
+		return
+	}
+
+	_ = h.db.AppendAuditLog(admin.ID, "hub.keypair_generated", "hub", saved.HubID, map[string]any{
+		"publicKey": saved.PublicKey,
 	})
 	writeJSON(w, http.StatusOK, saved)
 }
@@ -610,12 +676,24 @@ func normalizeDirectoryTrustLevel(value string) string {
 	}
 }
 
-func (h *handler) fetchHubDirectoryEntry(r *http.Request, hubID string) (hubDirectoryEntry, bool, error) {
+func generateHubKeyPair() (string, string, error) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", "", err
+	}
+	return encodeHubKey(publicKey), encodeHubKey(privateKey), nil
+}
+
+func encodeHubKey(key []byte) string {
+	return "ed25519:" + base64.RawStdEncoding.EncodeToString(key)
+}
+
+func (h *handler) fetchHubDirectoryEntry(ctx context.Context, hubID string) (hubDirectoryEntry, bool, error) {
 	directoryURL, err := normalizeDirectoryURL(h.cfg.HubDirectoryURL)
 	if err != nil {
 		return hubDirectoryEntry{}, false, err
 	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, directoryURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, directoryURL, nil)
 	if err != nil {
 		return hubDirectoryEntry{}, false, err
 	}

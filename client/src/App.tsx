@@ -75,6 +75,32 @@ function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text).catch(console.error)
 }
 
+function trustTextClass(trustLevel = 'community'): string {
+  switch (trustLevel) {
+    case 'official':
+    case 'verified':
+      return 'text-console-accent'
+    case 'trusted':
+      return 'text-console-amber'
+    case 'suspended':
+      return 'text-console-error'
+    default:
+      return 'text-console-muted'
+  }
+}
+
+function directoryStatusClass(status = 'unverified'): string {
+  switch (status) {
+    case 'verified':
+    case 'listed':
+      return 'text-console-accent'
+    case 'suspended':
+      return 'text-console-error'
+    default:
+      return 'text-console-muted'
+  }
+}
+
 function redactKey(key: string): string {
   if (key.length <= 8) return key
   return '*'.repeat(key.length - 4) + key.slice(-4)
@@ -1285,6 +1311,39 @@ function App() {
     }
   }
 
+  async function generateHubKeyPair() {
+    if (authUser?.role !== 'admin') return
+    setHubLoading(true)
+    setHubMessage('')
+    setHubError('')
+    try {
+      const saved = await api.generateHubKeyPair()
+      applyHubIdentity(saved)
+      setHubMessage('Hub keypair generated')
+    } catch (err) {
+      console.error(err)
+      setHubError(getErrorMessage(err, 'Could not generate hub keypair'))
+    } finally {
+      setHubLoading(false)
+    }
+  }
+
+  function copyDirectoryListingRequest() {
+    if (!hubIdentity) return
+    const request = {
+      type: 'signalforge-directory-listing-request',
+      hubId: hubIdentity.hubId,
+      publicUrl: hubIdentity.publicUrl,
+      name: hubIdentity.name,
+      region: hubIdentity.region,
+      publicKey: hubIdentity.publicKey,
+      software: 'SignalForge Hub',
+      version: currentDeploymentTag,
+    }
+    copyToClipboard(JSON.stringify(request, null, 2))
+    setHubMessage('Directory listing request copied')
+  }
+
   async function createHubInvite() {
     if (authUser?.role !== 'admin') return
     setHubInviteActionID('new')
@@ -2307,8 +2366,8 @@ function App() {
             <div className="border border-console-border rounded p-3 flex flex-col gap-2 text-xs">
               <p className="console-label text-xs">FEDERATION STATUS</p>
               <div className="text-console-muted">Hub ID: <span className="text-console-text break-all">{hubIdentity?.hubId || '—'}</span></div>
-              <div className="text-console-muted">Directory: <span className="text-console-accent uppercase">{hubIdentity?.directoryValidationStatus || 'unverified'}</span></div>
-              <div className="text-console-muted">Trust: <span className="text-console-accent uppercase">{hubIdentity?.trustLevel || 'community'}</span></div>
+              <div className="text-console-muted">Directory: <span className={`${directoryStatusClass(hubIdentity?.directoryValidationStatus)} uppercase`}>{hubIdentity?.directoryValidationStatus || 'unverified'}</span></div>
+              <div className="text-console-muted">Trust: <span className={`${trustTextClass(hubIdentity?.trustLevel)} uppercase`}>{hubIdentity?.trustLevel || 'community'}</span></div>
               <div className="text-console-muted">Trust issuer: <span className="text-console-text break-all">{hubIdentity?.trustIssuerHubId || '—'}</span></div>
               <div className="text-console-muted">Trust verified: <span className="text-console-text">{hubIdentity?.trustVerifiedAt ? fmtDateTime(hubIdentity.trustVerifiedAt) : '—'}</span></div>
               {isAdmin && (
@@ -2348,6 +2407,23 @@ function App() {
                 </>
               )}
               <div className="text-console-muted">Public key: <span className="text-console-text break-all">{hubIdentity?.publicKey || 'not generated yet'}</span></div>
+              {isAdmin && !hubIdentity?.publicKey && (
+                <button
+                  onClick={generateHubKeyPair}
+                  disabled={hubLoading}
+                  className="w-fit px-2 py-1 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent disabled:opacity-50"
+                >
+                  GENERATE KEY
+                </button>
+              )}
+              {isAdmin && hubIdentity && (
+                <button
+                  onClick={copyDirectoryListingRequest}
+                  className="w-fit px-2 py-1 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent"
+                >
+                  COPY LISTING REQUEST
+                </button>
+              )}
               <div className="text-console-muted">Updated: <span className="text-console-text">{hubIdentity?.updatedAt ? fmtDateTime(hubIdentity.updatedAt) : '—'}</span></div>
               {!isAdmin && (
                 <p className="text-[11px] text-console-muted mt-2">Admin access is required to change hub identity.</p>

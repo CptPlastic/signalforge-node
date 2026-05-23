@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -100,6 +101,37 @@ func TestNormalizeDirectoryURLRejectsUnsafeHosts(t *testing.T) {
 		if got, err := normalizeDirectoryURL(raw); err == nil {
 			t.Fatalf("normalizeDirectoryURL(%q) = %q, want error", raw, got)
 		}
+	}
+}
+
+func TestGenerateHubKeyPairReturnsEd25519Keys(t *testing.T) {
+	publicKey, privateKey, err := generateHubKeyPair()
+	if err != nil {
+		t.Fatalf("generateHubKeyPair returned error: %v", err)
+	}
+	if !strings.HasPrefix(publicKey, "ed25519:") {
+		t.Fatalf("public key = %q, want ed25519 prefix", publicKey)
+	}
+	if !strings.HasPrefix(privateKey, "ed25519:") {
+		t.Fatalf("private key = %q, want ed25519 prefix", privateKey)
+	}
+	if publicKey == privateKey {
+		t.Fatal("public and private keys matched, want distinct encoded keys")
+	}
+}
+
+func TestHubIdentityJSONOmitsPrivateKey(t *testing.T) {
+	payload, err := json.Marshal(database.HubIdentity{
+		HubID:      "hub_test",
+		PublicKey:  "ed25519:public",
+		PrivateKey: "ed25519:private",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded := string(payload)
+	if strings.Contains(encoded, "private") || strings.Contains(encoded, "PrivateKey") {
+		t.Fatalf("hub identity JSON exposed private key: %s", encoded)
 	}
 }
 

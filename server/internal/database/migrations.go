@@ -60,6 +60,7 @@ func (d *DB) migrate() error {
 		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS trust_certificate TEXT NOT NULL DEFAULT '';
 		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS trust_expires_at BIGINT NOT NULL DEFAULT 0;
 		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS trust_verified_at BIGINT NOT NULL DEFAULT 0;
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS private_key TEXT NOT NULL DEFAULT '';
 		CREATE TABLE IF NOT EXISTS hub_invites (
 			id                 TEXT PRIMARY KEY,
 			token              TEXT NOT NULL UNIQUE,

@@ -10,6 +10,7 @@ type HubIdentity struct {
 	Region                    string `json:"region"`
 	Contact                   string `json:"contact"`
 	PublicKey                 string `json:"publicKey"`
+	PrivateKey                string `json:"-"`
 	FederationEnabled         bool   `json:"federationEnabled"`
 	DirectoryValidationStatus string `json:"directoryValidationStatus"`
 	TrustLevel                string `json:"trustLevel"`

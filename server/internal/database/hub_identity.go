@@ -18,7 +18,7 @@ type FederatedPeerImportDeleteStats struct {
 // GetHubIdentity returns the local hub identity, if it has been initialized.
 func (d *DB) GetHubIdentity() (*HubIdentity, bool, error) {
 	row := d.db.QueryRow(`
-		SELECT hub_id, name, public_url, region, contact, public_key,
+		SELECT hub_id, name, public_url, region, contact, public_key, private_key,
 		       federation_enabled, directory_validation_status, trust_level,
 		       trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
 		       created_at, updated_at
@@ -33,6 +33,7 @@ func (d *DB) GetHubIdentity() (*HubIdentity, bool, error) {
 		&identity.Region,
 		&identity.Contact,
 		&identity.PublicKey,
+		&identity.PrivateKey,
 		&identity.FederationEnabled,
 		&identity.DirectoryValidationStatus,
 		&identity.TrustLevel,
@@ -70,16 +71,17 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 
 	row := d.db.QueryRow(`
 		INSERT INTO hub_identity
-			(id, hub_id, name, public_url, region, contact, public_key,
+			(id, hub_id, name, public_url, region, contact, public_key, private_key,
 			 federation_enabled, directory_validation_status, trust_level, trust_issuer_hub_id,
 			 trust_certificate, trust_expires_at, trust_verified_at, created_at, updated_at)
-		VALUES ('local', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
+		VALUES ('local', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15)
 		ON CONFLICT (id) DO UPDATE SET
 			name = excluded.name,
 			public_url = excluded.public_url,
 			region = excluded.region,
 			contact = excluded.contact,
 			public_key = excluded.public_key,
+			private_key = excluded.private_key,
 			federation_enabled = excluded.federation_enabled,
 			directory_validation_status = excluded.directory_validation_status,
 			trust_level = excluded.trust_level,
@@ -88,7 +90,7 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 			trust_expires_at = excluded.trust_expires_at,
 			trust_verified_at = excluded.trust_verified_at,
 			updated_at = excluded.updated_at
-		RETURNING hub_id, name, public_url, region, contact, public_key,
+		RETURNING hub_id, name, public_url, region, contact, public_key, private_key,
 		          federation_enabled, directory_validation_status, trust_level,
 		          trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
 		          created_at, updated_at`,
@@ -98,6 +100,7 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 		identity.Region,
 		identity.Contact,
 		identity.PublicKey,
+		identity.PrivateKey,
 		identity.FederationEnabled,
 		identity.DirectoryValidationStatus,
 		identity.TrustLevel,
@@ -116,6 +119,44 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 		&saved.Region,
 		&saved.Contact,
 		&saved.PublicKey,
+		&saved.PrivateKey,
+		&saved.FederationEnabled,
+		&saved.DirectoryValidationStatus,
+		&saved.TrustLevel,
+		&saved.TrustIssuerHubID,
+		&saved.TrustCertificate,
+		&saved.TrustExpiresAt,
+		&saved.TrustVerifiedAt,
+		&saved.CreatedAt,
+		&saved.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &saved, nil
+}
+
+// SetHubIdentityKeyPair stores the local hub signing keypair and returns the public identity.
+func (d *DB) SetHubIdentityKeyPair(publicKey, privateKey string) (*HubIdentity, error) {
+	now := time.Now().Unix()
+	row := d.db.QueryRow(`
+		UPDATE hub_identity
+		SET public_key = $1, private_key = $2, updated_at = $3
+		WHERE id = 'local'
+		RETURNING hub_id, name, public_url, region, contact, public_key, private_key,
+		          federation_enabled, directory_validation_status, trust_level,
+		          trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
+		          created_at, updated_at`, publicKey, privateKey, now)
+
+	var saved HubIdentity
+	if err := row.Scan(
+		&saved.HubID,
+		&saved.Name,
+		&saved.PublicURL,
+		&saved.Region,
+		&saved.Contact,
+		&saved.PublicKey,
+		&saved.PrivateKey,
 		&saved.FederationEnabled,
 		&saved.DirectoryValidationStatus,
 		&saved.TrustLevel,

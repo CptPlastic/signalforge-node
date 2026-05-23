@@ -24,6 +24,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 	sh := newStreamHub(logger)
 	handle := newHandler(cfg, db, h, sh, logger)
 	handle.startFederationSyncLoop()
+	handle.startHubDirectorySyncLoop()
 	r.Use(handle.withUserContext)
 
 	// Long-lived connections — no request timeout.
@@ -44,6 +45,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Get("/api/v1/auth/me", handle.handleMe)
 		r.Get("/api/v1/hub/identity", handle.handleGetHubIdentity)
 		r.Put("/api/v1/hub/identity", handle.handleUpdateHubIdentity)
+		r.Post("/api/v1/hub/identity/keypair", handle.handleGenerateHubKeyPair)
 		r.Post("/api/v1/hub/directory/refresh", handle.handleRefreshHubDirectory)
 		r.Get("/api/v1/hub/invites", handle.handleListHubInvites)
 		r.Post("/api/v1/hub/invites", handle.handleCreateHubInvite)

@@ -41,6 +41,22 @@ function PwaInstallControl({ isStandalone, onInstallApp, showInstallButton }: Re
   return null
 }
 
+function trustBadgeClass(trustLevel: string): string {
+  switch (trustLevel) {
+    case 'official':
+    case 'verified':
+      return 'console-label text-[9px] text-console-accent'
+    case 'trusted':
+      return 'console-label text-[9px] text-console-amber'
+    case 'listed':
+      return 'console-label text-[9px] text-console-muted'
+    case 'suspended':
+      return 'console-label text-[9px] text-console-error'
+    default:
+      return 'console-label text-[9px] text-console-muted'
+  }
+}
+
 export function AppHeader({
   authUser,
   headerVersionLabel,
@@ -58,6 +74,7 @@ export function AppHeader({
   const showUpdateBadge = hasUpdateAvailable || Boolean(updateError)
   const hubLabel = hubIdentity?.name?.trim() || 'SIGNALFORGE NODE CONSOLE'
   const trustLevel = hubIdentity?.trustLevel || 'community'
+  const showTrustBadge = trustLevel !== 'community'
   const hubTitle = hubIdentity
     ? [
         `Hub: ${hubIdentity.name || 'unnamed'}`,
@@ -78,12 +95,12 @@ export function AppHeader({
           <div className="text-lg font-bold tracking-widest truncate">SIGNALFORGE // HUB</div>
           <div className="flex items-center gap-2 min-w-0">
             <div className="console-label text-[9px] truncate" title={hubTitle}>{hubLabel}</div>
-            {(trustLevel === 'official' || trustLevel === 'verified') && (
+            {showTrustBadge && (
               <span
-                className={trustLevel === 'official' ? 'console-label text-[9px] text-console-accent' : 'console-label text-[9px] text-console-amber'}
+                className={trustBadgeClass(trustLevel)}
                 title={hubTitle}
               >
-                {trustLevel === 'official' ? 'OFFICIAL' : 'VERIFIED'}
+                {trustLevel.toUpperCase()}
               </span>
             )}
           </div>
