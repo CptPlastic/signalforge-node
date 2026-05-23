@@ -110,6 +110,11 @@ func (d *DB) UpsertIngestionSource(s IngestionSource) error {
 			enabled = excluded.enabled,
 			is_shared = excluded.is_shared,
 			deleted_at = 0,
+			system_id = excluded.system_id,
+			system_label = excluded.system_label,
+			last_seen_unix = excluded.last_seen_unix,
+			error_count = excluded.error_count,
+			calls_received = excluded.calls_received,
 			updated_at = excluded.updated_at
 	`, s.ID, nullableString(s.UserID), s.Label, s.Enabled, s.IsShared, s.SystemID, s.SystemLabel,
 		s.LastSeenUnix, s.ErrorCount, s.CallsReceived, time.Now().Unix())

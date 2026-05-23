@@ -399,12 +399,15 @@ func (h *handler) upsertFederatedSources(peer database.HubPeer, sources []databa
 		label := federatedSourceLabel(source)
 		sourceLabels[source.ID] = label
 		if err := h.db.UpsertIngestionSource(database.IngestionSource{
-			ID:          federatedSourceID(peer.HubID, source.ID),
-			Label:       fmt.Sprintf("%s / %s", peer.Name, label),
-			Enabled:     true,
-			IsShared:    true,
-			SystemID:    source.SystemID,
-			SystemLabel: source.SystemLabel,
+			ID:            federatedSourceID(peer.HubID, source.ID),
+			Label:         fmt.Sprintf("%s / %s", peer.Name, label),
+			Enabled:       true,
+			IsShared:      true,
+			SystemID:      source.SystemID,
+			SystemLabel:   source.SystemLabel,
+			LastSeenUnix:  source.LastSeenUnix,
+			ErrorCount:    source.ErrorCount,
+			CallsReceived: source.CallsReceived,
 		}); err != nil {
 			return nil, fmt.Errorf("upsert remote source %s: %w", source.ID, err)
 		}
@@ -443,6 +446,7 @@ func (h *handler) importFederatedCall(peer database.HubPeer, sourceLabels map[st
 		return fmt.Errorf("record remote call %d import: %w", remoteCallID, err)
 	}
 	if inserted {
+		_ = h.db.IncrementSourceMetrics(localSourceID, true)
 		h.broadcastCall(&call, localSourceID)
 		h.streamHub.push(&call, audio)
 	}
