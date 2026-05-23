@@ -58,7 +58,7 @@ def recorder_script_path() -> Path:
 
 def default_server_url() -> str:
     value = getattr(build_info, "DEFAULT_SERVER_URL", "").strip()
-    return value or "https://p7scan.projectseven.us/"
+    return value or "https://p7hub.projectseven.us/"
 
 
 def toml_string(value: str) -> str:

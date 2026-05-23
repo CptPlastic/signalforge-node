@@ -20,7 +20,7 @@ Hub trust is an application-level concept, not a deployment-source concept. A hu
 
 The root/super hub should issue signed hub certificates or invite credentials. Federation handshakes can exchange that certificate metadata, and the UI can show whether a peer is community, verified, or official. This keeps the community open while still making official hubs easy to recognize.
 
-`https://p7scan.projectseven.us/` is the first official hub. It bootstraps as `official` with issuer `signalforge-root`; later certificate signing can replace the bootstrap certificate string with a real signed certificate without changing the trust levels exposed to operators.
+`https://p7hub.projectseven.us/` is the first official hub. It bootstraps as `official` with issuer `signalforge-root`; later certificate signing can replace the bootstrap certificate string with a real signed certificate without changing the trust levels exposed to operators.
 
 ## MVP Goals
 
@@ -41,14 +41,14 @@ The first SignalHub implementation should be testable with normal Docker Compose
 Run one local hub with the existing compose file:
 
 ```bash
-docker-compose up --build -d
+docker compose up --build -d
 ```
 
 For hub-to-hub testing, run two local stacks with separate project names and ports:
 
 ```bash
-COMPOSE_PROJECT_NAME=p7hub_a CLIENT_PORT=3000 SERVER_PORT=8080 POSTGRES_PORT=5432 docker-compose up --build -d
-COMPOSE_PROJECT_NAME=p7hub_b CLIENT_PORT=3001 SERVER_PORT=8081 POSTGRES_PORT=5433 docker-compose up --build -d
+COMPOSE_PROJECT_NAME=p7hub_a CLIENT_PORT=3000 SERVER_PORT=8080 POSTGRES_PORT=5432 docker compose up --build -d
+COMPOSE_PROJECT_NAME=p7hub_b CLIENT_PORT=3001 SERVER_PORT=8081 POSTGRES_PORT=5433 docker compose up --build -d
 ```
 
 Each stack gets its own Docker project name and named volume, so identity, peers, sources, and calls stay separate.
@@ -70,7 +70,7 @@ Expected local MVP flow:
 The hosted/operator path should stay close to `docker-compose.prod.yml`:
 
 ```bash
-docker-compose --env-file .env.production -f docker-compose.prod.yml up -d
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 ```
 
 SignalHub-specific deployment variables should be minimal:

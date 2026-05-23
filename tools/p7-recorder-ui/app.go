@@ -349,7 +349,7 @@ func findDevRecorderRoot() (string, error) {
 
 func defaultRecorderConfig(path string) RecorderConfig {
 	return RecorderConfig{
-		BaseURL:                        "https://p7scan.projectseven.us/",
+		BaseURL:                        "https://p7hub.projectseven.us/",
 		SourceKey:                      "sk_live_REPLACE_WITH_GENERATED_SOURCE_KEY",
 		TimeoutSec:                     20,
 		Device:                         "",

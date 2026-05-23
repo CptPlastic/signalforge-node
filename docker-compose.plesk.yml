@@ -8,7 +8,7 @@
 #
 # Usage:
 #   cp .env.production.example .env   # fill in your values
-#   docker-compose --env-file .env -f docker-compose.plesk.yml up -d
+#   docker compose --env-file .env -f docker-compose.plesk.yml up -d
 #
 # Minimal vars for first deploy in Portainer/Plesk:
 #   - POSTGRES_PASSWORD
@@ -18,7 +18,7 @@
 # Official runtime images are published under ghcr.io/signalforge-org.
 #
 # With mock radio sidecar (test/staging only):
-#   docker-compose --env-file .env -f docker-compose.plesk.yml --profile mock up -d
+#   docker compose --env-file .env -f docker-compose.plesk.yml --profile mock up -d
 
 services:
   postgres:
@@ -37,8 +37,8 @@ services:
       timeout: 3s
       retries: 10
 
-  server:
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/p7-scanner-server:${IMAGE_TAG:-latest}
+  api:
+    image: ${API_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-hub-api:${IMAGE_TAG:-latest}}
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -77,22 +77,22 @@ services:
       timeout: 3s
       retries: 5
 
-  client:
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/p7-scanner-client:${IMAGE_TAG:-latest}
+  web:
+    image: ${WEB_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-hub-web:${IMAGE_TAG:-latest}}
     restart: unless-stopped
     # Point your Plesk reverse proxy rule at this port.
     ports:
       - "${CLIENT_PORT:-3000}:8080"
     depends_on:
-      server:
+      api:
         condition: service_healthy
 
   mock-call-sender:
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/p7-scanner-mock-call-sender:${IMAGE_TAG:-latest}
+    image: ${MOCK_CALL_SENDER_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-hub-mock-call-sender:${IMAGE_TAG:-latest}}
     restart: unless-stopped
     profiles: ["mock"]
     environment:
-      SCANNER_URL: http://server:8080
+      SCANNER_URL: http://api:8080
       MOCK_INTERVAL_SEC: ${MOCK_INTERVAL_SEC:-5}
       MOCK_DURATION_SEC: ${MOCK_DURATION_SEC:-3}
       MOCK_SYSTEM_ID: ${MOCK_SYSTEM_ID:-1}
@@ -100,7 +100,7 @@ services:
       MOCK_FREQUENCY: ${MOCK_FREQUENCY:-460000000}
       MOCK_SOURCE_API_KEY: ${MOCK_SOURCE_API_KEY:-}
     depends_on:
-      server:
+      api:
         condition: service_healthy
 
 volumes:

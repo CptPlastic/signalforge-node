@@ -76,7 +76,7 @@ You can edit the generated `config.toml` directly:
 
 ```toml
 [p7]
-base_url = "https://p7scan.projectseven.us/"
+base_url = "https://p7hub.projectseven.us/"
 source_key = "sk_live_your_generated_source_key"
 
 [metadata]
@@ -221,7 +221,7 @@ The desktop app provides:
 - start/stop buttons
 - live recorder log
 
-Release builds default the server URL to `https://p7scan.projectseven.us/`. Local development builds can still point at `http://localhost:8080/` by changing the Server URL field before saving.
+Release builds default the server URL to `https://p7hub.projectseven.us/`. Local development builds can still point at `http://localhost:8080/` by changing the Server URL field before saving.
 
 It stores its config under the current user's local app data folder, for example:
 

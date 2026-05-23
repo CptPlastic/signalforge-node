@@ -5,7 +5,7 @@
 # POST /api/call-upload exactly as SDRTrunk (Rdio Scanner output plugin) would.
 #
 # Environment variables:
-#   SCANNER_URL        Base URL of the scanner server  (default: http://server:8080)
+#   SCANNER_URL        Base URL of the hub API  (default: http://api:8080)
 #   MOCK_INTERVAL_SEC  Seconds between calls           (default: 5)
 #   MOCK_DURATION_SEC  Duration of each fake call      (default: 3)
 #   MOCK_SYSTEM_ID     System ID                       (default: 1)
@@ -15,7 +15,7 @@
 
 set -e
 
-SCANNER_URL="${SCANNER_URL:-http://server:8080}"
+SCANNER_URL="${SCANNER_URL:-http://api:8080}"
 INTERVAL="${MOCK_INTERVAL_SEC:-5}"
 DURATION="${MOCK_DURATION_SEC:-3}"
 SYSTEM_ID="${MOCK_SYSTEM_ID:-1}"

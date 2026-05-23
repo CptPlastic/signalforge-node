@@ -162,7 +162,7 @@ func run() int {
 
 func loadConfig(path string) (RuntimeConfig, error) {
 	cfg := Config{
-		P7:       P7Config{BaseURL: "https://p7scan.projectseven.us/", TimeoutSec: 20},
+		P7:       P7Config{BaseURL: "https://p7hub.projectseven.us/", TimeoutSec: 20},
 		Audio:    AudioConfig{SampleRate: 16000, Channels: 1, BlockMS: 100, Threshold: 500, SilenceMS: 1200, MinDurationMS: 400, MaxDurationSec: 120, PreRollMS: 300},
 		Metadata: MetadataConfig{System: 1, SystemLabel: "GMRS", Talkgroup: 18, TalkgroupLabel: "GMRS Channel 18", TalkgroupGroup: "GMRS", TalkgroupTag: "voice", Frequency: 462625000},
 		Queue:    QueueConfig{Directory: "queue"},
@@ -262,7 +262,7 @@ func writeInitialConfig(path string, force bool, audio *AudioContext, in io.Read
 	}
 	fmt.Fprintln(out, "")
 
-	baseURL := promptString(reader, out, "SignalForge Hub URL", "https://p7scan.projectseven.us/")
+	baseURL := promptString(reader, out, "SignalForge Hub URL", "https://p7hub.projectseven.us/")
 	sourceKey := promptString(reader, out, "Source API key", "sk_live_REPLACE_WITH_GENERATED_SOURCE_KEY")
 	device := promptString(reader, out, "Audio device index or name", "")
 	threshold := promptInt(reader, out, "VOX threshold", 500)
