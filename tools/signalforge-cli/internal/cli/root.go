@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -24,6 +25,15 @@ type options struct {
 	timeout   time.Duration
 	recorder  recorder.Settings
 }
+
+const (
+	ansiReset  = "\x1b[0m"
+	ansiCyan   = "\x1b[36;1m"
+	ansiGreen  = "\x1b[32;1m"
+	ansiYellow = "\x1b[33;1m"
+	ansiRed    = "\x1b[31;1m"
+	ansiDim    = "\x1b[90m"
+)
 
 func NewRootCommand() *cobra.Command {
 	cfg := config.FromEnv()
@@ -49,9 +59,11 @@ func newVersionCommand() *cobra.Command {
 		Use:   "version",
 		Short: "Print SignalForge CLI version metadata",
 		Run: func(cmd *cobra.Command, _ []string) {
-			fmt.Fprintf(cmd.OutOrStdout(), "signalforge %s\n", buildinfo.DisplayVersion())
-			fmt.Fprintf(cmd.OutOrStdout(), "commit: %s\n", buildinfo.Commit)
-			fmt.Fprintf(cmd.OutOrStdout(), "date: %s\n", buildinfo.Date)
+			out := cmd.OutOrStdout()
+			printBanner(out, "SignalForge CLI")
+			printLine(out, "ok", "signalforge", buildinfo.DisplayVersion())
+			printLine(out, "info", "commit", buildinfo.Commit)
+			printLine(out, "info", "date", buildinfo.Date)
 		},
 	}
 }
@@ -94,10 +106,12 @@ func newHubCommand(opts *options) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "hub: %s\n", client.BaseURL())
-			fmt.Fprintf(cmd.OutOrStdout(), "health: %s\n", fallback(health.Status, "ok"))
-			fmt.Fprintf(cmd.OutOrStdout(), "version: %s\n", fallback(version.Version, "unknown"))
-			fmt.Fprintf(cmd.OutOrStdout(), "commit: %s\n", fallback(version.Commit, "unknown"))
+			out := cmd.OutOrStdout()
+			printBanner(out, "Hub Check")
+			printLine(out, "info", "hub", client.BaseURL())
+			printLine(out, "ok", "health", fallback(health.Status, "ok"))
+			printLine(out, "info", "version", fallback(version.Version, "unknown"))
+			printLine(out, "info", "commit", fallback(version.Commit, "unknown"))
 			return nil
 		},
 	})
@@ -120,8 +134,10 @@ func newRecorderCommand(opts *options) *cobra.Command {
 			if err := client.ProbeSourceKey(); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "hub health ok: %s\n", client.BaseURL())
-			fmt.Fprintln(cmd.OutOrStdout(), "source key ok")
+			out := cmd.OutOrStdout()
+			printBanner(out, "Recorder Check")
+			printLine(out, "ok", "hub health ok", client.BaseURL())
+			printLine(out, "ok", "source key ok", "ready")
 			return nil
 		},
 	})
@@ -164,7 +180,7 @@ func newRecorderCommand(opts *options) *cobra.Command {
 			if err := client.UploadFile(status.Path, fields); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "uploaded: %s\n", status.Path)
+			printLine(cmd.OutOrStdout(), "ok", "uploaded", status.Path)
 			return nil
 		},
 	}
@@ -191,15 +207,17 @@ func newRecorderCommand(opts *options) *cobra.Command {
 			if poll <= 0 {
 				poll = time.Second
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "watching: %s\n", watchSettings.Input)
-			fmt.Fprintf(cmd.OutOrStdout(), "processed: %s\n", recorder.ProcessedPath(watchSettings, ".keep"))
+			out := cmd.OutOrStdout()
+			printBanner(out, "Recorder Watch")
+			printLine(out, "info", "watching", watchSettings.Input)
+			printLine(out, "info", "processed", recorder.ProcessedPath(watchSettings, ".keep"))
 			for {
 				if _, err := uploadFolderBatch(cmd, client, watchSettings); err != nil {
 					return err
 				}
 				select {
 				case <-ctx.Done():
-					fmt.Fprintln(cmd.OutOrStdout(), "watch stopped")
+					printLine(out, "warn", "watch", "stopped")
 					return nil
 				case <-time.After(poll):
 				}
@@ -257,18 +275,19 @@ func fallback(value, fallbackValue string) string {
 
 func printUpdateResult(cmd *cobra.Command, result updater.Result) {
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "current: %s\n", fallback(result.CurrentVersion, "unknown"))
-	fmt.Fprintf(out, "latest: %s\n", fallback(result.LatestVersion, "unknown"))
+	printBanner(out, "Update Check")
+	printLine(out, "info", "current", fallback(result.CurrentVersion, "unknown"))
+	printLine(out, "info", "latest", fallback(result.LatestVersion, "unknown"))
 	if result.UpdateAvailable {
-		fmt.Fprintln(out, "status: update available")
+		printLine(out, "warn", "status", "update available")
 	} else {
-		fmt.Fprintln(out, "status: up to date")
+		printLine(out, "ok", "status", "up to date")
 	}
 	if result.AssetURL != "" {
-		fmt.Fprintf(out, "asset: %s\n", result.AssetName)
-		fmt.Fprintf(out, "download: %s\n", result.AssetURL)
+		printLine(out, "info", "asset", result.AssetName)
+		printLine(out, "info", "download", result.AssetURL)
 	} else if result.ReleaseURL != "" {
-		fmt.Fprintf(out, "release: %s\n", result.ReleaseURL)
+		printLine(out, "info", "release", result.ReleaseURL)
 	}
 }
 
@@ -313,16 +332,18 @@ func bindRecorderFlags(cmd *cobra.Command, settings *recorder.Settings) {
 
 func printInputStatus(cmd *cobra.Command, status recorder.InputStatus) {
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "input: %s\n", fallback(status.Path, "not configured"))
-	fmt.Fprintf(out, "mode: %s\n", status.Mode)
-	fmt.Fprintf(out, "status: %s\n", status.Message)
+	tone := inputTone(status)
+	printBanner(out, "Recorder Inspect")
+	printLine(out, "info", "input", fallback(status.Path, "not configured"))
+	printLine(out, tone, "mode", status.Mode)
+	printLine(out, tone, "status", status.Message)
 	if status.Mode == "file" {
-		fmt.Fprintf(out, "audio type: %s\n", fallback(status.AudioType, "unsupported"))
-		fmt.Fprintf(out, "size: %d bytes\n", status.SizeBytes)
+		printLine(out, tone, "audio type", fallback(status.AudioType, "unsupported"))
+		printLine(out, "info", "size", fmt.Sprintf("%d bytes", status.SizeBytes))
 	}
 	if status.Mode == "folder" {
-		fmt.Fprintf(out, "audio files: %d\n", status.SupportedCount)
-		fmt.Fprintf(out, "skipped files: %d\n", status.SkippedCount)
+		printLine(out, tone, "audio files", fmt.Sprintf("%d", status.SupportedCount))
+		printLine(out, "info", "skipped files", fmt.Sprintf("%d", status.SkippedCount))
 	}
 }
 
@@ -345,16 +366,55 @@ func uploadFolderBatch(cmd *cobra.Command, client *api.Client, settings recorder
 			return 0, err
 		}
 		if settings.Reprocess {
-			fmt.Fprintf(cmd.OutOrStdout(), "uploaded: %s\n", file.Path)
+			printLine(cmd.OutOrStdout(), "ok", "uploaded", file.Path)
 			continue
 		}
 		destination, err := recorder.MoveToProcessed(settings, file.Path)
 		if err != nil {
 			return 0, err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "uploaded: %s -> %s\n", file.Path, destination)
+		printLine(cmd.OutOrStdout(), "ok", "uploaded", fmt.Sprintf("%s -> %s", file.Path, destination))
 	}
 	return len(files), nil
+}
+
+func printBanner(out io.Writer, title string) {
+	fmt.Fprintf(out, "\n%s\n", color(ansiCyan, "SignalForge Console"))
+	fmt.Fprintf(out, "%s\n", color(ansiDim, "// "+title))
+}
+
+func printLine(out io.Writer, tone, label, value string) {
+	fmt.Fprintf(out, "%s %s: %s\n", statusTag(tone), label, value)
+}
+
+func statusTag(tone string) string {
+	switch tone {
+	case "ok":
+		return color(ansiGreen, "[OK]")
+	case "warn":
+		return color(ansiYellow, "[!!]")
+	case "error":
+		return color(ansiRed, "[XX]")
+	default:
+		return color(ansiCyan, "[..]")
+	}
+}
+
+func color(code, value string) string {
+	if os.Getenv("NO_COLOR") != "" {
+		return value
+	}
+	return code + value + ansiReset
+}
+
+func inputTone(status recorder.InputStatus) string {
+	if status.Mode == "missing" || (status.Mode == "file" && !status.Supported) {
+		return "error"
+	}
+	if status.Mode == "none" || status.Mode == "" {
+		return "warn"
+	}
+	return "ok"
 }
 
 func signals() []os.Signal {

@@ -15,17 +15,19 @@ import (
 var (
 	frameStyle = lipgloss.NewStyle().Padding(1, 2)
 	panelStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("41")).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("43")).
 			Padding(1, 2).
 			Width(78)
-	sectionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true)
-	titleStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("46")).Bold(true)
+	sectionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true).MarginTop(1)
+	titleStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true)
+	brandStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("46")).Bold(true)
 	mutedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
 	okStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
 	warnStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 	keyStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	valueStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("230"))
 )
 
 type checkResult struct {
@@ -87,8 +89,9 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	var body strings.Builder
-	body.WriteString(titleStyle.Render("SIGNALFORGE // RECORDER CONSOLE") + "\n")
-	body.WriteString(mutedStyle.Render("one binary // hub check // source key // audio ingest") + "\n\n")
+	body.WriteString(brandStyle.Render("SignalForge Console") + "\n")
+	body.WriteString(titleStyle.Render("// RECORDER LINK") + "\n")
+	body.WriteString(mutedStyle.Render("one binary // hub check // source key // audio ingest") + "\n")
 	body.WriteString(sectionStyle.Render("HUB") + "\n")
 	body.WriteString(row("url", m.client.BaseURL(), "") + "\n")
 	if m.busy {
@@ -100,7 +103,7 @@ func (m model) View() string {
 			body.WriteString(line + "\n")
 		}
 	}
-	body.WriteString("\n" + sectionStyle.Render("RECORDER INPUT") + "\n")
+	body.WriteString(sectionStyle.Render("RECORDER INPUT") + "\n")
 	body.WriteString(row("path", fallback(m.input.Path, "set --input"), "") + "\n")
 	body.WriteString(row("mode", fallback(m.input.Mode, "none"), statusTone(m.input)) + "\n")
 	body.WriteString(row("state", fallback(m.input.Message, "waiting for input"), statusTone(m.input)) + "\n")
@@ -112,15 +115,15 @@ func (m model) View() string {
 		body.WriteString(row("audio", fmt.Sprintf("%d ready", m.input.SupportedCount), statusTone(m.input)) + "\n")
 		body.WriteString(row("skipped", fmt.Sprintf("%d ignored", m.input.SkippedCount), "") + "\n")
 	}
-	body.WriteString("\n" + sectionStyle.Render("METADATA") + "\n")
+	body.WriteString(sectionStyle.Render("METADATA") + "\n")
 	body.WriteString(row("system", fmt.Sprintf("%d %s", m.recorder.Metadata.System, m.recorder.Metadata.SystemLabel), "") + "\n")
 	body.WriteString(row("talkgroup", fmt.Sprintf("%d %s", m.recorder.Metadata.Talkgroup, m.recorder.Metadata.TalkgroupLabel), "") + "\n")
 	body.WriteString(row("group", m.recorder.Metadata.TalkgroupGroup, "") + "\n")
 	if m.upload != "" {
-		body.WriteString("\n" + okStyle.Render(m.upload) + "\n")
+		body.WriteString("\n" + okStyle.Render("[OK] "+m.upload) + "\n")
 	}
 	body.WriteString("\n")
-	body.WriteString(mutedStyle.Render("r refresh   u upload file   q quit"))
+	body.WriteString(mutedStyle.Render("r refresh   u upload   q quit"))
 	return frameStyle.Render(panelStyle.Render(body.String()))
 }
 
@@ -211,7 +214,7 @@ func fallback(value, fallbackValue string) string {
 }
 
 func row(label, value, tone string) string {
-	style := mutedStyle
+	style := valueStyle
 	switch tone {
 	case "ok":
 		style = okStyle
@@ -220,7 +223,20 @@ func row(label, value, tone string) string {
 	case "error":
 		style = errorStyle
 	}
-	return keyStyle.Render(fmt.Sprintf("%-10s", label)) + style.Render(value)
+	return tag(tone) + " " + keyStyle.Render(fmt.Sprintf("%-10s", label+":")) + style.Render(value)
+}
+
+func tag(tone string) string {
+	switch tone {
+	case "ok":
+		return okStyle.Render("[OK]")
+	case "warn":
+		return warnStyle.Render("[!!]")
+	case "error":
+		return errorStyle.Render("[XX]")
+	default:
+		return sectionStyle.Render("[..]")
+	}
 }
 
 func statusTone(status recorder.InputStatus) string {
