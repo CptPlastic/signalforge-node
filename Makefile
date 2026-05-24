@@ -41,7 +41,7 @@ test-cli:
 test: test-server test-cli
 
 clean:
-	rm -rf client/node_modules client/dist tools/signalforge-cli/dist tools/signalforge-cli/signalforge tools/signalforge-cli/signalforge.exe
+	rm -rf client/node_modules client/dist tools/signalforge-cli/dist tools/signalforge-cli/signalforge tools/signalforge-cli/signalforge.exe tools/signalforge-cli/sf tools/signalforge-cli/sf.exe
 
 init-env:
 	./tools/init-env.sh

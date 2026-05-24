@@ -43,7 +43,7 @@ scoop install signalforge
 
 Release archives are also attached to the public `signalforge-cli-v*` releases at <https://github.com/CptPlastic/signalforge.org/releases>.
 
-Installed releases provide both `signalforge` and the short `sf` alias.
+Homebrew, Scoop, and release archives provide both `signalforge` and the short `sf` alias.
 
 ## Configure
 
