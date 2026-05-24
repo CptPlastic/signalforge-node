@@ -166,6 +166,13 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sourceIDs, err := h.db.ListReadableSourceIDsForUser(rs.UserID)
+	if err != nil {
+		h.logger.Error("list public stream readable sources failed", "error", err)
+		http.Error(w, "query sources", http.StatusInternalServerError)
+		return
+	}
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
 	})
@@ -176,12 +183,6 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 	defer conn.CloseNow()
 
 	ctx := r.Context()
-	sourceIDs, err := h.db.ListReadableSourceIDsForUser(rs.UserID)
-	if err != nil {
-		h.logger.Error("list public stream readable sources failed", "error", err)
-		http.Error(w, "query sources", http.StatusInternalServerError)
-		return
-	}
 	h.logger.Info("public stream connected",
 		"radio_set_id", rs.ID,
 		"radio_set_name", rs.Name,
@@ -402,6 +403,9 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
   var idleDotN = 0;
   var callLog = [];
   var reconnectDelay = 1000;
+	var reconnectAttempts = 0;
+	var reconnectTimer = null;
+	var MAX_RECONNECT_ATTEMPTS = 5;
   var MAX_QUEUE = 20;
 
   function esc(s) {
@@ -531,12 +535,14 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
   }
 
   function connect() {
+		if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     if (ws) { try { ws.close(); } catch(_){} ws = null; }
     setStatus('connecting', 'CONNECTING');
     ws = new WebSocket(wsURL);
 
     ws.onopen = function() {
       reconnectDelay = 1000;
+			reconnectAttempts = 0;
       setStatus('live', 'SCANNING');
     };
 
@@ -547,11 +553,22 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
       } catch(_) {}
     };
 
+		ws.onerror = function() {
+			setStatus('err', 'NO SIGNAL');
+		};
+
     ws.onclose = function() {
       ws = null;
       if (!liveActive) return;
       setStatus('err', 'NO SIGNAL');
-      setTimeout(connect, reconnectDelay);
+			reconnectAttempts += 1;
+			if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+				liveActive = false;
+				document.getElementById('live-btn').textContent = 'RETRY';
+				document.getElementById('live-btn').className = 'btn';
+				return;
+			}
+			reconnectTimer = setTimeout(connect, reconnectDelay);
       reconnectDelay = Math.min(reconnectDelay * 2, 30000);
     };
   }
@@ -576,11 +593,12 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
 		}
     if (liveActive) {
       liveActive = false;
+		if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       if (ws) { try { ws.close(); } catch(_){} ws = null; }
       audio.pause();
       audio.src = '';
       playing = false;
-	playbackBlocked = false;
+		playbackBlocked = false;
       queue.forEach(function(item) { URL.revokeObjectURL(item.blobURL); });
       queue = [];
       btn.textContent = 'LIVE OFF';
@@ -591,6 +609,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
       btn.textContent = 'LIVE ON';
       btn.className = 'btn on';
       reconnectDelay = 1000;
+			reconnectAttempts = 0;
       connect();
     }
   };

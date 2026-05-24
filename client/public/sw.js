@@ -1,11 +1,19 @@
-const CACHE_NAME = 'p7-scanner-shell-v2'
+const CACHE_NAME = 'p7-scanner-shell-v3'
 const APP_SHELL = ['/', '/index.html', '/offline.html', '/manifest.webmanifest', '/pwa/icon.svg']
+
+function cacheShellResponse(cacheKey, response) {
+  if (response?.status === 200) {
+    const copy = response.clone()
+    caches.open(CACHE_NAME).then((cache) => cache.put(cacheKey, copy))
+  }
+  return response
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting()),
+      .then(() => globalThis.skipWaiting()),
   )
 })
 
@@ -13,7 +21,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(keys.map((key) => (key === CACHE_NAME ? undefined : caches.delete(key)))))
-      .then(() => self.clients.claim()),
+      .then(() => globalThis.clients.claim()),
   )
 })
 
@@ -25,22 +33,18 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  if (url.origin !== self.location.origin) {
+  if (url.origin !== globalThis.location.origin) {
     return
   }
 
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws')) {
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws') || url.pathname.startsWith('/public/')) {
     return
   }
 
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          const copy = response.clone()
-          caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', copy))
-          return response
-        })
+        .then((response) => cacheShellResponse('/index.html', response))
         .catch(() => caches.match('/index.html').then((response) => response || caches.match('/offline.html'))),
     )
     return
@@ -51,14 +55,7 @@ self.addEventListener('fetch', (event) => {
       if (cached) {
         return cached
       }
-      return fetch(request).then((response) => {
-        if (!response || response.status !== 200) {
-          return response
-        }
-        const copy = response.clone()
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy))
-        return response
-      })
+      return fetch(request).then((response) => cacheShellResponse(request, response))
     }),
   )
 })
