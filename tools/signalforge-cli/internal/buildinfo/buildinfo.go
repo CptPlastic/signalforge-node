@@ -6,7 +6,7 @@ var (
 	Date    = "unknown"
 )
 
-const ReleaseRepo = "CptPlastic/p7-scanner"
+const ReleaseRepo = "CptPlastic/signalforge.org"
 
 func DisplayVersion() string {
 	if Version == "" {

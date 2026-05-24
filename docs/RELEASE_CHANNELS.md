@@ -18,7 +18,7 @@ SignalForge has three repositories in the working set. They do not all publish t
 
 | Channel | Repository | Trigger | Output | Public Consumer |
 | --- | --- | --- | --- | --- |
-| SignalForge CLI recorder | `p7-scanner` | tag `signalforge-cli-v*` | Windows/macOS/Linux `signalforge` binaries attached to the `p7-scanner` GitHub Release | `signalforge.org/#recorder`, CLI updater |
+| SignalForge CLI recorder | `p7-scanner` | tag `signalforge-cli-v*` | Windows/macOS/Linux `signalforge` binaries built in `p7-scanner` and mirrored to a public `signalforge.org` GitHub Release | `signalforge.org/#recorder`, CLI updater |
 | Hub container images | `p7-scanner` | push to `main` / workflow dispatch | GHCR images and `signalforge.org/p7-scanner-update.json` | deployed hubs, admin update checks |
 | Legacy recorder UI | `p7-scanner` | manual workflow dispatch only | build artifacts for internal/manual testing | none by default |
 
@@ -34,4 +34,4 @@ SignalForge has three repositories in the working set. They do not all publish t
 - Hub image updates: commit-derived image tags in `p7-scanner-update.json`
 - Legacy recorder UI builds: manual only, not a public release channel
 
-The public site and CLI updater must filter `p7-scanner` releases by the `signalforge-cli-v*` tag prefix. Do not use the repository-wide `latest` release, because older hub/recorder tags such as `v1.2.x` may also exist in `p7-scanner`.
+The public site and CLI updater read the public `signalforge.org` release mirror and filter releases by the `signalforge-cli-v*` tag prefix. Do not use the repository-wide `latest` release, because unrelated historical tags can exist during migrations.
