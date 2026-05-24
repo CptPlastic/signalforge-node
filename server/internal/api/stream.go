@@ -341,6 +341,10 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
 .btn.on{border-color:#7df7ae;color:#7df7ae}
 .btn:disabled{opacity:.3;cursor:default}
 .btn:disabled:hover{border-color:#252525;color:#484848}
+.vol{display:flex;align-items:center;gap:.4rem;min-width:142px;flex:1;border:1px solid #1a1a1a;padding:.28rem .45rem;border-radius:2px;color:#484848}
+.vol-lbl,.vol-val{font-size:9px;text-transform:uppercase;letter-spacing:.12em;line-height:1;white-space:nowrap}
+.vol-val{width:34px;text-align:right;color:#7df7ae;font-variant-numeric:tabular-nums}
+.vol input{min-width:0;flex:1;accent-color:#7df7ae;background:transparent}
 .stream-bar{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;background:#080808}
 .stream-url{font-size:9px;color:#1e1e1e;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.04em}
 .copy-btn{background:none;border:1px solid #1a1a1a;color:#2a2a2a;font-family:inherit;font-size:9px;text-transform:uppercase;letter-spacing:.1em;cursor:pointer;padding:.2rem .5rem;border-radius:2px;flex-shrink:0;transition:border-color .1s,color .1s}
@@ -375,6 +379,11 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
   <div class="controls">
     <button class="btn on" id="live-btn" onclick="toggleLive()">LIVE ON</button>
     <button class="btn" id="replay-btn" onclick="replayLast()">REPLAY LAST</button>
+		<label class="vol" title="Player volume">
+			<span class="vol-lbl">VOL</span>
+			<input id="volume-range" type="range" min="0" max="100" step="1" value="100" oninput="setPlayerVolume(this.value)">
+			<span class="vol-val" id="volume-val">100%</span>
+		</label>
   </div>
   <div class="stream-bar">
     <span class="stream-url" id="stream-url-txt"></span>
@@ -407,6 +416,28 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
 	var reconnectTimer = null;
 	var MAX_RECONNECT_ATTEMPTS = 5;
   var MAX_QUEUE = 20;
+  var volumeStorageKey = 'signalforge_public_player_volume';
+  var playerVolume = getStoredVolume();
+
+  function getStoredVolume() {
+    var saved = Number(localStorage.getItem(volumeStorageKey));
+    if (!Number.isFinite(saved)) return 100;
+    return Math.min(100, Math.max(0, Math.round(saved)));
+  }
+
+  function applyVolume(target) {
+    target.volume = playerVolume / 100;
+  }
+
+  window.setPlayerVolume = function(value) {
+    playerVolume = Math.min(100, Math.max(0, Math.round(Number(value))));
+    localStorage.setItem(volumeStorageKey, String(playerVolume));
+    document.getElementById('volume-range').value = String(playerVolume);
+    document.getElementById('volume-val').textContent = playerVolume + '%';
+    applyVolume(audio);
+  };
+
+  window.setPlayerVolume(playerVolume);
 
   function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -503,6 +534,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     setStatus('live', 'LIVE');
     showCall(item.meta);
     audio.src = curBlobURL;
+		applyVolume(audio);
 		audio.play().catch(function() {
 			playbackBlocked = true;
 			document.getElementById('live-btn').textContent = 'PLAY';
@@ -618,6 +650,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     var url = curBlobURL || prevBlobURL;
     if (!url) return;
     var a = new Audio(url);
+		applyVolume(a);
     a.play().catch(function(){});
   };
 
