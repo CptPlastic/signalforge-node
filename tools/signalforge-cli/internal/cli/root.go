@@ -40,12 +40,17 @@ const (
 func NewRootCommand() *cobra.Command {
 	cfg := config.FromEnv()
 	opts := &options{hubURL: cfg.HubURL, sourceKey: cfg.SourceKey, timeout: cfg.Timeout, recorder: recorder.DefaultSettings()}
+	showVersion := false
 
 	cmd := &cobra.Command{
 		Use:   "signalforge",
 		Short: "SignalForge operator CLI",
 		Long:  "SignalForge is a cross-platform operator CLI for checking hubs, recorder keys, and federation-ready nodes.",
 		Run: func(cmd *cobra.Command, _ []string) {
+			if showVersion {
+				printVersion(cmd)
+				return
+			}
 			_ = cmd.Help()
 		},
 		PersistentPostRun: func(cmd *cobra.Command, _ []string) {
@@ -53,9 +58,13 @@ func NewRootCommand() *cobra.Command {
 		},
 	}
 	cmd.PersistentFlags().StringVar(&opts.hubURL, "hub-url", opts.hubURL, "SignalForge Hub base URL")
-	cmd.PersistentFlags().StringVar(&opts.sourceKey, "source-key", opts.sourceKey, "source upload API key")
+	cmd.PersistentFlags().StringVarP(&opts.sourceKey, "source-key", "k", opts.sourceKey, "source upload API key")
 	cmd.PersistentFlags().DurationVar(&opts.timeout, "timeout", opts.timeout, "HTTP timeout")
+	cmd.PersistentFlags().BoolVarP(&showVersion, "version", "v", false, "show build metadata and exit; --v also works")
+	cmd.PersistentFlags().BoolVar(&showVersion, "v", false, "show build metadata and exit")
+	_ = cmd.PersistentFlags().MarkHidden("v")
 	cmd.AddCommand(newHubCommand(opts), newRecorderCommand(opts), newTUICommand(opts), newUpdateCommand(), newVersionCommand())
+	configureCompletionAliases(cmd)
 	configureHelp(cmd)
 	return cmd
 }
@@ -70,25 +79,33 @@ func configureHelp(root *cobra.Command) {
 	})
 }
 
+func configureCompletionAliases(root *cobra.Command) {
+	root.InitDefaultCompletionCmd()
+	for _, child := range root.Commands() {
+		if child.Name() == "completion" {
+			child.Aliases = []string{"tab", "comp"}
+			return
+		}
+	}
+}
+
 func newVersionCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "version",
-		Short: "Print SignalForge CLI version metadata",
+		Use:     "version",
+		Aliases: []string{"ver", "v"},
+		Short:   "Print SignalForge CLI version metadata",
 		Run: func(cmd *cobra.Command, _ []string) {
-			out := cmd.OutOrStdout()
-			printBanner(out, "SignalForge CLI")
-			printLine(out, "ok", "signalforge", buildinfo.DisplayVersion())
-			printLine(out, "info", "commit", buildinfo.Commit)
-			printLine(out, "info", "date", buildinfo.Date)
+			printVersion(cmd)
 		},
 	}
 }
 
 func newUpdateCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "update", Short: "Check for SignalForge CLI updates"}
+	cmd := &cobra.Command{Use: "update", Aliases: []string{"upd", "up"}, Short: "Check for SignalForge CLI updates"}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "check",
-		Short: "Check GitHub releases for a newer SignalForge CLI",
+		Use:     "check",
+		Aliases: []string{"chk"},
+		Short:   "Check GitHub releases for a newer SignalForge CLI",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
 			defer cancel()
@@ -105,10 +122,11 @@ func newUpdateCommand() *cobra.Command {
 }
 
 func newHubCommand(opts *options) *cobra.Command {
-	cmd := &cobra.Command{Use: "hub", Short: "Hub checks and operations"}
+	cmd := &cobra.Command{Use: "hub", Aliases: []string{"h"}, Short: "Hub checks and operations"}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "check",
-		Short: "Check hub health and version",
+		Use:     "check",
+		Aliases: []string{"chk"},
+		Short:   "Check hub health and version",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			client, err := newClient(opts)
 			if err != nil {
@@ -135,10 +153,11 @@ func newHubCommand(opts *options) *cobra.Command {
 }
 
 func newRecorderCommand(opts *options) *cobra.Command {
-	cmd := &cobra.Command{Use: "recorder", Short: "Recorder setup, source-key, and audio input checks"}
+	cmd := &cobra.Command{Use: "recorder", Aliases: []string{"rec", "r"}, Short: "Recorder setup, source-key, and audio input checks"}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "check",
-		Short: "Check hub health and source upload key",
+		Use:     "check",
+		Aliases: []string{"chk"},
+		Short:   "Check hub health and source upload key",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			client, err := newClient(opts)
 			if err != nil {
@@ -160,8 +179,9 @@ func newRecorderCommand(opts *options) *cobra.Command {
 
 	inspectSettings := opts.recorder
 	inspectCmd := &cobra.Command{
-		Use:   "inspect",
-		Short: "Inspect a recorder input file or folder",
+		Use:     "inspect",
+		Aliases: []string{"insp", "i"},
+		Short:   "Inspect a recorder input file or folder",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			status, err := recorder.InspectInput(inspectSettings.Input)
 			if err != nil {
@@ -176,8 +196,9 @@ func newRecorderCommand(opts *options) *cobra.Command {
 
 	uploadSettings := opts.recorder
 	uploadCmd := &cobra.Command{
-		Use:   "upload",
-		Short: "Upload one audio file through the recorder ingest path",
+		Use:     "upload",
+		Aliases: []string{"up", "u"},
+		Short:   "Upload one audio file through the recorder ingest path",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			client, err := newClient(opts)
 			if err != nil {
@@ -206,8 +227,9 @@ func newRecorderCommand(opts *options) *cobra.Command {
 	watchSettings := opts.recorder
 	watchOnce := false
 	watchCmd := &cobra.Command{
-		Use:   "watch",
-		Short: "Watch a folder and upload stable audio files",
+		Use:     "watch",
+		Aliases: []string{"w"},
+		Short:   "Watch a folder and upload stable audio files",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			client, err := newClient(opts)
 			if err != nil {
@@ -241,13 +263,14 @@ func newRecorderCommand(opts *options) *cobra.Command {
 		},
 	}
 	bindRecorderFlags(watchCmd, &watchSettings)
-	watchCmd.Flags().BoolVar(&watchOnce, "once", false, "process the current ready batch and exit")
+	watchCmd.Flags().BoolVarP(&watchOnce, "once", "o", false, "process the current ready batch and exit")
 	cmd.AddCommand(watchCmd)
 
 	tuiSettings := opts.recorder
 	tuiCmd := &cobra.Command{
-		Use:   "tui",
-		Short: "Open the recorder setup and ingest console",
+		Use:     "tui",
+		Aliases: []string{"console", "dash"},
+		Short:   "Open the recorder setup and ingest console",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			client, err := newClient(opts)
 			if err != nil {
@@ -264,8 +287,9 @@ func newRecorderCommand(opts *options) *cobra.Command {
 func newTUICommand(opts *options) *cobra.Command {
 	settings := opts.recorder
 	cmd := &cobra.Command{
-		Use:   "tui",
-		Short: "Open the SignalForge terminal dashboard",
+		Use:     "tui",
+		Aliases: []string{"console", "dash"},
+		Short:   "Open the SignalForge terminal dashboard",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			client, err := newClient(opts)
 			if err != nil {
@@ -307,6 +331,14 @@ func printUpdateResult(cmd *cobra.Command, result updater.Result) {
 	}
 }
 
+func printVersion(cmd *cobra.Command) {
+	out := cmd.OutOrStdout()
+	printBanner(out, "SignalForge CLI")
+	printLine(out, "ok", "signalforge", buildinfo.DisplayVersion())
+	printLine(out, "info", "commit", buildinfo.Commit)
+	printLine(out, "info", "date", buildinfo.Date)
+}
+
 func runAutoUpdateCheck(cmd *cobra.Command) {
 	path := cmd.CommandPath()
 	if path == "signalforge" {
@@ -335,10 +367,10 @@ func runAutoUpdateCheck(cmd *cobra.Command) {
 }
 
 func bindRecorderFlags(cmd *cobra.Command, settings *recorder.Settings) {
-	cmd.Flags().StringVar(&settings.Input, "input", settings.Input, "audio file or folder to inspect/upload")
-	cmd.Flags().StringVar(&settings.Processed, "processed", settings.Processed, "processed folder for watched audio")
+	cmd.Flags().StringVarP(&settings.Input, "input", "i", settings.Input, "audio file or folder to inspect/upload")
+	cmd.Flags().StringVarP(&settings.Processed, "processed", "p", settings.Processed, "processed folder for watched audio")
 	cmd.Flags().DurationVar(&settings.Poll, "poll", settings.Poll, "folder watch poll interval")
-	cmd.Flags().DurationVar(&settings.Stable, "stable", settings.Stable, "file age required before upload")
+	cmd.Flags().DurationVarP(&settings.Stable, "stable", "s", settings.Stable, "file age required before upload")
 	cmd.Flags().BoolVar(&settings.Reprocess, "reprocess", settings.Reprocess, "upload ready files without moving them to processed")
 	cmd.Flags().IntVar(&settings.Metadata.System, "system", settings.Metadata.System, "system ID")
 	cmd.Flags().StringVar(&settings.Metadata.SystemLabel, "system-label", settings.Metadata.SystemLabel, "system label")
@@ -433,16 +465,16 @@ func printRootHelp(out io.Writer) {
 	printLine(out, "info", "hub", "https://p7hub.projectseven.us")
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s\n", color(ansiCyan, "Quick Start"))
-	fmt.Fprintf(out, "  %s\n", color(ansiDim, "signalforge recorder check --source-key sk_live_REPLACE_WITH_SOURCE_KEY"))
-	fmt.Fprintf(out, "  %s\n", color(ansiDim, "signalforge recorder inspect --input ./calls"))
-	fmt.Fprintf(out, "  %s\n", color(ansiDim, "signalforge recorder watch --input ./calls --source-key sk_live_REPLACE_WITH_SOURCE_KEY"))
+	fmt.Fprintf(out, "  %s\n", color(ansiDim, "signalforge rec chk -k sk_live_..."))
+	fmt.Fprintf(out, "  %s\n", color(ansiDim, "signalforge rec i -i ./calls"))
+	fmt.Fprintf(out, "  %s\n", color(ansiDim, "signalforge rec w -i ./calls -k sk_live_..."))
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s\n", color(ansiCyan, "Commands"))
-	commandRow(out, "HUB", "hub", "check hub health and version")
-	commandRow(out, "REC", "recorder", "inspect, upload, watch, and open recorder console")
-	commandRow(out, "TUI", "tui", "open the full-screen recorder dashboard")
-	commandRow(out, "UPD", "update", "check the public package release feed")
-	commandRow(out, "VER", "version", "show build metadata")
+	commandRow(out, "HUB", "hub/h", "check hub health and version")
+	commandRow(out, "REC", "recorder/rec/r", "inspect, upload, watch, and open recorder console")
+	commandRow(out, "TUI", "tui/console/dash", "open the full-screen recorder dashboard")
+	commandRow(out, "UPD", "update/upd/up", "check the public package release feed")
+	commandRow(out, "VER", "version/ver/v", "show build metadata; -v, --v, --version")
 	commandRow(out, "TAB", "completion", "generate shell completion scripts")
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s signalforge <command> --help\n", color(ansiDim, "more:"))
@@ -465,7 +497,7 @@ func printCommandHelp(out io.Writer, cmd *cobra.Command) {
 			if !child.IsAvailableCommand() || child.IsAdditionalHelpTopicCommand() {
 				continue
 			}
-			commandRow(out, "CMD", child.Name(), child.Short)
+			commandRow(out, "CMD", commandLabel(child), child.Short)
 		}
 	}
 	printFlagSet(out, cmd.NonInheritedFlags(), "Flags")
@@ -475,7 +507,19 @@ func printCommandHelp(out io.Writer, cmd *cobra.Command) {
 }
 
 func commandRow(out io.Writer, group, name, summary string) {
-	fmt.Fprintf(out, "  %s %-12s %s\n", color(ansiGreen, "["+group+"]"), color(ansiYellow, name), summary)
+	padding := 18 - len(name)
+	if padding < 1 {
+		padding = 1
+	}
+	fmt.Fprintf(out, "  %s %s%s%s\n", color(ansiGreen, "["+group+"]"), color(ansiYellow, name), strings.Repeat(" ", padding), summary)
+}
+
+func commandLabel(cmd *cobra.Command) string {
+	if len(cmd.Aliases) == 0 {
+		return cmd.Name()
+	}
+	names := append([]string{cmd.Name()}, cmd.Aliases...)
+	return strings.Join(names, "/")
 }
 
 func printFlagSet(out io.Writer, flags *pflag.FlagSet, title string) {
@@ -485,6 +529,9 @@ func printFlagSet(out io.Writer, flags *pflag.FlagSet, title string) {
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s\n", color(ansiCyan, title))
 	flags.VisitAll(func(flag *pflag.Flag) {
+		if flag.Hidden {
+			return
+		}
 		name := "--" + flag.Name
 		if flag.Shorthand != "" {
 			name = "-" + flag.Shorthand + ", " + name

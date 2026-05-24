@@ -72,11 +72,11 @@ func TestRecorderWatchOnceUploadsAndMovesStableFile(t *testing.T) {
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{
 		"--hub-url", server.URL,
-		"--source-key", "test-key",
+		"-k", "test-key",
 		"recorder", "watch",
-		"--input", input,
-		"--stable", "1ms",
-		"--once",
+		"-i", input,
+		"-s", "1ms",
+		"-o",
 	})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("command failed: %v\n%s", err, out.String())
@@ -122,6 +122,53 @@ func TestUpdateCheckUsesConfiguredReleaseAPI(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("expected %q in output:\n%s", want, out.String())
 		}
+	}
+}
+
+func TestVersionShortcuts(t *testing.T) {
+	t.Setenv("SIGNALFORGE_NO_UPDATE_CHECK", "1")
+
+	for _, args := range [][]string{{"version"}, {"ver"}, {"v"}, {"--version"}, {"-v"}, {"--v"}} {
+		cmd := NewRootCommand()
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs(args)
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("%v failed: %v\n%s", args, err, out.String())
+		}
+		if !strings.Contains(out.String(), "signalforge:") {
+			t.Fatalf("expected version output for %v, got:\n%s", args, out.String())
+		}
+	}
+}
+
+func TestCommandAliases(t *testing.T) {
+	t.Setenv("SIGNALFORGE_NO_UPDATE_CHECK", "1")
+
+	dir := t.TempDir()
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"rec", "i", "-i", dir})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("command failed: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "mode: folder") {
+		t.Fatalf("expected recorder inspect output, got:\n%s", out.String())
+	}
+
+	out.Reset()
+	cmd = NewRootCommand()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"tab", "--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("completion alias failed: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "autocompletion") {
+		t.Fatalf("expected completion help, got:\n%s", out.String())
 	}
 }
 

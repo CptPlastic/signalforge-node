@@ -76,6 +76,21 @@ signalforge version
 signalforge update check
 ```
 
+Top-level command aliases are available for faster terminal use:
+
+```powershell
+signalforge h chk
+signalforge rec i -i ./calls
+signalforge rec w -i ./calls -k sk_live_REPLACE_WITH_SOURCE_KEY
+signalforge upd chk
+signalforge ver
+signalforge -v
+signalforge --v
+signalforge --version
+```
+
+Common shorthand flags include `-k` for `--source-key`, `-i` for `--input`, `-p` for `--processed`, `-s` for `--stable`, and `-o` for `--once`.
+
 `recorder check` probes `POST /api/call-upload` with `test=1`. A valid source key returns the expected SDRTrunk-style incomplete-call response, which the CLI reports as `source key ok`.
 
 `recorder inspect` accepts a file or folder and reports whether SignalForge can ingest the audio. Supported file extensions are `.wav`, `.mp3`, `.m4a`, and `.flac`.
