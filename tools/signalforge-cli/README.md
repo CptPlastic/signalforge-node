@@ -93,4 +93,4 @@ $env:SIGNALFORGE_NO_UPDATE_CHECK = "1"
 export SIGNALFORGE_NO_UPDATE_CHECK=1
 ```
 
-For staging or test release feeds, set `SIGNALFORGE_UPDATE_URL` to a GitHub-compatible latest-release JSON endpoint.
+For staging or test release feeds, set `SIGNALFORGE_UPDATE_URL` to a GitHub-compatible releases-list JSON endpoint. A single latest-release JSON object is also accepted for tests.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 )
 
 const (
-	defaultReleaseAPI = "https://api.github.com/repos/" + buildinfo.ReleaseRepo + "/releases/latest"
+	defaultReleaseAPI = "https://api.github.com/repos/" + buildinfo.ReleaseRepo + "/releases"
 	cacheFileName     = "update-check.json"
 )
 
@@ -79,8 +80,8 @@ func Check(ctx context.Context, options Options) (Result, error) {
 		return Result{}, fmt.Errorf("release check returned %s", resp.Status)
 	}
 
-	var release releaseResponse
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	release, err := decodeReleaseResponse(resp.Body)
+	if err != nil {
 		return Result{}, err
 	}
 	latest := normalizeVersion(release.TagName)
@@ -93,6 +94,30 @@ func Check(ctx context.Context, options Options) (Result, error) {
 		AssetURL:        asset.URL,
 		UpdateAvailable: isNewer(latest, current),
 	}, nil
+}
+
+func decodeReleaseResponse(body io.Reader) (releaseResponse, error) {
+	var raw json.RawMessage
+	if err := json.NewDecoder(body).Decode(&raw); err != nil {
+		return releaseResponse{}, err
+	}
+	var releases []releaseResponse
+	if err := json.Unmarshal(raw, &releases); err == nil {
+		for _, release := range releases {
+			if strings.HasPrefix(release.TagName, "signalforge-cli-v") {
+				return release, nil
+			}
+		}
+		return releaseResponse{}, errors.New("no signalforge-cli release found")
+	}
+	var release releaseResponse
+	if err := json.Unmarshal(raw, &release); err != nil {
+		return releaseResponse{}, err
+	}
+	if release.TagName == "" {
+		return releaseResponse{}, errors.New("release response missing tag_name")
+	}
+	return release, nil
 }
 
 func ShouldAutoCheck(now time.Time, interval time.Duration) bool {
