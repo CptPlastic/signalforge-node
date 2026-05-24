@@ -189,6 +189,7 @@ export type TalkgroupInfo = {
   talkgroup: number
   talkgroupLabel: string
   talkgroupGroup: string
+  systemLabel: string
 }
 
 export type RadioSet = {

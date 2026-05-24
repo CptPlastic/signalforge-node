@@ -125,6 +125,7 @@ function upsertTalkgroupInfo(talkgroups: TalkgroupInfo[], call: Call): Talkgroup
     talkgroup: call.talkgroup,
     talkgroupLabel: call.talkgroupLabel,
     talkgroupGroup: call.talkgroupGroup,
+    systemLabel: call.systemLabel,
   }
 
   if (!talkgroups.some((tg) => tg.talkgroup === call.talkgroup)) {
@@ -1514,7 +1515,7 @@ function App() {
         talkgroup: tg.talkgroup,
         label: tg.talkgroupLabel,
         group: tg.talkgroupGroup,
-        system: '',
+        system: tg.systemLabel,
         callCount: 0,
         lastSeen: 0,
         favorite: setting?.favorite ?? false,

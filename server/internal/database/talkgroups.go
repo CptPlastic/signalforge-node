@@ -102,10 +102,10 @@ func (d *DB) DeleteTalkgroup(talkgroup int) (int64, error) {
 	return deleted, nil
 }
 
-// ListDistinctTalkgroups returns one visible entry per talkgroup ID using the label from the most recent call.
+// ListDistinctTalkgroups returns one visible entry per talkgroup ID using metadata from the most recent call.
 func (d *DB) ListDistinctTalkgroups(userID string, includeAll bool) ([]TalkgroupInfo, error) {
 	query := `
-		SELECT DISTINCT ON (c.talkgroup) c.talkgroup, c.talkgroup_label, c.talkgroup_group
+		SELECT DISTINCT ON (c.talkgroup) c.talkgroup, c.talkgroup_label, c.talkgroup_group, c.system_label
 		FROM calls c
 		LEFT JOIN ingestion_sources s ON s.id = c.source_id
 		WHERE c.talkgroup > 0`
@@ -132,7 +132,7 @@ func (d *DB) ListDistinctTalkgroups(userID string, includeAll bool) ([]Talkgroup
 	tgs := make([]TalkgroupInfo, 0)
 	for rows.Next() {
 		var t TalkgroupInfo
-		if err := rows.Scan(&t.Talkgroup, &t.TalkgroupLabel, &t.TalkgroupGroup); err != nil {
+		if err := rows.Scan(&t.Talkgroup, &t.TalkgroupLabel, &t.TalkgroupGroup, &t.SystemLabel); err != nil {
 			return nil, err
 		}
 		tgs = append(tgs, t)

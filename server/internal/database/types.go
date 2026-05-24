@@ -136,6 +136,7 @@ type TalkgroupInfo struct {
 	Talkgroup      int    `json:"talkgroup"`
 	TalkgroupLabel string `json:"talkgroupLabel"`
 	TalkgroupGroup string `json:"talkgroupGroup"`
+	SystemLabel    string `json:"systemLabel"`
 }
 
 // RadioSet is a named, user-owned collection of talkgroup IDs used to filter the call log.
