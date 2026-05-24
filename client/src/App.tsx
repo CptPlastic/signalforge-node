@@ -65,10 +65,17 @@ const SESSION_WARNING_WINDOW_SEC = 15 * 60
 const CALL_PAGE_SIZE_OPTIONS = [25, 50, 100, 250] as const
 const DEFAULT_CALL_PAGE_SIZE = 50
 const CALL_PAGE_SIZE_STORAGE_KEY = 'p7_call_page_size'
+const RADIO_SET_VOLUME_STORAGE_KEY = 'p7_radio_set_volume'
 
 function getStoredCallPageSize(): number {
   const saved = Number(localStorage.getItem(CALL_PAGE_SIZE_STORAGE_KEY))
   return CALL_PAGE_SIZE_OPTIONS.includes(saved as typeof CALL_PAGE_SIZE_OPTIONS[number]) ? saved : DEFAULT_CALL_PAGE_SIZE
+}
+
+function getStoredRadioSetVolume(): number {
+  const saved = Number(localStorage.getItem(RADIO_SET_VOLUME_STORAGE_KEY))
+  if (!Number.isFinite(saved)) return 100
+  return Math.min(100, Math.max(0, Math.round(saved)))
 }
 
 function copyToClipboard(text: string) {
@@ -320,7 +327,9 @@ function App() {
   const [rsEditTGs, setRsEditTGs] = useState<number[]>([])
   const [rsError, setRsError] = useState('')
   const [rsLoading, setRsLoading] = useState(false)
+  const [rsVolume, setRsVolume] = useState(getStoredRadioSetVolume)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const rsVolumeRef = useRef(rsVolume)
 
   const {
     updateInfo,
@@ -701,6 +710,14 @@ function App() {
     setSourceStatusMap((prev) => smoothSourceStatusMap(prev, sourcesMap, nowUnix))
   }, [nowUnix, sourcesMap])
 
+  useEffect(() => {
+    rsVolumeRef.current = rsVolume
+    localStorage.setItem(RADIO_SET_VOLUME_STORAGE_KEY, String(rsVolume))
+    if (audioRef.current) {
+      audioRef.current.volume = rsVolume / 100
+    }
+  }, [rsVolume])
+
   const ws = useMemo(
     () =>
       new WebSocketClient<WsEvent>({
@@ -792,6 +809,7 @@ function App() {
     }
     const audio = audioRef.current ?? new Audio()
     audio.src = `/api/v1/calls/${call.id}/audio`
+    audio.volume = rsVolumeRef.current / 100
     audio.onended = () => setPlayingId(null)
     if (selectedDeviceId && 'setSinkId' in audio) {
       (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> })
@@ -1932,6 +1950,7 @@ function App() {
           rsName={rsName}
           rsPlayingID={rsPlayingID}
           rsTGSearch={rsTGSearch}
+          rsVolume={rsVolume}
           selectedDeviceId={selectedDeviceId}
           selectedSetID={selectedSetID}
           setRadioSets={setRadioSets}
@@ -1944,6 +1963,7 @@ function App() {
           setRsName={setRsName}
           setRsPlayingID={setRsPlayingID}
           setRsTGSearch={setRsTGSearch}
+          setRsVolume={setRsVolume}
           setSelectedDeviceId={setSelectedDeviceId}
           setSelectedSetID={setSelectedSetID}
         />

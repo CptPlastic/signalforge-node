@@ -17,6 +17,7 @@ type RadioSetsViewProps = Readonly<{
   rsName: string
   rsPlayingID: string | null
   rsTGSearch: string
+  rsVolume: number
   selectedDeviceId: string
   selectedSetID: string
   setRadioSets: Dispatch<SetStateAction<RadioSet[]>>
@@ -29,6 +30,7 @@ type RadioSetsViewProps = Readonly<{
   setRsName: Dispatch<SetStateAction<string>>
   setRsPlayingID: Dispatch<SetStateAction<string | null>>
   setRsTGSearch: Dispatch<SetStateAction<string>>
+  setRsVolume: Dispatch<SetStateAction<number>>
   setSelectedDeviceId: Dispatch<SetStateAction<string>>
   setSelectedSetID: Dispatch<SetStateAction<string>>
 }>
@@ -70,6 +72,7 @@ export function RadioSetsView({
   rsName,
   rsPlayingID,
   rsTGSearch,
+  rsVolume,
   selectedDeviceId,
   selectedSetID,
   setRadioSets,
@@ -82,6 +85,7 @@ export function RadioSetsView({
   setRsName,
   setRsPlayingID,
   setRsTGSearch,
+  setRsVolume,
   setSelectedDeviceId,
   setSelectedSetID,
 }: RadioSetsViewProps) {
@@ -147,6 +151,14 @@ export function RadioSetsView({
       (audioRef.current as HTMLAudioElement & { setSinkId(id: string): Promise<void> })
         .setSinkId(deviceId)
         .catch(console.error)
+    }
+  }
+
+  const updateRadioSetVolume = (volume: number) => {
+    const nextVolume = Math.min(100, Math.max(0, Math.round(volume)))
+    setRsVolume(nextVolume)
+    if (audioRef.current) {
+      audioRef.current.volume = nextVolume / 100
     }
   }
 
@@ -293,6 +305,22 @@ export function RadioSetsView({
                           </option>
                         ))}
                       </select>
+                    )}
+                    {isScanning && (
+                      <label className="col-span-2 flex items-center gap-2 bg-console-bg border border-console-border rounded px-2 py-1 sm:py-0.5 text-[10px] text-console-muted">
+                        <span className="uppercase tracking-wider flex-shrink-0">Vol</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={rsVolume}
+                          onChange={(event) => updateRadioSetVolume(Number(event.target.value))}
+                          className="min-w-0 flex-1 accent-console-accent"
+                          title="Radio set volume"
+                        />
+                        <span className="w-8 text-right tabular-nums text-console-accent">{rsVolume}%</span>
+                      </label>
                     )}
                     <button
                       onClick={() => generateShareLink(radioSet.id)}
