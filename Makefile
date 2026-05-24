@@ -1,4 +1,4 @@
-.PHONY: dev-server dev-client build-server build-client build lint-server lint-client lint test-server test clean init-env install-up install-down install-logs sync-signalforge-node
+.PHONY: dev-server dev-client build-server build-client build-cli build lint-server lint-client lint test-server test-cli test clean init-env install-up install-down install-logs sync-signalforge-node
 
 SIGNALFORGE_NODE_DIR ?= ../signalforge-node
 COMPOSE ?= docker compose
@@ -15,7 +15,10 @@ build-server:
 build-client:
 	cd client && npm run build
 
-build: build-server build-client
+build-cli:
+	cd tools/signalforge-cli && go build -o dist/signalforge ./cmd/signalforge
+
+build: build-server build-client build-cli
 
 lint-server:
 	cd server && go vet ./...
@@ -28,10 +31,13 @@ lint: lint-server lint-client
 test-server:
 	cd server && go test ./...
 
-test: test-server
+test-cli:
+	cd tools/signalforge-cli && go test ./...
+
+test: test-server test-cli
 
 clean:
-	rm -rf client/node_modules client/dist
+	rm -rf client/node_modules client/dist tools/signalforge-cli/dist tools/signalforge-cli/signalforge tools/signalforge-cli/signalforge.exe
 
 init-env:
 	./tools/init-env.sh

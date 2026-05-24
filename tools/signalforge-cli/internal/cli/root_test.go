@@ -1,0 +1,103 @@
+package cli
+
+import (
+	"bytes"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestRecorderWatchOnceUploadsAndMovesStableFile(t *testing.T) {
+	uploads := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/call-upload" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if got := r.FormValue("key"); got != "test-key" {
+			http.Error(w, fmt.Sprintf("key %q", got), http.StatusUnauthorized)
+			return
+		}
+		if got := r.FormValue("talkgroup"); got != "18" {
+			http.Error(w, fmt.Sprintf("talkgroup %q", got), http.StatusBadRequest)
+			return
+		}
+		file, header, err := r.FormFile("audio")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		_ = file.Close()
+		if header.Filename != "call.wav" {
+			http.Error(w, fmt.Sprintf("filename %q", header.Filename), http.StatusBadRequest)
+			return
+		}
+		uploads++
+		fmt.Fprint(w, "Call imported successfully.\n")
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	input := filepath.Join(dir, "ingest")
+	if err := os.MkdirAll(input, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	audioPath := filepath.Join(input, "call.wav")
+	if err := os.WriteFile(audioPath, fakeWAV(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-10 * time.Second)
+	if err := os.Chtimes(audioPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"--hub-url", server.URL,
+		"--source-key", "test-key",
+		"recorder", "watch",
+		"--input", input,
+		"--stable", "1ms",
+		"--once",
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("command failed: %v\n%s", err, out.String())
+	}
+	if uploads != 1 {
+		t.Fatalf("expected 1 upload, got %d", uploads)
+	}
+	if _, err := os.Stat(audioPath); !os.IsNotExist(err) {
+		t.Fatalf("expected source file to move, stat err=%v", err)
+	}
+	processedPath := filepath.Join(input, "processed", "call.wav")
+	if _, err := os.Stat(processedPath); err != nil {
+		t.Fatalf("expected processed file: %v", err)
+	}
+	if !strings.Contains(out.String(), "uploaded:") {
+		t.Fatalf("expected upload output, got %q", out.String())
+	}
+}
+
+func fakeWAV() []byte {
+	return []byte{
+		'R', 'I', 'F', 'F', 40, 0, 0, 0, 'W', 'A', 'V', 'E', 'f', 'm', 't', ' ',
+		16, 0, 0, 0, 1, 0, 1, 0, 0x40, 0x1f, 0, 0, 0x80, 0x3e, 0, 0,
+		2, 0, 16, 0, 'd', 'a', 't', 'a', 4, 0, 0, 0, 0, 0, 0, 0,
+	}
+}
