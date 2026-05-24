@@ -19,6 +19,8 @@ SignalForge has three repositories in the working set. They do not all publish t
 | Channel | Repository | Trigger | Output | Public Consumer |
 | --- | --- | --- | --- | --- |
 | SignalForge CLI recorder | `p7-scanner` | tag `signalforge-cli-v*` | Windows/macOS/Linux `signalforge` binaries built in `p7-scanner` and mirrored to a public `signalforge.org` GitHub Release | `signalforge.org/#recorder`, CLI updater |
+| Homebrew tap | `p7-scanner` release workflow | tag `signalforge-cli-v*` | `CptPlastic/homebrew-signalforge` formula update | macOS/Linux `brew install` |
+| Scoop bucket | `p7-scanner` release workflow | tag `signalforge-cli-v*` | `CptPlastic/scoop-signalforge` manifest update | Windows `scoop install` |
 | Hub container images | `p7-scanner` | push to `main` / workflow dispatch | GHCR images and `signalforge.org/p7-scanner-update.json` | deployed hubs, admin update checks |
 | Legacy recorder UI | `p7-scanner` | manual workflow dispatch only | build artifacts for internal/manual testing | none by default |
 
@@ -33,5 +35,21 @@ SignalForge has three repositories in the working set. They do not all publish t
 - CLI recorder tags: `signalforge-cli-v0.1.0`
 - Hub image updates: commit-derived image tags in `p7-scanner-update.json`
 - Legacy recorder UI builds: manual only, not a public release channel
+
+## Package Manager Installs
+
+macOS and Linux:
+
+```bash
+brew tap CptPlastic/signalforge
+brew install signalforge
+```
+
+Windows:
+
+```powershell
+scoop bucket add signalforge https://github.com/CptPlastic/scoop-signalforge
+scoop install signalforge
+```
 
 The public site and CLI updater read the public `signalforge.org` release mirror and filter releases by the `signalforge-cli-v*` tag prefix. Do not use the repository-wide `latest` release, because unrelated historical tags can exist during migrations.

@@ -23,6 +23,24 @@ go build -o dist/signalforge.exe ./cmd/signalforge
 go build -o dist/signalforge ./cmd/signalforge
 ```
 
+## Install
+
+macOS and Linux with Homebrew:
+
+```bash
+brew tap CptPlastic/signalforge
+brew install signalforge
+```
+
+Windows with Scoop:
+
+```powershell
+scoop bucket add signalforge https://github.com/CptPlastic/scoop-signalforge
+scoop install signalforge
+```
+
+Release archives are also attached to the public `signalforge-cli-v*` releases at <https://github.com/CptPlastic/signalforge.org/releases>.
+
 ## Configure
 
 You can pass flags each time:
