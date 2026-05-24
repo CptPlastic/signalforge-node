@@ -16,11 +16,14 @@ go build -o dist/p7-recorder-go ./cmd/p7-recorder-go
 
 ```powershell
 .\p7-recorder-go.exe --config config.toml --init-config
+.\p7-recorder-go.exe --config config.toml --check-hub
 .\p7-recorder-go.exe --config config.toml --list-devices
 .\p7-recorder-go.exe --config config.toml
 ```
 
 Use `--init-config --force` only when you want to overwrite an existing config file.
+
+Use `--check-hub` after setting `p7.base_url` and `p7.source_key`. It checks the hub health endpoint and sends the SDRTrunk-style upload probe (`test=1`) so you can verify the URL and source key before recording audio.
 
 The config format matches the existing Python recorder so users can migrate by copying the same server URL, source key, audio thresholds, and metadata.
 

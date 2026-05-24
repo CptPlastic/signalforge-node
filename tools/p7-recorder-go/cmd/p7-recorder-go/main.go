@@ -108,11 +108,25 @@ func run() int {
 	initConfig := flag.Bool("init-config", false, "create a recorder config interactively and exit")
 	forceConfig := flag.Bool("force", false, "overwrite an existing config when used with --init-config")
 	listDevices := flag.Bool("list-devices", false, "list capture devices and exit")
+	checkHub := flag.Bool("check-hub", false, "check hub health and source key connectivity, then exit")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Printf("%s %s\n", appName, version)
+		return 0
+	}
+
+	if *checkHub {
+		runtimeConfig, err := loadConfig(*configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config error: %v\n", err)
+			return 1
+		}
+		if err := checkHubConnectivity(runtimeConfig, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "hub check failed: %v\n", err)
+			return 1
+		}
 		return 0
 	}
 
@@ -158,6 +172,65 @@ func run() int {
 		return 1
 	}
 	return 0
+}
+
+func checkHubConnectivity(cfg RuntimeConfig, out io.Writer) error {
+	base, err := url.Parse(cfg.P7.BaseURL)
+	if err != nil {
+		return fmt.Errorf("p7.base_url: %w", err)
+	}
+	base.Path = strings.TrimRight(base.Path, "/") + "/api/v1/health"
+	base.RawQuery = ""
+	base.Fragment = ""
+
+	timeout := time.Duration(cfg.P7.TimeoutSec * float64(time.Second))
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Get(base.String())
+	if err != nil {
+		return fmt.Errorf("health request: %w", err)
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 2048))
+	_ = resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("health endpoint returned %s", resp.Status)
+	}
+	fmt.Fprintf(out, "hub health ok: %s\n", base.String())
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	if err := writer.WriteField("key", cfg.P7.SourceKey); err != nil {
+		return err
+	}
+	if err := writer.WriteField("test", "1"); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPost, cfg.UploadURL, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("User-Agent", "P7 Recorder Go")
+	resp, err = client.Do(req)
+	if err != nil {
+		return fmt.Errorf("source key probe: %w", err)
+	}
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+	_ = resp.Body.Close()
+	message := strings.TrimSpace(string(respBody))
+	if resp.StatusCode == http.StatusExpectationFailed && strings.Contains(message, "incomplete call data") {
+		fmt.Fprintln(out, "source key ok")
+		return nil
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		return errors.New("source key rejected")
+	}
+	if resp.StatusCode == http.StatusForbidden {
+		return errors.New("source is disabled")
+	}
+	return fmt.Errorf("source key probe returned %s: %s", resp.Status, message)
 }
 
 func loadConfig(path string) (RuntimeConfig, error) {
