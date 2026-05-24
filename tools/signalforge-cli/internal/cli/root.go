@@ -43,9 +43,10 @@ func NewRootCommand() *cobra.Command {
 	showVersion := false
 
 	cmd := &cobra.Command{
-		Use:   "signalforge",
-		Short: "SignalForge operator CLI",
-		Long:  "SignalForge is a cross-platform operator CLI for checking hubs, recorder keys, and federation-ready nodes.",
+		Use:     "signalforge",
+		Aliases: []string{"sf"},
+		Short:   "SignalForge operator CLI",
+		Long:    "SignalForge is a cross-platform operator CLI for checking hubs, recorder keys, and federation-ready nodes.",
 		Run: func(cmd *cobra.Command, _ []string) {
 			if showVersion {
 				printVersion(cmd)
@@ -465,9 +466,9 @@ func printRootHelp(out io.Writer) {
 	printLine(out, "info", "hub", "https://p7hub.projectseven.us")
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s\n", color(ansiCyan, "Quick Start"))
-	fmt.Fprintf(out, "  %s\n", color(ansiDim, "signalforge rec chk -k sk_live_..."))
-	fmt.Fprintf(out, "  %s\n", color(ansiDim, "signalforge rec i -i ./calls"))
-	fmt.Fprintf(out, "  %s\n", color(ansiDim, "signalforge rec w -i ./calls -k sk_live_..."))
+	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf rec chk -k sk_live_..."))
+	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf rec i -i ./calls"))
+	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf rec w -i ./calls -k sk_live_..."))
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s\n", color(ansiCyan, "Commands"))
 	commandRow(out, "HUB", "hub/h", "check hub health and version")
@@ -477,7 +478,7 @@ func printRootHelp(out io.Writer) {
 	commandRow(out, "VER", "version/ver/v", "show build metadata; -v, --v, --version")
 	commandRow(out, "TAB", "completion", "generate shell completion scripts")
 	fmt.Fprintln(out)
-	fmt.Fprintf(out, "%s signalforge <command> --help\n", color(ansiDim, "more:"))
+	fmt.Fprintf(out, "%s sf <command> --help (signalforge also works)\n", color(ansiDim, "more:"))
 	fmt.Fprintf(out, "%s SIGNALFORGE_NO_UPDATE_CHECK=1 disables quiet daily update checks\n", color(ansiDim, "env:"))
 }
 
@@ -503,7 +504,7 @@ func printCommandHelp(out io.Writer, cmd *cobra.Command) {
 	printFlagSet(out, cmd.NonInheritedFlags(), "Flags")
 	printFlagSet(out, cmd.InheritedFlags(), "Global Flags")
 	fmt.Fprintln(out)
-	fmt.Fprintf(out, "%s signalforge <command> --help\n", color(ansiDim, "more:"))
+	fmt.Fprintf(out, "%s sf <command> --help (signalforge also works)\n", color(ansiDim, "more:"))
 }
 
 func commandRow(out io.Writer, group, name, summary string) {

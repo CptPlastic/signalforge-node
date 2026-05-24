@@ -170,6 +170,18 @@ func TestCommandAliases(t *testing.T) {
 	if !strings.Contains(out.String(), "autocompletion") {
 		t.Fatalf("expected completion help, got:\n%s", out.String())
 	}
+
+	out.Reset()
+	cmd = NewRootCommand()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("root help failed: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "sf rec chk") || !strings.Contains(out.String(), "signalforge also works") {
+		t.Fatalf("expected sf alias in root help, got:\n%s", out.String())
+	}
 }
 
 func fakeWAV() []byte {

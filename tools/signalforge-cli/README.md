@@ -17,10 +17,12 @@ The intent is for this CLI/TUI to become the clean operator surface for recorder
 
 ```powershell
 go build -o dist/signalforge.exe ./cmd/signalforge
+Copy-Item dist/signalforge.exe dist/sf.exe
 ```
 
 ```bash
 go build -o dist/signalforge ./cmd/signalforge
+cp dist/signalforge dist/sf
 ```
 
 ## Install
@@ -40,6 +42,8 @@ scoop install signalforge
 ```
 
 Release archives are also attached to the public `signalforge-cli-v*` releases at <https://github.com/CptPlastic/signalforge.org/releases>.
+
+Installed releases provide both `signalforge` and the short `sf` alias.
 
 ## Configure
 
@@ -79,6 +83,11 @@ signalforge update check
 Top-level command aliases are available for faster terminal use:
 
 ```powershell
+sf h chk
+sf rec i -i ./calls
+sf rec w -i ./calls -k sk_live_REPLACE_WITH_SOURCE_KEY
+sf upd chk
+sf ver
 signalforge h chk
 signalforge rec i -i ./calls
 signalforge rec w -i ./calls -k sk_live_REPLACE_WITH_SOURCE_KEY
