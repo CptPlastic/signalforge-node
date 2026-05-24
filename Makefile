@@ -2,6 +2,10 @@
 
 SIGNALFORGE_NODE_DIR ?= ../signalforge-node
 COMPOSE ?= docker compose
+CLI_VERSION ?= dev
+CLI_COMMIT ?= local
+CLI_DATE ?= local
+CLI_LDFLAGS := -X github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/buildinfo.Version=$(CLI_VERSION) -X github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/buildinfo.Commit=$(CLI_COMMIT) -X github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/buildinfo.Date=$(CLI_DATE)
 
 dev-server:
 	cd server && go run ./main.go
@@ -16,7 +20,7 @@ build-client:
 	cd client && npm run build
 
 build-cli:
-	cd tools/signalforge-cli && go build -o dist/signalforge ./cmd/signalforge
+	cd tools/signalforge-cli && go build -ldflags "$(CLI_LDFLAGS)" -o dist/signalforge ./cmd/signalforge
 
 build: build-server build-client build-cli
 

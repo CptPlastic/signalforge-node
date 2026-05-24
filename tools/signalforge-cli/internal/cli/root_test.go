@@ -13,6 +13,8 @@ import (
 )
 
 func TestRecorderWatchOnceUploadsAndMovesStableFile(t *testing.T) {
+	t.Setenv("SIGNALFORGE_NO_UPDATE_CHECK", "1")
+
 	uploads := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/call-upload" {
@@ -91,6 +93,35 @@ func TestRecorderWatchOnceUploadsAndMovesStableFile(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "uploaded:") {
 		t.Fatalf("expected upload output, got %q", out.String())
+	}
+}
+
+func TestUpdateCheckUsesConfiguredReleaseAPI(t *testing.T) {
+	t.Setenv("SIGNALFORGE_NO_UPDATE_CHECK", "1")
+	t.Setenv("LocalAppData", t.TempDir())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/latest" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"tag_name":"signalforge-cli-v99.0.0","html_url":"https://example.invalid/releases/99","assets":[{"name":"signalforge-windows-amd64.exe","browser_download_url":"https://example.invalid/signalforge.exe"}]}`)
+	}))
+	defer server.Close()
+	t.Setenv("SIGNALFORGE_UPDATE_URL", server.URL+"/latest")
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"update", "check"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("command failed: %v\n%s", err, out.String())
+	}
+	for _, want := range []string{"latest: 99.0.0", "status: up to date", "signalforge-windows-amd64.exe"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("expected %q in output:\n%s", want, out.String())
+		}
 	}
 }
 

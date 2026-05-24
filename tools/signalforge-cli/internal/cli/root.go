@@ -6,12 +6,15 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/api"
+	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/buildinfo"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/config"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/recorder"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/tui"
+	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/updater"
 	"github.com/spf13/cobra"
 )
 
@@ -30,11 +33,46 @@ func NewRootCommand() *cobra.Command {
 		Use:   "signalforge",
 		Short: "SignalForge operator CLI",
 		Long:  "SignalForge is a cross-platform operator CLI for checking hubs, recorder keys, and federation-ready nodes.",
+		PersistentPostRun: func(cmd *cobra.Command, _ []string) {
+			runAutoUpdateCheck(cmd)
+		},
 	}
 	cmd.PersistentFlags().StringVar(&opts.hubURL, "hub-url", opts.hubURL, "SignalForge Hub base URL")
 	cmd.PersistentFlags().StringVar(&opts.sourceKey, "source-key", opts.sourceKey, "source upload API key")
 	cmd.PersistentFlags().DurationVar(&opts.timeout, "timeout", opts.timeout, "HTTP timeout")
-	cmd.AddCommand(newHubCommand(opts), newRecorderCommand(opts), newTUICommand(opts))
+	cmd.AddCommand(newHubCommand(opts), newRecorderCommand(opts), newTUICommand(opts), newUpdateCommand(), newVersionCommand())
+	return cmd
+}
+
+func newVersionCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print SignalForge CLI version metadata",
+		Run: func(cmd *cobra.Command, _ []string) {
+			fmt.Fprintf(cmd.OutOrStdout(), "signalforge %s\n", buildinfo.DisplayVersion())
+			fmt.Fprintf(cmd.OutOrStdout(), "commit: %s\n", buildinfo.Commit)
+			fmt.Fprintf(cmd.OutOrStdout(), "date: %s\n", buildinfo.Date)
+		},
+	}
+}
+
+func newUpdateCommand() *cobra.Command {
+	cmd := &cobra.Command{Use: "update", Short: "Check for SignalForge CLI updates"}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "check",
+		Short: "Check GitHub releases for a newer SignalForge CLI",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
+			defer cancel()
+			result, err := updater.Check(ctx, updater.Options{CurrentVersion: buildinfo.DisplayVersion(), ReleaseAPI: updateReleaseAPI()})
+			if err != nil {
+				return err
+			}
+			printUpdateResult(cmd, result)
+			updater.MarkChecked(time.Now())
+			return nil
+		},
+	})
 	return cmd
 }
 
@@ -217,6 +255,47 @@ func fallback(value, fallbackValue string) string {
 	return value
 }
 
+func printUpdateResult(cmd *cobra.Command, result updater.Result) {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "current: %s\n", fallback(result.CurrentVersion, "unknown"))
+	fmt.Fprintf(out, "latest: %s\n", fallback(result.LatestVersion, "unknown"))
+	if result.UpdateAvailable {
+		fmt.Fprintln(out, "status: update available")
+	} else {
+		fmt.Fprintln(out, "status: up to date")
+	}
+	if result.AssetURL != "" {
+		fmt.Fprintf(out, "asset: %s\n", result.AssetName)
+		fmt.Fprintf(out, "download: %s\n", result.AssetURL)
+	} else if result.ReleaseURL != "" {
+		fmt.Fprintf(out, "release: %s\n", result.ReleaseURL)
+	}
+}
+
+func runAutoUpdateCheck(cmd *cobra.Command) {
+	path := cmd.CommandPath()
+	if strings.Contains(path, " completion") || strings.Contains(path, " update") || strings.Contains(path, " version") {
+		return
+	}
+	if !updater.ShouldAutoCheck(time.Now(), 24*time.Hour) {
+		return
+	}
+	updater.MarkChecked(time.Now())
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	result, err := updater.Check(ctx, updater.Options{CurrentVersion: buildinfo.DisplayVersion(), ReleaseAPI: updateReleaseAPI()})
+	if err != nil || !result.UpdateAvailable {
+		return
+	}
+	fmt.Fprintf(cmd.ErrOrStderr(), "\nupdate available: signalforge %s", result.LatestVersion)
+	if result.AssetURL != "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), " (%s)", result.AssetURL)
+	} else if result.ReleaseURL != "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), " (%s)", result.ReleaseURL)
+	}
+	fmt.Fprintln(cmd.ErrOrStderr(), "")
+}
+
 func bindRecorderFlags(cmd *cobra.Command, settings *recorder.Settings) {
 	cmd.Flags().StringVar(&settings.Input, "input", settings.Input, "audio file or folder to inspect/upload")
 	cmd.Flags().StringVar(&settings.Processed, "processed", settings.Processed, "processed folder for watched audio")
@@ -280,4 +359,8 @@ func uploadFolderBatch(cmd *cobra.Command, client *api.Client, settings recorder
 
 func signals() []os.Signal {
 	return []os.Signal{os.Interrupt}
+}
+
+func updateReleaseAPI() string {
+	return os.Getenv("SIGNALFORGE_UPDATE_URL")
 }

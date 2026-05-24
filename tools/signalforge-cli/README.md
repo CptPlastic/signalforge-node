@@ -54,6 +54,8 @@ signalforge recorder watch --input ./calls --source-key sk_live_REPLACE_WITH_SOU
 signalforge recorder watch --input ./calls --once --source-key sk_live_REPLACE_WITH_SOURCE_KEY
 signalforge recorder tui --input ./calls --source-key sk_live_REPLACE_WITH_SOURCE_KEY
 signalforge tui --input ./calls --source-key sk_live_REPLACE_WITH_SOURCE_KEY
+signalforge version
+signalforge update check
 ```
 
 `recorder check` probes `POST /api/call-upload` with `test=1`. A valid source key returns the expected SDRTrunk-style incomplete-call response, which the CLI reports as `source key ok`.
@@ -71,3 +73,24 @@ signalforge tui --input ./calls --source-key sk_live_REPLACE_WITH_SOURCE_KEY
 - `--once` processes the current ready batch and exits.
 
 The TUI uses Bubble Tea for the SignalForge recorder console: hub health, version, source-key status, recorder input readiness, metadata preview, and a one-key upload action for file inputs or the current ready folder batch. Stream input and live capture are the next runtime layers to add under the same interface.
+
+## Updates
+
+Release builds are stamped with version, commit, and build date metadata. Check the installed binary with:
+
+```powershell
+signalforge version
+signalforge update check
+```
+
+Normal commands perform a quiet automatic update check at most once per day. If a newer GitHub release exists, the CLI prints a short notice with the matching platform asset or release URL. To disable automatic checks for scripts or locked-down installs:
+
+```powershell
+$env:SIGNALFORGE_NO_UPDATE_CHECK = "1"
+```
+
+```bash
+export SIGNALFORGE_NO_UPDATE_CHECK=1
+```
+
+For staging or test release feeds, set `SIGNALFORGE_UPDATE_URL` to a GitHub-compatible latest-release JSON endpoint.
