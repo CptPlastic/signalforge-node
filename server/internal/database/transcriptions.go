@@ -38,7 +38,7 @@ func (d *DB) ClaimTranscriptionJob(workerID string, leaseSeconds int64) (*Transc
 			FROM call_transcripts
 			WHERE status = 'pending'
 			   OR (status = 'processing' AND claimed_until < $1)
-			ORDER BY call_id ASC
+			ORDER BY call_id DESC
 			LIMIT 1
 			FOR UPDATE SKIP LOCKED
 		), claimed AS (
@@ -69,7 +69,7 @@ func (d *DB) ClaimTranscriptionJob(workerID string, leaseSeconds int64) (*Transc
 
 // CompleteTranscriptionJob stores a transcript and marks the job complete.
 func (d *DB) CompleteTranscriptionJob(callID int64, transcript, provider, language string, confidence float64) error {
-	_, err := d.db.Exec(`
+	result, err := d.db.Exec(`
 		UPDATE call_transcripts
 		SET status = 'done',
 		    transcript = $2,
@@ -81,12 +81,12 @@ func (d *DB) CompleteTranscriptionJob(callID int64, transcript, provider, langua
 		    claimed_until = 0,
 		    updated_at = $6
 		WHERE call_id = $1`, callID, transcript, provider, language, confidence, time.Now().Unix())
-	return err
+	return requireRowsAffected(result, err)
 }
 
 // FailTranscriptionJob records a worker failure for a call.
 func (d *DB) FailTranscriptionJob(callID int64, message string) error {
-	_, err := d.db.Exec(`
+	result, err := d.db.Exec(`
 		UPDATE call_transcripts
 		SET status = 'failed',
 		    error = $2,
@@ -94,7 +94,21 @@ func (d *DB) FailTranscriptionJob(callID int64, message string) error {
 		    claimed_until = 0,
 		    updated_at = $3
 		WHERE call_id = $1`, callID, message, time.Now().Unix())
-	return err
+	return requireRowsAffected(result, err)
+}
+
+func requireRowsAffected(result sql.Result, err error) error {
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // IsNoTranscriptionJob reports whether a claim query found no available work.
