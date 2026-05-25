@@ -155,7 +155,7 @@ export function RadioSetsView({
   }
 
   const updateRadioSetVolume = (volume: number) => {
-    const nextVolume = Math.min(100, Math.max(0, Math.round(volume)))
+    const nextVolume = Math.min(100, Math.max(1, Math.round(volume)))
     setRsVolume(nextVolume)
     if (audioRef.current) {
       audioRef.current.volume = nextVolume / 100
@@ -311,7 +311,7 @@ export function RadioSetsView({
                         <span className="uppercase tracking-wider flex-shrink-0">Vol</span>
                         <input
                           type="range"
-                          min="0"
+                          min="1"
                           max="100"
                           step="1"
                           value={rsVolume}

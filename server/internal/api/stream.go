@@ -722,16 +722,11 @@ func (h *handler) handlePublicLastCall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no calls", http.StatusNotFound)
 		return
 	}
-	audio, audioType, _, _, _, err := h.db.GetCallAudio(ids[0])
+	audio, audioType, audioName, _, _, err := h.db.GetCallAudio(ids[0])
 	if err != nil {
 		http.Error(w, "audio not found", http.StatusNotFound)
 		return
 	}
-	if audioType == "" {
-		audioType = "audio/mpeg"
-	}
-	w.Header().Set("Content-Type", audioType)
-	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Write(audio) //nolint:errcheck
+	serveAudioBytes(w, r, audio, audioType, defaultCallAudioName(ids[0], audioName), false, "no-store")
 }

@@ -38,6 +38,15 @@ function transcriptLabel(call: Call): string {
   return '—'
 }
 
+function transcriptBadge(call: Call): { label: string; className: string } | null {
+  const status = call.transcriptText ? 'done' : call.transcriptStatus
+  if (status === 'done') return { label: 'TX', className: 'border-console-accent text-console-accent' }
+  if (status === 'processing') return { label: 'RUN', className: 'border-console-amber text-console-amber' }
+  if (status === 'pending') return { label: 'QUE', className: 'border-console-amber text-console-amber' }
+  if (status === 'failed') return { label: 'ERR', className: 'border-console-error text-console-error' }
+  return null
+}
+
 export function CallRow({
   call,
   active,
@@ -56,6 +65,7 @@ export function CallRow({
   const statusLabel = getStatusLabel(active, playing)
   const rowClass = getRowClass(active, playing)
   const transcript = transcriptLabel(call)
+  const transcriptState = transcriptBadge(call)
 
   return (
     <tr
@@ -115,8 +125,15 @@ export function CallRow({
         {fmtFreq(call.frequency)}
       </td>
       <td className="py-2 px-3 tabular-nums text-console-muted">{fmtDur(call.duration)}</td>
-      <td className="py-2 px-3 max-w-[260px] truncate text-console-muted" title={call.transcriptText || call.transcriptStatus || ''}>
-        {call.transcriptText ? <span className="text-console-text">{transcript}</span> : transcript}
+      <td className="py-2 px-3 max-w-[300px] text-console-muted" title={call.transcriptText || call.transcriptStatus || ''}>
+        <div className="flex items-center gap-2 min-w-0">
+          {transcriptState && (
+            <span className={`flex-shrink-0 px-1.5 py-0.5 border rounded text-[9px] leading-none tabular-nums ${transcriptState.className}`}>
+              {transcriptState.label}
+            </span>
+          )}
+          <span className={`truncate ${call.transcriptText ? 'text-console-text' : ''}`}>{transcript}</span>
+        </div>
       </td>
       <td className="py-2 px-3">
         <div className="flex items-center gap-1.5">

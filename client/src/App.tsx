@@ -73,9 +73,11 @@ function getStoredCallPageSize(): number {
 }
 
 function getStoredRadioSetVolume(): number {
-  const saved = Number(localStorage.getItem(RADIO_SET_VOLUME_STORAGE_KEY))
-  if (!Number.isFinite(saved)) return 100
-  return Math.min(100, Math.max(0, Math.round(saved)))
+  const stored = localStorage.getItem(RADIO_SET_VOLUME_STORAGE_KEY)
+  if (stored == null) return 100
+  const saved = Number(stored)
+  if (!Number.isFinite(saved) || saved <= 0) return 100
+  return Math.min(100, Math.max(1, Math.round(saved)))
 }
 
 function copyToClipboard(text: string) {
@@ -202,6 +204,46 @@ function publicWSProbeClass(status: PublicWSProbeStatus): string {
   if (status === 'ok') return 'text-console-accent'
   if (status === 'failed' || status === 'missing-token') return 'text-console-error'
   return 'text-console-muted'
+}
+
+type TranscriptStatusSummary = Readonly<{
+  total: number
+  done: number
+  pending: number
+  processing: number
+  failed: number
+}>
+
+function summarizeTranscriptStatus(calls: Call[]): TranscriptStatusSummary {
+  return calls.reduce<TranscriptStatusSummary>((summary, call) => {
+    const status = call.transcriptText ? 'done' : call.transcriptStatus
+    if (!status) return summary
+    return {
+      total: summary.total + 1,
+      done: summary.done + (status === 'done' ? 1 : 0),
+      pending: summary.pending + (status === 'pending' ? 1 : 0),
+      processing: summary.processing + (status === 'processing' ? 1 : 0),
+      failed: summary.failed + (status === 'failed' ? 1 : 0),
+    }
+  }, { total: 0, done: 0, pending: 0, processing: 0, failed: 0 })
+}
+
+function transcriptSummaryLabel(summary: TranscriptStatusSummary): string {
+  if (summary.total === 0) return ''
+  const backlog = summary.pending + summary.processing + summary.failed
+  if (backlog === 0) return `TX ${summary.done}/${summary.total}`
+  return [
+    summary.done > 0 ? `${summary.done} done` : '',
+    summary.pending > 0 ? `${summary.pending} queue` : '',
+    summary.processing > 0 ? `${summary.processing} run` : '',
+    summary.failed > 0 ? `${summary.failed} fail` : '',
+  ].filter(Boolean).join(' · ')
+}
+
+function transcriptSummaryClass(summary: TranscriptStatusSummary): string {
+  if (summary.failed > 0) return 'border-console-error text-console-error'
+  if (summary.pending + summary.processing > 0) return 'border-console-amber text-console-amber'
+  return 'border-console-accent text-console-accent'
 }
 
 async function runPublicWSProbe(token: string | undefined, setPublicWSProbe: (state: PublicWSProbeState) => void) {
@@ -809,17 +851,21 @@ function App() {
       return
     }
     const audio = audioRef.current ?? new Audio()
-    audio.src = `/api/v1/calls/${call.id}/audio`
-    audio.volume = rsVolumeRef.current / 100
+    audio.src = `/api/v1/calls/${call.id}/audio?play=1`
+    audio.volume = Math.max(1, rsVolumeRef.current) / 100
     audio.onended = () => setPlayingId(null)
     if (selectedDeviceId && 'setSinkId' in audio) {
       (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> })
         .setSinkId(selectedDeviceId)
         .catch(console.error)
     }
-    audio.play().catch(console.error)
     audioRef.current = audio
-    setPlayingId(call.id)
+    audio.play()
+      .then(() => setPlayingId(call.id))
+      .catch((err) => {
+        console.error(err)
+        setPlayingId(null)
+      })
   }
 
   function enumerateAudioDevices() {
@@ -1223,6 +1269,8 @@ function App() {
     sortOrder,
   }), [calls, serverResults, hideMuted, search, groupFilter, settingsMap, showFavoritesOnly, sortBy, sortOrder])
   const callLogCountLabel = formatCallLogCount(serverLoading, serverResults, filteredCalls.length, calls.length)
+  const transcriptStatusSummary = useMemo(() => summarizeTranscriptStatus(filteredCalls), [filteredCalls])
+  const transcriptStatusLabel = transcriptSummaryLabel(transcriptStatusSummary)
 
   useEffect(() => {
     setCallPage(0)
@@ -1719,12 +1767,19 @@ function App() {
           <main className="console-panel overflow-hidden flex flex-col">
             <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
               <span className="console-label text-xs">CALL LOG</span>
-              <span className="text-xs text-console-muted tabular-nums">
-                {callLogCountLabel}
-                {totalCallPages > 1 && (
-                  <span className="ml-2 text-[10px]">· pg {callPage + 1}/{totalCallPages}</span>
+              <div className="flex items-center gap-2 text-xs text-console-muted tabular-nums">
+                {transcriptStatusLabel && (
+                  <span className={`px-1.5 py-0.5 border rounded text-[10px] uppercase tracking-widest ${transcriptSummaryClass(transcriptStatusSummary)}`} title="Transcription status for current call list">
+                    {transcriptStatusLabel}
+                  </span>
                 )}
-              </span>
+                <span>
+                  {callLogCountLabel}
+                  {totalCallPages > 1 && (
+                    <span className="ml-2 text-[10px]">· pg {callPage + 1}/{totalCallPages}</span>
+                  )}
+                </span>
+              </div>
             </div>
 
             <div className="mb-3 grid gap-2 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto_auto_auto]">

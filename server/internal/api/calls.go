@@ -3,7 +3,6 @@ package api
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -182,17 +181,7 @@ func (h *handler) handleCallAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", audioType)
-	w.Header().Set("Cache-Control", "private, max-age=3600")
-	if r.URL.Query().Get("download") == "1" {
-		fn := audioName
-		if fn == "" {
-			fn = fmt.Sprintf("call-%d.mp3", id)
-		}
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fn))
-	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(audio)
+	serveAudioBytes(w, r, audio, audioType, defaultCallAudioName(id, audioName), r.URL.Query().Get("download") == "1", "private, max-age=3600")
 }
 
 func (h *handler) canReadCall(user authUser, call database.Call, sourceByID map[string]database.IngestionSource, sharedSourceIDs map[string]bool) bool {

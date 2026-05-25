@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -96,17 +95,7 @@ func (h *handler) handleTranscriptionJobAudio(w http.ResponseWriter, r *http.Req
 		http.Error(w, "query audio", http.StatusInternalServerError)
 		return
 	}
-	if audioType == "" {
-		audioType = "audio/mpeg"
-	}
-	if audioName == "" {
-		audioName = fmt.Sprintf("call-%d.mp3", callID)
-	}
-	w.Header().Set("Content-Type", audioType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, audioName))
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(audio)
+	serveAudioBytes(w, r, audio, audioType, defaultCallAudioName(callID, audioName), true, "no-store")
 }
 
 func (h *handler) handleCompleteTranscriptionJob(w http.ResponseWriter, r *http.Request) {
