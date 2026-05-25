@@ -374,7 +374,6 @@ function App() {
   const [rsError, setRsError] = useState('')
   const [rsLoading, setRsLoading] = useState(false)
   const [rsVolume, setRsVolume] = useState(getStoredRadioSetVolume)
-  const [rsNowPlayingCall, setRsNowPlayingCall] = useState<Call | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const rsVolumeRef = useRef(rsVolume)
 
@@ -763,9 +762,6 @@ function App() {
     }
   }, [rsVolume])
 
-  useEffect(() => {
-    if (!rsPlayingID) setRsNowPlayingCall(null)
-  }, [rsPlayingID])
 
   const ws = useMemo(
     () =>
@@ -794,7 +790,6 @@ function App() {
               playCall,
               setPlayingId,
               setRadioSets,
-              setRsNowPlayingCall,
               setRsPlayingID,
             })
 
@@ -2022,7 +2017,6 @@ function App() {
           rsError={rsError}
           rsLoading={rsLoading}
           rsName={rsName}
-          rsNowPlayingCall={rsNowPlayingCall}
           rsPlayingID={rsPlayingID}
           rsTGSearch={rsTGSearch}
           rsVolume={rsVolume}

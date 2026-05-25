@@ -127,14 +127,14 @@ export function CallRow({
         {fmtFreq(call.frequency)}
       </td>
       <td className="py-2 px-3 tabular-nums text-console-muted">{fmtDur(call.duration)}</td>
-      <td className="py-2 px-3 max-w-[300px] text-console-muted" title={call.transcriptText || call.transcriptStatus || ''}>
-        <div className="flex items-start gap-2 min-w-0">
+      <td className="py-2 px-3 text-console-muted">
+        <div className="flex items-start gap-2">
           {transcriptState && (
             <span className={`flex-shrink-0 px-1.5 py-0.5 border rounded text-[9px] leading-none tabular-nums mt-0.5 ${transcriptState.className}`}>
               {transcriptState.label}
             </span>
           )}
-          <span className={`line-clamp-2 break-words whitespace-normal ${call.transcriptText ? 'text-console-text' : ''}`}>{transcript}</span>
+          <span className={`break-words whitespace-normal leading-relaxed ${call.transcriptText ? 'text-console-text' : ''}`}>{transcript}</span>
         </div>
       </td>
       <td className="py-2 px-3">

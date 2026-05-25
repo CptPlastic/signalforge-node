@@ -6,7 +6,6 @@ type MaybePlayActiveRadioSetCallArgs = Readonly<{
   playCall: (call: Call) => void
   setPlayingId: Dispatch<SetStateAction<number | null>>
   setRadioSets: Dispatch<SetStateAction<RadioSet[]>>
-  setRsNowPlayingCall: Dispatch<SetStateAction<Call | null>>
   setRsPlayingID: Dispatch<SetStateAction<string | null>>
 }>
 
@@ -15,7 +14,6 @@ export function maybePlayActiveRadioSetCall({
   playCall,
   setPlayingId,
   setRadioSets,
-  setRsNowPlayingCall,
   setRsPlayingID,
 }: MaybePlayActiveRadioSetCallArgs) {
   setRsPlayingID((activeID) => {
@@ -26,7 +24,6 @@ export function maybePlayActiveRadioSetCall({
           setPlayingId((currentPlaying) => {
             if (!currentPlaying) {
               playCall(call)
-              setRsNowPlayingCall(call)
             }
             return currentPlaying
           })
