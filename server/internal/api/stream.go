@@ -23,6 +23,7 @@ type streamCallMeta struct {
 	Frequency      int     `json:"frequency"`
 	SystemLabel    string  `json:"systemLabel"`
 	AudioType      string  `json:"audioType"`
+	TranscriptText string  `json:"transcriptText,omitempty"`
 }
 
 type streamChunk struct {
@@ -61,6 +62,7 @@ func (sh *streamHub) push(call *database.Call, audio []byte) {
 		Frequency:      call.Frequency,
 		SystemLabel:    call.SystemLabel,
 		AudioType:      call.AudioType,
+		TranscriptText: call.TranscriptText,
 	}
 	chunk := streamChunk{audio: audio, meta: meta}
 
@@ -151,6 +153,7 @@ type playerWSCallMsg struct {
 	Frequency      int     `json:"frequency"`
 	SystemLabel    string  `json:"systemLabel"`
 	AudioType      string  `json:"audioType"`
+	TranscriptText string  `json:"transcriptText,omitempty"`
 	Audio          []byte  `json:"audio"` // base64-encoded in JSON output
 }
 
@@ -207,6 +210,7 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 			Frequency:      meta.Frequency,
 			SystemLabel:    meta.SystemLabel,
 			AudioType:      meta.AudioType,
+			TranscriptText: meta.TranscriptText,
 			Audio:          audio,
 		}
 		data, err := json.Marshal(msg)
@@ -239,6 +243,7 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 					Frequency:      c.Frequency,
 					SystemLabel:    c.SystemLabel,
 					AudioType:      c.AudioType,
+					TranscriptText: c.TranscriptText,
 				}
 				if err := sendCall(meta, audio); err != nil {
 					return
@@ -325,7 +330,6 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
 .log-hdr{display:grid;grid-template-columns:52px 80px 1fr;padding:.28rem .75rem;background:#080808;border-bottom:1px solid #111}
 .log-hdr span,.log-cell{font-size:9px;text-transform:uppercase;letter-spacing:.1em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .log-hdr span{color:#1e1e1e}
-.log-row{display:grid;grid-template-columns:52px 80px 1fr;padding:.28rem .75rem;border-bottom:1px solid #0e0e0e}
 .log-row:last-child{border-bottom:none}
 .log-row.flash{background:#0b1a10}
 #log-body{flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none}
@@ -350,6 +354,11 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
 .copy-btn{background:none;border:1px solid #1a1a1a;color:#2a2a2a;font-family:inherit;font-size:9px;text-transform:uppercase;letter-spacing:.1em;cursor:pointer;padding:.2rem .5rem;border-radius:2px;flex-shrink:0;transition:border-color .1s,color .1s}
 .copy-btn:hover{border-color:#555;color:#555}
 .copy-btn.ok{border-color:#7df7ae;color:#7df7ae}
+.disp-transcript{font-size:9px;color:#3a3a3a;margin-top:.35rem;letter-spacing:.03em;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;line-height:1.5;word-break:break-word}
+.log-row{display:grid;grid-template-columns:52px 80px 1fr;padding:.28rem .75rem;border-bottom:1px solid #0e0e0e;align-items:start}
+.log-tg-cell{overflow:hidden;min-width:0}
+.log-tg{font-size:10px;color:#484848;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.log-transcript{font-size:8px;color:#2c2c2c;white-space:normal;word-break:break-word;letter-spacing:.02em;line-height:1.35;margin-top:2px;display:block}
 </style>
 </head>
 <body>
@@ -370,6 +379,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
         <span class="disp-label" id="disp-label"></span><span class="cursor" id="cur"></span>
       </div>
       <div class="disp-freq" id="disp-freq"></div>
+      <div class="disp-transcript" id="disp-transcript"></div>
     </div>
   </div>
   <div class="log-table">
@@ -474,7 +484,10 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
       return '<div class="log-row' + (c.flash ? ' flash' : '') + '">' +
         '<span class="log-cell log-time">' + esc(c.time) + '</span>' +
         '<span class="log-cell log-sys">' + esc(c.sys) + '</span>' +
-        '<span class="log-cell log-tg">' + esc(c.tg) + '</span>' +
+        '<span class="log-tg-cell">' +
+          '<span class="log-tg">' + esc(c.tg) + '</span>' +
+          (c.transcript ? '<span class="log-transcript">' + esc(c.transcript) + '</span>' : '') +
+        '</span>' +
         '</div>';
     });
     document.getElementById('log-body').innerHTML = rows.join('');
@@ -495,6 +508,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     if (meta.frequency) freq.push((meta.frequency / 1e6).toFixed(4) + ' MHz');
     if (meta.duration) freq.push(meta.duration.toFixed(1) + 's');
     document.getElementById('disp-freq').textContent = freq.join('  \u00b7  ');
+    document.getElementById('disp-transcript').textContent = meta.transcriptText || '';
 
     typeText((meta.talkgroupLabel || ('#' + meta.talkgroup)).toUpperCase());
 
@@ -502,7 +516,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     var timeStr = String(ts.getHours()).padStart(2,'0') + ':' +
       String(ts.getMinutes()).padStart(2,'0') + ':' +
       String(ts.getSeconds()).padStart(2,'0');
-    callLog.unshift({ time: timeStr, sys: meta.systemLabel || '-', tg: meta.talkgroupLabel || ('#' + meta.talkgroup), flash: true });
+    callLog.unshift({ time: timeStr, sys: meta.systemLabel || '-', tg: meta.talkgroupLabel || ('#' + meta.talkgroup), transcript: meta.transcriptText || '', flash: true });
     if (callLog.length > 50) callLog.pop();
     renderLog();
     setTimeout(function() { if (callLog.length) { callLog[0].flash = false; renderLog(); } }, 1800);

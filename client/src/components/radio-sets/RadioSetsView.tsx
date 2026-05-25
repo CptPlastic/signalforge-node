@@ -1,5 +1,5 @@
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
-import { api, type AuthUser, type RadioSet, type TalkgroupInfo } from '../../lib/api'
+import { api, type AuthUser, type Call, type RadioSet, type TalkgroupInfo } from '../../lib/api'
 
 type RadioSetsViewProps = Readonly<{
   authUser: AuthUser | null
@@ -15,6 +15,7 @@ type RadioSetsViewProps = Readonly<{
   rsError: string
   rsLoading: boolean
   rsName: string
+  rsNowPlayingCall: Call | null
   rsPlayingID: string | null
   rsTGSearch: string
   rsVolume: number
@@ -70,6 +71,7 @@ export function RadioSetsView({
   rsError,
   rsLoading,
   rsName,
+  rsNowPlayingCall,
   rsPlayingID,
   rsTGSearch,
   rsVolume,
@@ -321,6 +323,19 @@ export function RadioSetsView({
                         />
                         <span className="w-8 text-right tabular-nums text-console-accent">{rsVolume}%</span>
                       </label>
+                    )}
+                    {isScanning && rsNowPlayingCall && radioSet.talkgroups.includes(rsNowPlayingCall.talkgroup) && (
+                      <div className="col-span-2 border border-console-accent/30 rounded p-2 bg-console-bg/60 flex flex-col gap-1">
+                        <span className="text-[9px] text-console-muted uppercase tracking-wider">Now Playing</span>
+                        <span className="text-xs text-console-accent font-semibold truncate">
+                          {rsNowPlayingCall.talkgroupLabel || `#${rsNowPlayingCall.talkgroup}`}
+                        </span>
+                        {rsNowPlayingCall.transcriptText ? (
+                          <span className="text-[10px] text-console-text leading-relaxed break-words">{rsNowPlayingCall.transcriptText}</span>
+                        ) : rsNowPlayingCall.transcriptStatus && rsNowPlayingCall.transcriptStatus !== 'skipped' ? (
+                          <span className="text-[10px] text-console-muted">[{rsNowPlayingCall.transcriptStatus}]</span>
+                        ) : null}
+                      </div>
                     )}
                     <button
                       onClick={() => generateShareLink(radioSet.id)}
