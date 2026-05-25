@@ -34,6 +34,7 @@ function transcriptLabel(call: Call): string {
   if (call.transcriptText) return call.transcriptText
   if (call.transcriptStatus === 'processing') return '[processing]'
   if (call.transcriptStatus === 'pending') return '[queued]'
+  if (call.transcriptStatus === 'skipped') return '[skipped]'
   if (call.transcriptStatus === 'failed') return '[failed]'
   return '—'
 }
@@ -43,6 +44,7 @@ function transcriptBadge(call: Call): { label: string; className: string } | nul
   if (status === 'done') return { label: 'TX', className: 'border-console-accent text-console-accent' }
   if (status === 'processing') return { label: 'RUN', className: 'border-console-amber text-console-amber' }
   if (status === 'pending') return { label: 'QUE', className: 'border-console-amber text-console-amber' }
+  if (status === 'skipped') return { label: 'SKIP', className: 'border-console-muted text-console-muted' }
   if (status === 'failed') return { label: 'ERR', className: 'border-console-error text-console-error' }
   return null
 }

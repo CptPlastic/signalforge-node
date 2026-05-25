@@ -97,6 +97,19 @@ func (d *DB) FailTranscriptionJob(callID int64, message string) error {
 	return requireRowsAffected(result, err)
 }
 
+// SkipTranscriptionJob marks a call as intentionally skipped by worker policy.
+func (d *DB) SkipTranscriptionJob(callID int64, message string) error {
+	result, err := d.db.Exec(`
+		UPDATE call_transcripts
+		SET status = 'skipped',
+		    error = $2,
+		    claimed_by = '',
+		    claimed_until = 0,
+		    updated_at = $3
+		WHERE call_id = $1`, callID, message, time.Now().Unix())
+	return requireRowsAffected(result, err)
+}
+
 func requireRowsAffected(result sql.Result, err error) error {
 	if err != nil {
 		return err

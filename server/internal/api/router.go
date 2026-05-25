@@ -68,6 +68,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Post("/internal/transcription/jobs/claim", handle.handleClaimTranscriptionJob)
 		r.Get("/internal/transcription/jobs/{id}/audio", handle.handleTranscriptionJobAudio)
 		r.Post("/internal/transcription/jobs/{id}/complete", handle.handleCompleteTranscriptionJob)
+		r.Post("/internal/transcription/jobs/{id}/skip", handle.handleSkipTranscriptionJob)
 		r.Post("/internal/transcription/jobs/{id}/fail", handle.handleFailTranscriptionJob)
 		r.Get("/api/v1/talkgroups/distinct", handle.handleListDistinctTalkgroups)
 		r.Get("/api/v1/talkgroups/settings", handle.handleListTalkgroupSettings)

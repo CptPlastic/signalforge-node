@@ -211,6 +211,7 @@ type TranscriptStatusSummary = Readonly<{
   done: number
   pending: number
   processing: number
+  skipped: number
   failed: number
 }>
 
@@ -223,19 +224,21 @@ function summarizeTranscriptStatus(calls: Call[]): TranscriptStatusSummary {
       done: summary.done + (status === 'done' ? 1 : 0),
       pending: summary.pending + (status === 'pending' ? 1 : 0),
       processing: summary.processing + (status === 'processing' ? 1 : 0),
+      skipped: summary.skipped + (status === 'skipped' ? 1 : 0),
       failed: summary.failed + (status === 'failed' ? 1 : 0),
     }
-  }, { total: 0, done: 0, pending: 0, processing: 0, failed: 0 })
+  }, { total: 0, done: 0, pending: 0, processing: 0, skipped: 0, failed: 0 })
 }
 
 function transcriptSummaryLabel(summary: TranscriptStatusSummary): string {
   if (summary.total === 0) return ''
   const backlog = summary.pending + summary.processing + summary.failed
-  if (backlog === 0) return `TX ${summary.done}/${summary.total}`
+  if (backlog === 0) return summary.skipped > 0 ? `TX ${summary.done}/${summary.total} · ${summary.skipped} skip` : `TX ${summary.done}/${summary.total}`
   return [
     summary.done > 0 ? `${summary.done} done` : '',
     summary.pending > 0 ? `${summary.pending} queue` : '',
     summary.processing > 0 ? `${summary.processing} run` : '',
+    summary.skipped > 0 ? `${summary.skipped} skip` : '',
     summary.failed > 0 ? `${summary.failed} fail` : '',
   ].filter(Boolean).join(' · ')
 }

@@ -11,6 +11,7 @@ TRANSCRIPTION_WORKER_TOKEN=replace-with-a-long-random-value
 TRANSCRIPTION_MODEL=base
 TRANSCRIPTION_DEVICE=cpu
 TRANSCRIPTION_COMPUTE_TYPE=int8
+TRANSCRIPTION_MIN_DURATION_SECONDS=0.75
 # Optional, but useful to avoid anonymous Hugging Face rate limits during model downloads.
 HF_TOKEN=hf_your_token_here
 ```
@@ -44,7 +45,11 @@ TRANSCRIPTION_DEVICE=cpu
 TRANSCRIPTION_COMPUTE_TYPE=int8
 ```
 
-If quality is too weak, try `small`. If backlog grows faster than the worker can process, add another worker, move to a larger CPU host, or switch to a hosted transcription provider later.
+Use `TRANSCRIPTION_MODEL=tiny` on low-power hosts or while draining a large queue. If quality is too weak, try `base` or `small` once the backlog is under control.
+
+Very short scanner clips are expensive relative to their useful transcript quality. By default the worker marks clips shorter than `TRANSCRIPTION_MIN_DURATION_SECONDS=0.75` as skipped. Set it to `0` to transcribe every clip, or raise it to `1.0`/`1.5` if the queue is growing faster than the CPU can drain it.
+
+If backlog still grows faster than the worker can process, add another worker, move to a larger CPU host, or switch to a hosted transcription provider later.
 
 The model cache is stored in the `transcriber_models` Docker volume so models are not downloaded on every restart.
 
@@ -99,8 +104,9 @@ To enable transcription in Portainer/Plesk, set a strong `TRANSCRIPTION_WORKER_T
 ```env
 COMPOSE_PROFILES=transcription
 TRANSCRIPTION_WORKER_TOKEN=replace-with-a-long-random-value
-TRANSCRIPTION_MODEL=base
+TRANSCRIPTION_MODEL=tiny
 TRANSCRIPTION_COMPUTE_TYPE=int8
+TRANSCRIPTION_MIN_DURATION_SECONDS=0.75
 ```
 
 Use `TRANSCRIPTION_MODEL=tiny` for low-power testing. Keep transcription disabled on installs that cannot spare the CPU/RAM.

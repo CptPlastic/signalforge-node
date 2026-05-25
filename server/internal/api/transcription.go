@@ -151,6 +151,32 @@ func (h *handler) handleFailTranscriptionJob(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (h *handler) handleSkipTranscriptionJob(w http.ResponseWriter, r *http.Request) {
+	if !h.requireTranscriptionWorker(w, r) {
+		return
+	}
+	callID, ok := transcriptionJobID(w, r)
+	if !ok {
+		return
+	}
+
+	var req failTranscriptionJobRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, invalidJSONMessage, http.StatusBadRequest)
+		return
+	}
+	message := strings.TrimSpace(req.Error)
+	if message == "" {
+		message = "transcription skipped"
+	}
+	if err := h.db.SkipTranscriptionJob(callID, message); err != nil {
+		h.logger.Error("skip transcription job failed", "call_id", callID, "error", err)
+		http.Error(w, "skip job", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func transcriptionJobID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
