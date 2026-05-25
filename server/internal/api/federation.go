@@ -441,6 +441,9 @@ func (h *handler) importFederatedCall(peer database.HubPeer, sourceLabels map[st
 		return fmt.Errorf("insert remote call %d: %w", remoteCallID, err)
 	}
 	call.ID = localCallID
+	if h.cfg.TranscriptionWorkerToken != "" {
+		call.TranscriptStatus = "pending"
+	}
 	inserted, err := h.db.RecordFederatedCallImport(peer.HubID, remoteCallID, localCallID)
 	if err != nil {
 		return fmt.Errorf("record remote call %d import: %w", remoteCallID, err)

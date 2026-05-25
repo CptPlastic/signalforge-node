@@ -481,13 +481,11 @@ function App() {
   }
 
   const mergeCalls = (existing: Call[], incoming: Call[]): Call[] => {
-  const merged = [...existing]
-  const seen = new Set(existing.map((call) => call.id))
+  const byID = new Map(existing.map((call) => [call.id, call]))
   for (const call of incoming) {
-    if (seen.has(call.id)) continue
-    merged.push(call)
-    seen.add(call.id)
+    byID.set(call.id, { ...byID.get(call.id), ...call })
   }
+  const merged = Array.from(byID.values())
   merged.sort((a, b) => b.dateTime - a.dateTime)
   return merged.slice(0, 500)
   }
