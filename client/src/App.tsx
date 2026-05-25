@@ -2098,7 +2098,7 @@ function App() {
                   } else if (loadingSharesFor === source.id) {
                     sourceShareStatus = 'LOADING...'
                   }
-                  let keyPanel: JSX.Element
+                  let keyPanel
 
                   if (loadingKeysFor === source.id) {
                     keyPanel = <div className="text-console-muted">Loading keys...</div>
