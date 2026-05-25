@@ -41,6 +41,7 @@ services:
       HUB_DIRECTORY_URL: ${HUB_DIRECTORY_URL:-https://signalforge.org/directory/hubs.json}
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
       TRANSCRIPTION_WORKER_TOKEN: ${TRANSCRIPTION_WORKER_TOKEN:-}
+      TRANSCRIPTION_MIN_DURATION_SECONDS: ${TRANSCRIPTION_MIN_DURATION_SECONDS:-0.75}
     depends_on:
       postgres:
         condition: service_healthy

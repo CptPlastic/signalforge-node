@@ -30,6 +30,7 @@ type Config struct {
 	HubDirectoryURL          string
 	UpdateCheckURL           string
 	TranscriptionWorkerToken string
+	TranscriptionMinDuration float64
 	LogLevel                 slog.Level
 }
 
@@ -58,6 +59,7 @@ func Load() (Config, error) {
 		HubDirectoryURL:          strings.TrimSpace(getEnv("HUB_DIRECTORY_URL", "https://signalforge.org/directory/hubs.json")),
 		UpdateCheckURL:           strings.TrimSpace(getEnv("UPDATE_CHECK_URL", "https://signalforge.org/p7-scanner-update.json")),
 		TranscriptionWorkerToken: strings.TrimSpace(getEnv("TRANSCRIPTION_WORKER_TOKEN", "")),
+		TranscriptionMinDuration: getFloat64Env("TRANSCRIPTION_MIN_DURATION_SECONDS", 0.75),
 	}
 
 	logLevel := getEnv("LOG_LEVEL", "info")
@@ -106,6 +108,18 @@ func getInt64Env(key string, fallback int64) int64 {
 	}
 	var parsed int64
 	if _, err := fmt.Sscanf(value, "%d", &parsed); err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func getFloat64Env(key string, fallback float64) float64 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	var parsed float64
+	if _, err := fmt.Sscanf(value, "%f", &parsed); err != nil {
 		return fallback
 	}
 	return parsed

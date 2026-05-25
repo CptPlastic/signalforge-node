@@ -181,9 +181,7 @@ func (h *handler) handleCallUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	call.ID = id
-	if h.cfg.TranscriptionWorkerToken != "" {
-		call.TranscriptStatus = "pending"
-	}
+	h.prepareInsertedCallTranscriptStatus(call)
 	_ = h.db.IncrementSourceMetrics(metricsSourceID, true)
 
 	h.logger.Info("call received",

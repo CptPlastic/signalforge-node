@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -16,6 +17,26 @@ func (d *DB) EnsureTranscriptionQueueRows() error {
 			SELECT 1 FROM call_transcripts ct WHERE ct.call_id = c.id
 		)
 		ON CONFLICT (call_id) DO NOTHING`, now)
+	return err
+}
+
+// SkipShortPendingTranscriptionJobs marks too-short pending calls as skipped before workers claim them.
+func (d *DB) SkipShortPendingTranscriptionJobs(minDurationSeconds float64) error {
+	if minDurationSeconds <= 0 {
+		return nil
+	}
+	_, err := d.db.Exec(`
+		UPDATE call_transcripts ct
+		SET status = 'skipped',
+		    error = $2,
+		    claimed_by = '',
+		    claimed_until = 0,
+		    updated_at = $3
+		FROM calls c
+		WHERE ct.call_id = c.id
+		  AND ct.status = 'pending'
+		  AND c.duration > 0
+		  AND c.duration < $1`, minDurationSeconds, shortTranscriptionSkipMessage(minDurationSeconds), time.Now().Unix())
 	return err
 }
 
@@ -108,6 +129,10 @@ func (d *DB) SkipTranscriptionJob(callID int64, message string) error {
 		    updated_at = $3
 		WHERE call_id = $1`, callID, message, time.Now().Unix())
 	return requireRowsAffected(result, err)
+}
+
+func shortTranscriptionSkipMessage(minDurationSeconds float64) string {
+	return fmt.Sprintf("audio duration below %.1fs minimum", minDurationSeconds)
 }
 
 func requireRowsAffected(result sql.Result, err error) error {

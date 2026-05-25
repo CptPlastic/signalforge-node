@@ -47,7 +47,7 @@ TRANSCRIPTION_COMPUTE_TYPE=int8
 
 Use `TRANSCRIPTION_MODEL=tiny` on low-power hosts or while draining a large queue. If quality is too weak, try `base` or `small` once the backlog is under control.
 
-Very short scanner clips are expensive relative to their useful transcript quality. By default the worker marks clips shorter than `TRANSCRIPTION_MIN_DURATION_SECONDS=0.75` as skipped. Set it to `0` to transcribe every clip, or raise it to `1.0`/`1.5` if the queue is growing faster than the CPU can drain it.
+Very short scanner clips are expensive relative to their useful transcript quality. By default the API and worker mark clips shorter than `TRANSCRIPTION_MIN_DURATION_SECONDS=0.75` as skipped. The API applies this when calls arrive and at startup for pending backfill, so tiny clips do not sit in the visible queue. Set it to `0` to transcribe every clip, or raise it to `1.0`/`1.5` if the queue is growing faster than the CPU can drain it.
 
 If backlog still grows faster than the worker can process, add another worker, move to a larger CPU host, or switch to a hosted transcription provider later.
 

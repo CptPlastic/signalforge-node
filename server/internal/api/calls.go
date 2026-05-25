@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -147,6 +148,26 @@ func clearTranscriptStatus(calls []database.Call) {
 		calls[i].TranscriptStatus = ""
 		calls[i].TranscriptProvider = ""
 	}
+}
+
+func (h *handler) prepareInsertedCallTranscriptStatus(call *database.Call) {
+	if h.cfg.TranscriptionWorkerToken == "" {
+		call.TranscriptText = ""
+		call.TranscriptStatus = ""
+		call.TranscriptProvider = ""
+		return
+	}
+	if h.cfg.TranscriptionMinDuration > 0 && call.Duration > 0 && call.Duration < h.cfg.TranscriptionMinDuration {
+		message := fmt.Sprintf("audio duration %.1fs below %.1fs minimum", call.Duration, h.cfg.TranscriptionMinDuration)
+		if err := h.db.SkipTranscriptionJob(call.ID, message); err != nil {
+			h.logger.Error("skip short transcription job failed", "call_id", call.ID, "duration", call.Duration, "error", err)
+			call.TranscriptStatus = "pending"
+			return
+		}
+		call.TranscriptStatus = "skipped"
+		return
+	}
+	call.TranscriptStatus = "pending"
 }
 
 // handleCallAudio serves the raw audio bytes for a single call.
