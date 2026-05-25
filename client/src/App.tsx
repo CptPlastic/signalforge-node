@@ -886,6 +886,7 @@ function App() {
       const saved = await api.updateTalkgroupSettings(talkgroup, {
         favorite: next.favorite,
         muted: next.muted,
+        transcribe: next.transcribe,
       })
       setSettingsMap((prev) => ({ ...prev, [talkgroup]: saved }))
     } catch (err) {
@@ -1557,6 +1558,7 @@ function App() {
       lastSeen: number
       favorite: boolean
       muted: boolean
+      transcribe: boolean
     }>()
 
     distinctTalkgroups.forEach((tg) => {
@@ -1570,6 +1572,7 @@ function App() {
         lastSeen: 0,
         favorite: setting?.favorite ?? false,
         muted: setting?.muted ?? false,
+        transcribe: setting?.transcribe ?? false,
       })
     })
 
@@ -1586,6 +1589,7 @@ function App() {
           lastSeen: call.dateTime,
           favorite: setting?.favorite ?? false,
           muted: setting?.muted ?? false,
+          transcribe: setting?.transcribe ?? false,
         })
         return
       }
@@ -1599,6 +1603,7 @@ function App() {
         lastSeen: Math.max(current.lastSeen, call.dateTime),
         favorite: setting?.favorite ?? current.favorite,
         muted: setting?.muted ?? current.muted,
+        transcribe: setting?.transcribe ?? current.transcribe,
       })
     })
 
@@ -1610,6 +1615,7 @@ function App() {
           ...current,
           favorite: setting.favorite,
           muted: setting.muted,
+          transcribe: setting.transcribe,
         })
         return
       }
@@ -1623,6 +1629,7 @@ function App() {
         lastSeen: 0,
         favorite: setting.favorite,
         muted: setting.muted,
+        transcribe: setting.transcribe,
       })
     })
 
@@ -1939,6 +1946,7 @@ function App() {
                             talkgroup: call.talkgroup,
                             favorite: !(current?.favorite ?? false),
                             muted: current?.muted ?? false,
+                            transcribe: current?.transcribe ?? false,
                             updatedAt: Date.now() / 1000,
                           }))
                         }
@@ -1947,6 +1955,7 @@ function App() {
                             talkgroup: call.talkgroup,
                             favorite: current?.favorite ?? false,
                             muted: !(current?.muted ?? false),
+                            transcribe: current?.transcribe ?? false,
                             updatedAt: Date.now() / 1000,
                           }))
                         }
@@ -2311,6 +2320,7 @@ function App() {
                               talkgroup: row.talkgroup,
                               favorite: !(current?.favorite ?? row.favorite),
                               muted: current?.muted ?? row.muted,
+                              transcribe: current?.transcribe ?? row.transcribe,
                               updatedAt: Date.now() / 1000,
                             }))
                           }
@@ -2328,6 +2338,7 @@ function App() {
                               talkgroup: row.talkgroup,
                               favorite: current?.favorite ?? row.favorite,
                               muted: !(current?.muted ?? row.muted),
+                              transcribe: current?.transcribe ?? row.transcribe,
                               updatedAt: Date.now() / 1000,
                             }))
                           }
@@ -2338,6 +2349,25 @@ function App() {
                           }`}
                         >
                           M
+                        </button>
+                        <button
+                          onClick={() =>
+                            updateTalkgroupSetting(row.talkgroup, (current) => ({
+                              talkgroup: row.talkgroup,
+                              favorite: current?.favorite ?? row.favorite,
+                              muted: current?.muted ?? row.muted,
+                              transcribe: !(current?.transcribe ?? row.transcribe),
+                              updatedAt: Date.now() / 1000,
+                            }))
+                          }
+                          className={`text-[10px] px-1.5 py-0.5 border rounded ${
+                            row.transcribe
+                              ? 'border-console-accent text-console-accent'
+                              : 'border-console-border text-console-muted'
+                          }`}
+                          title={row.transcribe ? 'Transcription enabled for this talkgroup' : 'Enable transcription for this talkgroup'}
+                        >
+                          TX
                         </button>
                       </div>
                     </td>

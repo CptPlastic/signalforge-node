@@ -5,7 +5,7 @@ import "time"
 // ListTalkgroupSettings returns all saved talkgroup preferences.
 func (d *DB) ListTalkgroupSettings() ([]TalkgroupSetting, error) {
 	rows, err := d.db.Query(`
-		SELECT talkgroup, favorite, muted, updated_at
+		SELECT talkgroup, favorite, muted, transcribe, updated_at
 		FROM talkgroup_settings
 		ORDER BY talkgroup ASC`)
 	if err != nil {
@@ -16,7 +16,7 @@ func (d *DB) ListTalkgroupSettings() ([]TalkgroupSetting, error) {
 	settings := make([]TalkgroupSetting, 0)
 	for rows.Next() {
 		var s TalkgroupSetting
-		if err := rows.Scan(&s.Talkgroup, &s.Favorite, &s.Muted, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.Talkgroup, &s.Favorite, &s.Muted, &s.Transcribe, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		settings = append(settings, s)
@@ -65,14 +65,27 @@ func (d *DB) ListTalkgroupGroups(userID string, includeAll bool) ([]string, erro
 // UpsertTalkgroupSetting creates or updates a talkgroup setting row.
 func (d *DB) UpsertTalkgroupSetting(s TalkgroupSetting) error {
 	_, err := d.db.Exec(`
-		INSERT INTO talkgroup_settings (talkgroup, favorite, muted, updated_at)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO talkgroup_settings (talkgroup, favorite, muted, transcribe, updated_at)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT(talkgroup) DO UPDATE SET
 			favorite = excluded.favorite,
 			muted = excluded.muted,
+			transcribe = excluded.transcribe,
 			updated_at = excluded.updated_at
-	`, s.Talkgroup, s.Favorite, s.Muted, time.Now().Unix())
+	`, s.Talkgroup, s.Favorite, s.Muted, s.Transcribe, time.Now().Unix())
 	return err
+}
+
+// ShouldTranscribeTalkgroup applies the operator talkgroup transcription allowlist.
+func (d *DB) ShouldTranscribeTalkgroup(talkgroup int) (bool, error) {
+	var allowed bool
+	err := d.db.QueryRow(`
+		SELECT NOT EXISTS (
+			SELECT 1 FROM talkgroup_settings WHERE transcribe = TRUE
+		) OR EXISTS (
+			SELECT 1 FROM talkgroup_settings WHERE talkgroup = $1 AND transcribe = TRUE
+		)`, talkgroup).Scan(&allowed)
+	return allowed, err
 }
 
 // DeleteTalkgroup removes current stored calls and settings for a talkgroup.

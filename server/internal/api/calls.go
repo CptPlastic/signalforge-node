@@ -157,6 +157,21 @@ func (h *handler) prepareInsertedCallTranscriptStatus(call *database.Call) {
 		call.TranscriptProvider = ""
 		return
 	}
+	allowed, err := h.db.ShouldTranscribeTalkgroup(call.Talkgroup)
+	if err != nil {
+		h.logger.Error("check talkgroup transcription policy failed", "talkgroup", call.Talkgroup, "error", err)
+		call.TranscriptStatus = "pending"
+		return
+	}
+	if !allowed {
+		if err := h.db.SkipTranscriptionJob(call.ID, "talkgroup not enabled for transcription"); err != nil {
+			h.logger.Error("skip unselected talkgroup transcription job failed", "call_id", call.ID, "talkgroup", call.Talkgroup, "error", err)
+			call.TranscriptStatus = "pending"
+			return
+		}
+		call.TranscriptStatus = "skipped"
+		return
+	}
 	if h.cfg.TranscriptionMinDuration > 0 && call.Duration > 0 && call.Duration < h.cfg.TranscriptionMinDuration {
 		message := fmt.Sprintf("audio duration %.1fs below %.1fs minimum", call.Duration, h.cfg.TranscriptionMinDuration)
 		if err := h.db.SkipTranscriptionJob(call.ID, message); err != nil {

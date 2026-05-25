@@ -109,8 +109,10 @@ func (d *DB) migrate() error {
 			talkgroup   INTEGER PRIMARY KEY,
 			favorite    BOOLEAN NOT NULL DEFAULT FALSE,
 			muted       BOOLEAN NOT NULL DEFAULT FALSE,
+			transcribe  BOOLEAN NOT NULL DEFAULT FALSE,
 			updated_at  BIGINT NOT NULL
 		);
+		ALTER TABLE talkgroup_settings ADD COLUMN IF NOT EXISTS transcribe BOOLEAN NOT NULL DEFAULT FALSE;
 		CREATE TABLE IF NOT EXISTS call_transcripts (
 			call_id       BIGINT PRIMARY KEY,
 			status        TEXT NOT NULL DEFAULT 'pending',

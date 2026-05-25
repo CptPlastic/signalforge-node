@@ -40,6 +40,26 @@ func (d *DB) SkipShortPendingTranscriptionJobs(minDurationSeconds float64) error
 	return err
 }
 
+// SkipUnselectedPendingTranscriptionJobs applies the talkgroup transcription allowlist to queued calls.
+func (d *DB) SkipUnselectedPendingTranscriptionJobs() error {
+	_, err := d.db.Exec(`
+		UPDATE call_transcripts ct
+		SET status = 'skipped',
+		    error = 'talkgroup not enabled for transcription',
+		    claimed_by = '',
+		    claimed_until = 0,
+		    updated_at = $1
+		FROM calls c
+		WHERE ct.call_id = c.id
+		  AND ct.status = 'pending'
+		  AND EXISTS (SELECT 1 FROM talkgroup_settings WHERE transcribe = TRUE)
+		  AND NOT EXISTS (
+			SELECT 1 FROM talkgroup_settings ts
+			WHERE ts.talkgroup = c.talkgroup AND ts.transcribe = TRUE
+		  )`, time.Now().Unix())
+	return err
+}
+
 // ClaimTranscriptionJob leases one pending call for a transcription worker.
 func (d *DB) ClaimTranscriptionJob(workerID string, leaseSeconds int64) (*TranscriptionJob, error) {
 	if leaseSeconds <= 0 {

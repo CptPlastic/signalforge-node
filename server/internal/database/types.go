@@ -88,10 +88,11 @@ type TranscriptionJob struct {
 
 // TalkgroupSetting stores per-talkgroup operator preferences.
 type TalkgroupSetting struct {
-	Talkgroup int   `json:"talkgroup"`
-	Favorite  bool  `json:"favorite"`
-	Muted     bool  `json:"muted"`
-	UpdatedAt int64 `json:"updatedAt"`
+	Talkgroup  int   `json:"talkgroup"`
+	Favorite   bool  `json:"favorite"`
+	Muted      bool  `json:"muted"`
+	Transcribe bool  `json:"transcribe"`
+	UpdatedAt  int64 `json:"updatedAt"`
 }
 
 // IngestionSource represents a scanner ingestion source (e.g., SDRTrunk, mock sender).

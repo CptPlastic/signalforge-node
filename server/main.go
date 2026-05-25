@@ -48,6 +48,10 @@ func main() {
 			logger.Error("failed to prepare transcription queue", "error", err)
 			os.Exit(1)
 		}
+		if err := db.SkipUnselectedPendingTranscriptionJobs(); err != nil {
+			logger.Error("failed to apply talkgroup transcription policy", "error", err)
+			os.Exit(1)
+		}
 		if cfg.TranscriptionMinDuration > 0 {
 			if err := db.SkipShortPendingTranscriptionJobs(cfg.TranscriptionMinDuration); err != nil {
 				logger.Error("failed to skip short transcription jobs", "error", err)

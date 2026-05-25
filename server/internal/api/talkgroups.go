@@ -25,8 +25,9 @@ func (h *handler) handleListTalkgroupSettings(w http.ResponseWriter, r *http.Req
 }
 
 type updateTalkgroupSettingsRequest struct {
-	Favorite bool `json:"favorite"`
-	Muted    bool `json:"muted"`
+	Favorite   bool `json:"favorite"`
+	Muted      bool `json:"muted"`
+	Transcribe bool `json:"transcribe"`
 }
 
 func (h *handler) handleUpsertTalkgroupSettings(w http.ResponseWriter, r *http.Request) {
@@ -47,15 +48,23 @@ func (h *handler) handleUpsertTalkgroupSettings(w http.ResponseWriter, r *http.R
 	}
 
 	s := database.TalkgroupSetting{
-		Talkgroup: talkgroup,
-		Favorite:  req.Favorite,
-		Muted:     req.Muted,
-		UpdatedAt: time.Now().Unix(),
+		Talkgroup:  talkgroup,
+		Favorite:   req.Favorite,
+		Muted:      req.Muted,
+		Transcribe: req.Transcribe,
+		UpdatedAt:  time.Now().Unix(),
 	}
 	if err := h.db.UpsertTalkgroupSetting(s); err != nil {
 		h.logger.Error("upsert talkgroup settings failed", "error", err)
 		http.Error(w, "save talkgroup settings", http.StatusInternalServerError)
 		return
+	}
+	if h.cfg.TranscriptionWorkerToken != "" {
+		if err := h.db.SkipUnselectedPendingTranscriptionJobs(); err != nil {
+			h.logger.Error("apply talkgroup transcription policy failed", "error", err)
+			http.Error(w, "apply transcription policy", http.StatusInternalServerError)
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, s)
 }

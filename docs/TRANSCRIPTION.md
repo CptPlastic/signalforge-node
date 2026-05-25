@@ -52,6 +52,8 @@ Very short scanner clips are expensive relative to their useful transcript quali
 
 If the monitored system is English-only, set `TRANSCRIPTION_LANGUAGE=en` to skip automatic language detection. On CPU-only hosts, leave `TRANSCRIPTION_CPU_THREADS=0` for faster-whisper auto tuning, or set it to the number of CPU cores you want the worker to use.
 
+Use the Talkgroups screen to choose which talkgroups are eligible for transcription. The `TX` flag is an allowlist: while no talkgroups have `TX` enabled, all talkgroups are eligible. As soon as one or more talkgroups have `TX` enabled, all other pending and new calls are marked skipped instead of being transcribed.
+
 If backlog still grows faster than the worker can process, add another worker, move to a larger CPU host, or switch to a hosted transcription provider later.
 
 The model cache is stored in the `transcriber_models` Docker volume so models are not downloaded on every restart.

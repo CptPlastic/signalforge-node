@@ -132,6 +132,7 @@ export type TalkgroupSetting = {
   talkgroup: number
   favorite: boolean
   muted: boolean
+  transcribe: boolean
   updatedAt: number
 }
 
@@ -313,7 +314,7 @@ export const api = {
   calls: (params?: CallQuery) => request<Call[]>(`/api/v1/calls${buildQuery(params ?? { limit: 100 })}`),
   callGroups: () => request<string[]>('/api/v1/calls/groups'),
   talkgroupSettings: () => request<TalkgroupSetting[]>('/api/v1/talkgroups/settings'),
-  updateTalkgroupSettings: (talkgroup: number, setting: { favorite: boolean; muted: boolean }) =>
+  updateTalkgroupSettings: (talkgroup: number, setting: { favorite: boolean; muted: boolean; transcribe: boolean }) =>
     request<TalkgroupSetting>(`/api/v1/talkgroups/${talkgroup}/settings`, {
       method: 'PUT',
       body: JSON.stringify(setting),
