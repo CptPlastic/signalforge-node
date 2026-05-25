@@ -51,22 +51,39 @@ type HubPeer struct {
 
 // Call is a single decoded radio call stored by the server.
 type Call struct {
-	ID             int64   `json:"id"`
-	UserID         string  `json:"userId,omitempty"`
-	SourceID       string  `json:"sourceId,omitempty"`
-	Redacted       bool    `json:"redacted,omitempty"`
-	DateTime       int64   `json:"dateTime"`
-	System         int     `json:"system"`
+	ID                 int64   `json:"id"`
+	UserID             string  `json:"userId,omitempty"`
+	SourceID           string  `json:"sourceId,omitempty"`
+	Redacted           bool    `json:"redacted,omitempty"`
+	DateTime           int64   `json:"dateTime"`
+	System             int     `json:"system"`
+	SystemLabel        string  `json:"systemLabel"`
+	Talkgroup          int     `json:"talkgroup"`
+	TalkgroupLabel     string  `json:"talkgroupLabel"`
+	TalkgroupGroup     string  `json:"talkgroupGroup"`
+	TalkgroupTag       string  `json:"talkgroupTag"`
+	Frequency          int     `json:"frequency"`
+	Duration           float64 `json:"duration"`
+	AudioName          string  `json:"audioName"`
+	AudioType          string  `json:"audioType"`
+	TranscriptText     string  `json:"transcriptText,omitempty"`
+	TranscriptStatus   string  `json:"transcriptStatus,omitempty"`
+	TranscriptProvider string  `json:"transcriptProvider,omitempty"`
+	CreatedAt          int64   `json:"createdAt"`
+}
+
+// TranscriptionJob is a queued call ready for an external worker.
+type TranscriptionJob struct {
+	CallID         int64   `json:"callId"`
+	AudioName      string  `json:"audioName"`
+	AudioType      string  `json:"audioType"`
+	Duration       float64 `json:"duration"`
 	SystemLabel    string  `json:"systemLabel"`
 	Talkgroup      int     `json:"talkgroup"`
 	TalkgroupLabel string  `json:"talkgroupLabel"`
 	TalkgroupGroup string  `json:"talkgroupGroup"`
-	TalkgroupTag   string  `json:"talkgroupTag"`
-	Frequency      int     `json:"frequency"`
-	Duration       float64 `json:"duration"`
-	AudioName      string  `json:"audioName"`
-	AudioType      string  `json:"audioType"`
-	CreatedAt      int64   `json:"createdAt"`
+	Attempts       int     `json:"attempts"`
+	ClaimedUntil   int64   `json:"claimedUntil"`
 }
 
 // TalkgroupSetting stores per-talkgroup operator preferences.

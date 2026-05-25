@@ -46,6 +46,9 @@ export type Call = {
   duration: number
   audioName: string
   audioType: string
+  transcriptText?: string
+  transcriptStatus?: string
+  transcriptProvider?: string
   createdAt: number
 }
 

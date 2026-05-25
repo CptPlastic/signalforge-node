@@ -30,6 +30,14 @@ function getRowClass(active: boolean, playing: boolean): string {
   return 'border-console-border hover:bg-console-surface/60'
 }
 
+function transcriptLabel(call: Call): string {
+  if (call.transcriptText) return call.transcriptText
+  if (call.transcriptStatus === 'processing') return '[processing]'
+  if (call.transcriptStatus === 'pending') return '[queued]'
+  if (call.transcriptStatus === 'failed') return '[failed]'
+  return '—'
+}
+
 export function CallRow({
   call,
   active,
@@ -47,6 +55,7 @@ export function CallRow({
   const playAriaLabel = playing ? 'playing' : 'play call'
   const statusLabel = getStatusLabel(active, playing)
   const rowClass = getRowClass(active, playing)
+  const transcript = transcriptLabel(call)
 
   return (
     <tr
@@ -106,6 +115,9 @@ export function CallRow({
         {fmtFreq(call.frequency)}
       </td>
       <td className="py-2 px-3 tabular-nums text-console-muted">{fmtDur(call.duration)}</td>
+      <td className="py-2 px-3 max-w-[260px] truncate text-console-muted" title={call.transcriptText || call.transcriptStatus || ''}>
+        {call.transcriptText ? <span className="text-console-text">{transcript}</span> : transcript}
+      </td>
       <td className="py-2 px-3">
         <div className="flex items-center gap-1.5">
           <button

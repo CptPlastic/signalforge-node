@@ -1470,7 +1470,7 @@ function App() {
   }
 
   function exportCSV() {
-    const headers = ['ID', 'DateTime', 'System', 'SystemLabel', 'Talkgroup', 'TalkgroupLabel', 'TalkgroupGroup', 'TalkgroupTag', 'Frequency(Hz)', 'Duration(s)']
+    const headers = ['ID', 'DateTime', 'System', 'SystemLabel', 'Talkgroup', 'TalkgroupLabel', 'TalkgroupGroup', 'TalkgroupTag', 'Frequency(Hz)', 'Duration(s)', 'Transcript']
     const rows = filteredCalls.map((c) => [
       c.id,
       new Date(c.dateTime * 1000).toISOString(),
@@ -1482,6 +1482,7 @@ function App() {
       c.talkgroupTag,
       c.frequency,
       c.duration.toFixed(1),
+      c.transcriptText ?? '',
     ])
     const csv = [headers, ...rows]
       .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
@@ -1862,6 +1863,7 @@ function App() {
                       <th className="py-1.5 px-3 text-left font-normal">System</th>
                       <th className="py-1.5 px-3 text-left font-normal">Frequency</th>
                       <th className="py-1.5 px-3 text-left font-normal">Dur</th>
+                      <th className="py-1.5 px-3 text-left font-normal">Transcript</th>
                       <th className="py-1.5 px-3 text-left font-normal">Audio</th>
                     </tr>
                   </thead>

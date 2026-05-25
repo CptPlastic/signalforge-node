@@ -10,7 +10,13 @@ import (
 // InsertCall stores a new call and returns its generated ID.
 func (d *DB) InsertCall(c *Call, audio []byte) (int64, error) {
 	var id int64
-	err := d.db.QueryRow(`
+	tx, err := d.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	err = tx.QueryRow(`
 		INSERT INTO calls
 			(user_id, source_id, datetime, system, system_label, talkgroup, talkgroup_label,
 			 talkgroup_group, talkgroup_tag, frequency, duration,
@@ -22,6 +28,15 @@ func (d *DB) InsertCall(c *Call, audio []byte) (int64, error) {
 		c.AudioName, c.AudioType, audio, time.Now().Unix(),
 	).Scan(&id)
 	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO call_transcripts (call_id, status, created_at, updated_at)
+		VALUES ($1, 'pending', $2, $2)
+		ON CONFLICT (call_id) DO NOTHING`, id, time.Now().Unix()); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 	return id, nil
@@ -125,19 +140,20 @@ func (d *DB) ListCalls(params ListCallsParams) ([]Call, error) {
 	orderByClause := normalizeListCallsSort(params)
 
 	baseQuery := `
-		SELECT id, COALESCE(user_id, ''), COALESCE(source_id, ''), datetime, system, system_label, talkgroup, talkgroup_label,
-		       talkgroup_group, talkgroup_tag, frequency, duration,
-		       audio_name, audio_type, created_at
-		FROM calls`
+		SELECT c.id, COALESCE(c.user_id, ''), COALESCE(c.source_id, ''), c.datetime, c.system, c.system_label, c.talkgroup, c.talkgroup_label,
+		       c.talkgroup_group, c.talkgroup_tag, c.frequency, c.duration,
+		       c.audio_name, c.audio_type, COALESCE(ct.transcript, ''), COALESCE(ct.status, ''), COALESCE(ct.provider, ''), c.created_at
+		FROM calls c
+		LEFT JOIN call_transcripts ct ON ct.call_id = c.id`
 	args := make([]any, 0, 4)
 	argPos := 1
 	filters := make([]string, 0, 2)
 	if params.UserID != "" {
-		filters = append(filters, fmt.Sprintf("(user_id = $%d OR user_id IS NULL)", argPos))
+		filters = append(filters, fmt.Sprintf("(c.user_id = $%d OR c.user_id IS NULL)", argPos))
 		args = append(args, params.UserID)
 		argPos += 1
 	} else if params.OnlyUnowned {
-		filters = append(filters, "user_id IS NULL")
+		filters = append(filters, "c.user_id IS NULL")
 	}
 	appendSearchFilter(params.Search, &filters, &args, &argPos)
 	appendTalkgroupsFilter(params.Talkgroups, &filters, &args, &argPos)
@@ -161,7 +177,7 @@ func (d *DB) ListCalls(params ListCallsParams) ([]Call, error) {
 		if err := rows.Scan(
 			&c.ID, &c.UserID, &c.SourceID, &c.DateTime, &c.System, &c.SystemLabel,
 			&c.Talkgroup, &c.TalkgroupLabel, &c.TalkgroupGroup, &c.TalkgroupTag,
-			&c.Frequency, &c.Duration, &c.AudioName, &c.AudioType, &c.CreatedAt,
+			&c.Frequency, &c.Duration, &c.AudioName, &c.AudioType, &c.TranscriptText, &c.TranscriptStatus, &c.TranscriptProvider, &c.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -183,38 +199,31 @@ func normalizeListCallsPaging(params ListCallsParams) (int, int) {
 }
 
 func normalizeListCallsSort(params ListCallsParams) string {
+	sortKey := strings.ToLower(params.SortBy)
 	sortBy := map[string]string{
-		"datetime":  "datetime",
-		"duration":  "duration",
-		"frequency": "frequency",
-		"talkgroup": "talkgroup",
-	}[strings.ToLower(params.SortBy)]
+		"datetime":  "c.datetime",
+		"duration":  "c.duration",
+		"frequency": "c.frequency",
+		"talkgroup": "c.talkgroup",
+	}[sortKey]
 	if sortBy == "" {
-		sortBy = "datetime"
+		sortBy = "c.datetime"
 	}
 
 	if strings.ToUpper(params.Order) == "ASC" {
-		switch sortBy {
-		case "duration":
-			return "duration ASC"
-		case "frequency":
-			return "frequency ASC"
-		case "talkgroup":
-			return "talkgroup ASC"
+		switch sortKey {
+		case "duration", "frequency", "talkgroup":
+			return sortBy + " ASC"
 		default:
-			return "datetime ASC"
+			return "c.datetime ASC"
 		}
 	}
 
-	switch sortBy {
-	case "duration":
-		return "duration DESC"
-	case "frequency":
-		return "frequency DESC"
-	case "talkgroup":
-		return "talkgroup DESC"
+	switch sortKey {
+	case "duration", "frequency", "talkgroup":
+		return sortBy + " DESC"
 	default:
-		return "datetime DESC"
+		return "c.datetime DESC"
 	}
 }
 
@@ -228,10 +237,11 @@ func appendSearchFilter(search string, filters *[]string, args *[]any, argPos *i
 	p3 := fmt.Sprintf("$%d", *argPos+2)
 	p4 := fmt.Sprintf("$%d", *argPos+3)
 	*filters = append(*filters,
-		`(LOWER(system_label) LIKE LOWER(`+p1+`)
-	   OR LOWER(talkgroup_label) LIKE LOWER(`+p2+`)
-	   OR LOWER(talkgroup_group) LIKE LOWER(`+p3+`)
-	   OR CAST(talkgroup AS TEXT) LIKE `+p4+`)`)
+		`(LOWER(c.system_label) LIKE LOWER(`+p1+`)
+	   OR LOWER(c.talkgroup_label) LIKE LOWER(`+p2+`)
+	   OR LOWER(c.talkgroup_group) LIKE LOWER(`+p3+`)
+	   OR CAST(c.talkgroup AS TEXT) LIKE `+p4+`
+	   OR LOWER(COALESCE(ct.transcript, '')) LIKE LOWER(`+p1+`))`)
 	pattern := "%" + value + "%"
 	*args = append(*args, pattern, pattern, pattern, pattern)
 	*argPos += 4
@@ -247,7 +257,7 @@ func appendTalkgroupsFilter(talkgroups []int, filters *[]string, args *[]any, ar
 		*args = append(*args, tg)
 		(*argPos)++
 	}
-	*filters = append(*filters, "talkgroup IN ("+strings.Join(placeholders, ",")+")")
+	*filters = append(*filters, "c.talkgroup IN ("+strings.Join(placeholders, ",")+")")
 }
 
 func appendGroupFilter(group string, filters *[]string, args *[]any, argPos *int) {
@@ -255,7 +265,7 @@ func appendGroupFilter(group string, filters *[]string, args *[]any, argPos *int
 	if value == "" {
 		return
 	}
-	*filters = append(*filters, fmt.Sprintf("LOWER(talkgroup_group) LIKE LOWER($%d)", *argPos))
+	*filters = append(*filters, fmt.Sprintf("LOWER(c.talkgroup_group) LIKE LOWER($%d)", *argPos))
 	*args = append(*args, "%"+value+"%")
 	(*argPos)++
 }

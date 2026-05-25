@@ -111,6 +111,22 @@ func (d *DB) migrate() error {
 			muted       BOOLEAN NOT NULL DEFAULT FALSE,
 			updated_at  BIGINT NOT NULL
 		);
+		CREATE TABLE IF NOT EXISTS call_transcripts (
+			call_id       BIGINT PRIMARY KEY,
+			status        TEXT NOT NULL DEFAULT 'pending',
+			transcript    TEXT NOT NULL DEFAULT '',
+			provider      TEXT NOT NULL DEFAULT '',
+			language      TEXT NOT NULL DEFAULT '',
+			confidence    DOUBLE PRECISION NOT NULL DEFAULT 0,
+			error         TEXT NOT NULL DEFAULT '',
+			attempts      INTEGER NOT NULL DEFAULT 0,
+			claimed_by    TEXT NOT NULL DEFAULT '',
+			claimed_until BIGINT NOT NULL DEFAULT 0,
+			created_at    BIGINT NOT NULL,
+			updated_at    BIGINT NOT NULL,
+			FOREIGN KEY (call_id) REFERENCES calls(id) ON DELETE CASCADE
+		);
+		CREATE INDEX IF NOT EXISTS idx_call_transcripts_status_claimed ON call_transcripts(status, claimed_until, call_id);
 		CREATE TABLE IF NOT EXISTS federation_call_imports (
 			peer_hub_id    TEXT   NOT NULL,
 			remote_call_id BIGINT NOT NULL,

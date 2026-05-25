@@ -38,6 +38,7 @@ export function buildFilteredCalls({
         call.talkgroupGroup,
         call.systemLabel,
         call.talkgroupTag,
+        call.transcriptText,
       ]
         .join(' ')
         .toLowerCase()
