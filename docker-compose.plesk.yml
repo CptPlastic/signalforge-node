@@ -106,9 +106,7 @@ services:
         condition: service_healthy
 
   transcriber:
-    build:
-      context: ./transcriber
-      dockerfile: Dockerfile
+    image: ${TRANSCRIBER_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-hub-transcriber:${IMAGE_TAG:-latest}}
     restart: unless-stopped
     profiles: ["transcription"]
     environment:
@@ -119,6 +117,7 @@ services:
       TRANSCRIPTION_COMPUTE_TYPE: ${TRANSCRIPTION_COMPUTE_TYPE:-int8}
       TRANSCRIPTION_LANGUAGE: ${TRANSCRIPTION_LANGUAGE:-}
       TRANSCRIPTION_POLL_SECONDS: ${TRANSCRIPTION_POLL_SECONDS:-2}
+      HF_TOKEN: ${HF_TOKEN:-}
     volumes:
       - transcriber_models:/models
     depends_on:

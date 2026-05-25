@@ -77,3 +77,30 @@ docker build --progress=plain -t p7-scanner-transcriber:local ./transcriber
 ```
 
 After the dependency layer is cached, normal compose rebuilds should be quick.
+
+## Queue Status
+
+Transcription is optional. Installs without `TRANSCRIPTION_WORKER_TOKEN` configured hide transcript queue status in the call log, so operators who do not have enough CPU/RAM for local transcription are not shown a permanent backlog.
+
+New calls are inserted into `call_transcripts` as `pending` immediately. When `TRANSCRIPTION_WORKER_TOKEN` is configured, the API also backfills missing `call_transcripts` rows for older calls on startup so the call log can show queued, running, done, or failed instead of a blank transcript state.
+
+If a deployed instance shows some calls as queued and others with no transcript status after enabling transcription, redeploy or restart the updated API container once. To inspect the queue directly:
+
+```sh
+docker compose exec -T postgres psql -U p7scanner -d p7scanner -c "select status, count(*) from call_transcripts group by status order by status;"
+```
+
+## Portainer and Plesk
+
+The Plesk and production compose files use the published transcriber image instead of building from local source. Leave the transcription profile off for small hosts.
+
+To enable transcription in Portainer/Plesk, set a strong `TRANSCRIPTION_WORKER_TOKEN` and enable the `transcription` compose profile. In Portainer this is usually done by adding:
+
+```env
+COMPOSE_PROFILES=transcription
+TRANSCRIPTION_WORKER_TOKEN=replace-with-a-long-random-value
+TRANSCRIPTION_MODEL=base
+TRANSCRIPTION_COMPUTE_TYPE=int8
+```
+
+Use `TRANSCRIPTION_MODEL=tiny` for low-power testing. Keep transcription disabled on installs that cannot spare the CPU/RAM.

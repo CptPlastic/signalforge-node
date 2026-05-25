@@ -43,6 +43,12 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+	if cfg.TranscriptionWorkerToken != "" {
+		if err := db.EnsureTranscriptionQueueRows(); err != nil {
+			logger.Error("failed to prepare transcription queue", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	handler := api.NewRouter(logger, cfg, db)
 	srv := &http.Server{

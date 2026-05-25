@@ -81,6 +81,9 @@ func (h *handler) handleListCalls(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redactCallsForUser(h, user, calls, sourceByID, sharedSourceIDs)
+	if h.cfg.TranscriptionWorkerToken == "" {
+		clearTranscriptStatus(calls)
+	}
 	writeJSON(w, http.StatusOK, calls)
 }
 
@@ -135,6 +138,14 @@ func redactCallsForUser(h *handler, user authUser, calls []database.Call, source
 		if !h.canReadCall(user, calls[i], sourceByID, sharedSourceIDs) {
 			redactCall(&calls[i])
 		}
+	}
+}
+
+func clearTranscriptStatus(calls []database.Call) {
+	for i := range calls {
+		calls[i].TranscriptText = ""
+		calls[i].TranscriptStatus = ""
+		calls[i].TranscriptProvider = ""
 	}
 }
 

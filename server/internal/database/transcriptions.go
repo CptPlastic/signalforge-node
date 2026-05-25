@@ -5,7 +5,19 @@ import (
 	"time"
 )
 
-const transcriptionSeedBatchSize = 1000
+// EnsureTranscriptionQueueRows backfills missing queue rows for existing calls.
+func (d *DB) EnsureTranscriptionQueueRows() error {
+	now := time.Now().Unix()
+	_, err := d.db.Exec(`
+		INSERT INTO call_transcripts (call_id, status, created_at, updated_at)
+		SELECT c.id, 'pending', $1, $1
+		FROM calls c
+		WHERE NOT EXISTS (
+			SELECT 1 FROM call_transcripts ct WHERE ct.call_id = c.id
+		)
+		ON CONFLICT (call_id) DO NOTHING`, now)
+	return err
+}
 
 // ClaimTranscriptionJob leases one pending call for a transcription worker.
 func (d *DB) ClaimTranscriptionJob(workerID string, leaseSeconds int64) (*TranscriptionJob, error) {
@@ -15,16 +27,7 @@ func (d *DB) ClaimTranscriptionJob(workerID string, leaseSeconds int64) (*Transc
 	now := time.Now().Unix()
 	claimedUntil := now + leaseSeconds
 
-	if _, err := d.db.Exec(`
-		INSERT INTO call_transcripts (call_id, status, created_at, updated_at)
-		SELECT c.id, 'pending', $1, $1
-		FROM calls c
-		WHERE NOT EXISTS (
-			SELECT 1 FROM call_transcripts ct WHERE ct.call_id = c.id
-		)
-		ORDER BY c.id ASC
-		LIMIT $2
-		ON CONFLICT (call_id) DO NOTHING`, now, transcriptionSeedBatchSize); err != nil {
+	if err := d.EnsureTranscriptionQueueRows(); err != nil {
 		return nil, err
 	}
 
