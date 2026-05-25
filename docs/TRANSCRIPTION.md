@@ -12,6 +12,7 @@ TRANSCRIPTION_MODEL=base
 TRANSCRIPTION_DEVICE=cpu
 TRANSCRIPTION_COMPUTE_TYPE=int8
 TRANSCRIPTION_MIN_DURATION_SECONDS=0.75
+TRANSCRIPTION_CPU_THREADS=0
 # Optional, but useful to avoid anonymous Hugging Face rate limits during model downloads.
 HF_TOKEN=hf_your_token_here
 ```
@@ -48,6 +49,8 @@ TRANSCRIPTION_COMPUTE_TYPE=int8
 Use `TRANSCRIPTION_MODEL=tiny` on low-power hosts or while draining a large queue. If quality is too weak, try `base` or `small` once the backlog is under control.
 
 Very short scanner clips are expensive relative to their useful transcript quality. By default the API and worker mark clips shorter than `TRANSCRIPTION_MIN_DURATION_SECONDS=0.75` as skipped. The API applies this when calls arrive and at startup for pending backfill, so tiny clips do not sit in the visible queue. Set it to `0` to transcribe every clip, or raise it to `1.0`/`1.5` if the queue is growing faster than the CPU can drain it.
+
+If the monitored system is English-only, set `TRANSCRIPTION_LANGUAGE=en` to skip automatic language detection. On CPU-only hosts, leave `TRANSCRIPTION_CPU_THREADS=0` for faster-whisper auto tuning, or set it to the number of CPU cores you want the worker to use.
 
 If backlog still grows faster than the worker can process, add another worker, move to a larger CPU host, or switch to a hosted transcription provider later.
 
@@ -106,7 +109,9 @@ COMPOSE_PROFILES=transcription
 TRANSCRIPTION_WORKER_TOKEN=replace-with-a-long-random-value
 TRANSCRIPTION_MODEL=tiny
 TRANSCRIPTION_COMPUTE_TYPE=int8
+TRANSCRIPTION_LANGUAGE=en
 TRANSCRIPTION_MIN_DURATION_SECONDS=0.75
+TRANSCRIPTION_CPU_THREADS=0
 ```
 
 Use `TRANSCRIPTION_MODEL=tiny` for low-power testing. Keep transcription disabled on installs that cannot spare the CPU/RAM.
