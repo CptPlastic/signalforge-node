@@ -1217,7 +1217,7 @@ function App() {
   setUserActionID(user.id)
   setAuthError('')
   try {
-    await api.updateUser(user.id, { role: user.role, status: user.status })
+    await api.updateUser(user.id, { role: user.role, status: user.status, txEnabled: user.txEnabled })
     await refreshUsers()
   } catch (err) {
     setAuthError(getErrorMessage(err, `Could not update ${user.email}`))

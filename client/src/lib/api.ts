@@ -176,6 +176,7 @@ export type UserRecord = {
   email: string
   role: 'admin' | 'user' | 'guest'
   status: 'active' | 'pending' | 'disabled'
+  txEnabled: boolean
   createdAt: number
   updatedAt: number
 }
@@ -283,7 +284,10 @@ export const api = {
   logout: () => request<{ status: string }>('/api/v1/auth/logout', { method: 'POST' }),
   me: () => request<AuthMeResponse>('/api/v1/auth/me'),
   users: () => request<UserRecord[]>('/api/v1/users'),
-  updateUser: (id: string, payload: Pick<UserRecord, 'role' | 'status'>) =>
+  updateUser: (
+    id: string,
+    payload: Pick<UserRecord, 'role' | 'status'> & { txEnabled?: boolean },
+  ) =>
     request<{ status: string }>(`/api/v1/users/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),

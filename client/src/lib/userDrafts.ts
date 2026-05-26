@@ -7,3 +7,7 @@ export function updateUserRoleDraft(userID: string, role: UserRecord['role']) {
 export function updateUserStatusDraft(userID: string, status: UserRecord['status']) {
   return (users: UserRecord[]): UserRecord[] => users.map((user) => user.id === userID ? { ...user, status } : user)
 }
+
+export function updateUserTxEnabledDraft(userID: string, txEnabled: boolean) {
+  return (users: UserRecord[]): UserRecord[] => users.map((user) => user.id === userID ? { ...user, txEnabled } : user)
+}
