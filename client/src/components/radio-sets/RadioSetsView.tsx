@@ -1,5 +1,6 @@
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { api, type AuthUser, type RadioSet, type TalkgroupInfo } from '../../lib/api'
+import { PTTButton } from './PTTButton'
 
 type RadioSetsViewProps = Readonly<{
   authUser: AuthUser | null
@@ -321,6 +322,9 @@ export function RadioSetsView({
                         />
                         <span className="w-8 text-right tabular-nums text-console-accent">{rsVolume}%</span>
                       </label>
+                    )}
+                    {authUser?.txEnabled && radioSet.pttTalkgroup !== undefined && (
+                      <PTTButton radioSetId={radioSet.id} />
                     )}
                     <button
                       onClick={() => generateShareLink(radioSet.id)}

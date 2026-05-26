@@ -168,6 +168,7 @@ export type AuthUser = {
   id: string
   email: string
   role: 'admin' | 'user' | 'guest'
+  txEnabled?: boolean
 }
 
 export type UserRecord = {
@@ -203,6 +204,7 @@ export type RadioSet = {
   talkgroups: number[]
   sourceIds?: string[]
   shareToken?: string
+  pttTalkgroup?: number
   createdAt: number
   updatedAt: number
 }
@@ -365,4 +367,31 @@ export const api = {
     request<RadioSet>(`/api/v1/radio-sets/${encodeURIComponent(id)}/share`, { method: 'POST' }),
   revokeShareToken: (id: string) =>
     request<RadioSet>(`/api/v1/radio-sets/${encodeURIComponent(id)}/share`, { method: 'DELETE' }),
+  uploadPTT: async (
+    id: string,
+    audio: Blob,
+    durationSeconds: number,
+    clientId: string,
+  ): Promise<PTTUploadResponse> => {
+    const form = new FormData()
+    const ext = audio.type.includes('webm') ? 'webm' : audio.type.includes('mp4') ? 'm4a' : 'bin'
+    form.append('audio', audio, `ptt-${clientId}.${ext}`)
+    form.append('duration', String(durationSeconds))
+    form.append('clientId', clientId)
+    const response = await fetch(`/api/v1/radio-sets/${encodeURIComponent(id)}/ptt`, {
+      method: 'POST',
+      body: form,
+    })
+    const isJSON = response.headers.get('content-type')?.includes('application/json')
+    const body = isJSON ? await response.json() : await response.text()
+    if (!response.ok) {
+      throw new ApiError(`PTT upload failed: ${response.status}`, response.status, body)
+    }
+    return body as PTTUploadResponse
+  },
+}
+
+export type PTTUploadResponse = {
+  callId: number
+  talkgroup: number
 }
