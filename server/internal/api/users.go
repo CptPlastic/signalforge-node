@@ -15,8 +15,9 @@ const (
 )
 
 type updateUserRequest struct {
-	Role   string `json:"role"`
-	Status string `json:"status"`
+	Role      string `json:"role"`
+	Status    string `json:"status"`
+	TxEnabled *bool  `json:"txEnabled,omitempty"`
 }
 
 func normalizeUserRole(role string) string {
@@ -135,10 +136,19 @@ func (h *handler) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, userNotFoundText, http.StatusNotFound)
 		return
 	}
-	_ = h.db.AppendAuditLog(admin.ID, "admin.user_updated", "user", userID, map[string]any{
+	auditMeta := map[string]any{
 		"role":   role,
 		"status": status,
-	})
+	}
+	if req.TxEnabled != nil {
+		if _, txErr := h.db.SetUserTxEnabled(userID, *req.TxEnabled); txErr != nil {
+			h.logger.Error("update user tx_enabled failed", "user_id", userID, "error", txErr)
+			http.Error(w, updateUserError, http.StatusInternalServerError)
+			return
+		}
+		auditMeta["txEnabled"] = *req.TxEnabled
+	}
+	_ = h.db.AppendAuditLog(admin.ID, "admin.user_updated", "user", userID, auditMeta)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

@@ -213,6 +213,29 @@ func (d *DB) migrate() error {
 				ALTER TABLE ingestion_source_keys ADD CONSTRAINT ingestion_source_keys_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
 			END IF;
 		END $$;
+
+		-- PTT Phase 1: per-hub push-to-talk inside a radio set.
+		ALTER TABLE users      ADD COLUMN IF NOT EXISTS tx_enabled     BOOLEAN NOT NULL DEFAULT FALSE;
+		ALTER TABLE radio_sets ADD COLUMN IF NOT EXISTS ptt_talkgroup  INTEGER;
+		ALTER TABLE calls      ADD COLUMN IF NOT EXISTS origin         TEXT    NOT NULL DEFAULT 'rf';
+		ALTER TABLE calls      ADD COLUMN IF NOT EXISTS sender_user_id TEXT;
+		DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'calls_sender_user_id_fkey') THEN
+				ALTER TABLE calls ADD CONSTRAINT calls_sender_user_id_fkey FOREIGN KEY (sender_user_id) REFERENCES users(id);
+			END IF;
+		END $$;
+		CREATE SEQUENCE IF NOT EXISTS ptt_talkgroup_seq START 9000001;
+		-- Backfill: every existing radio set gets a unique PTT talkgroup so the
+		-- POST /ptt endpoint can rely on the column always being set.
+		UPDATE radio_sets SET ptt_talkgroup = nextval('ptt_talkgroup_seq') WHERE ptt_talkgroup IS NULL;
+		CREATE TABLE IF NOT EXISTS ptt_uploads (
+			client_id  TEXT   PRIMARY KEY,
+			call_id    BIGINT NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
+			user_id    TEXT   NOT NULL REFERENCES users(id),
+			created_at BIGINT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_ptt_uploads_user_created ON ptt_uploads(user_id, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_calls_origin ON calls(origin);
 	`)
 	return err
 }

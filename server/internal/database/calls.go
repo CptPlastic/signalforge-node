@@ -16,16 +16,20 @@ func (d *DB) InsertCall(c *Call, audio []byte) (int64, error) {
 	}
 	defer tx.Rollback()
 
+	origin := c.Origin
+	if origin == "" {
+		origin = "rf"
+	}
 	err = tx.QueryRow(`
 		INSERT INTO calls
 			(user_id, source_id, datetime, system, system_label, talkgroup, talkgroup_label,
 			 talkgroup_group, talkgroup_tag, frequency, duration,
-			 audio_name, audio_type, audio, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+			 audio_name, audio_type, audio, origin, sender_user_id, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 		RETURNING id`,
 		nullableString(c.UserID), nullableString(c.SourceID), c.DateTime, c.System, c.SystemLabel, c.Talkgroup, c.TalkgroupLabel,
 		c.TalkgroupGroup, c.TalkgroupTag, c.Frequency, c.Duration,
-		c.AudioName, c.AudioType, audio, time.Now().Unix(),
+		c.AudioName, c.AudioType, audio, origin, nullableString(c.SenderUserID), time.Now().Unix(),
 	).Scan(&id)
 	if err != nil {
 		return 0, err
@@ -142,7 +146,8 @@ func (d *DB) ListCalls(params ListCallsParams) ([]Call, error) {
 	baseQuery := `
 		SELECT c.id, COALESCE(c.user_id, ''), COALESCE(c.source_id, ''), c.datetime, c.system, c.system_label, c.talkgroup, c.talkgroup_label,
 		       c.talkgroup_group, c.talkgroup_tag, c.frequency, c.duration,
-		       c.audio_name, c.audio_type, COALESCE(ct.transcript, ''), COALESCE(ct.status, ''), COALESCE(ct.provider, ''), c.created_at
+		       c.audio_name, c.audio_type, COALESCE(ct.transcript, ''), COALESCE(ct.status, ''), COALESCE(ct.provider, ''),
+		       COALESCE(c.origin, 'rf'), COALESCE(c.sender_user_id, ''), c.created_at
 		FROM calls c
 		LEFT JOIN call_transcripts ct ON ct.call_id = c.id`
 	args := make([]any, 0, 4)
@@ -177,7 +182,8 @@ func (d *DB) ListCalls(params ListCallsParams) ([]Call, error) {
 		if err := rows.Scan(
 			&c.ID, &c.UserID, &c.SourceID, &c.DateTime, &c.System, &c.SystemLabel,
 			&c.Talkgroup, &c.TalkgroupLabel, &c.TalkgroupGroup, &c.TalkgroupTag,
-			&c.Frequency, &c.Duration, &c.AudioName, &c.AudioType, &c.TranscriptText, &c.TranscriptStatus, &c.TranscriptProvider, &c.CreatedAt,
+			&c.Frequency, &c.Duration, &c.AudioName, &c.AudioType, &c.TranscriptText, &c.TranscriptStatus, &c.TranscriptProvider,
+			&c.Origin, &c.SenderUserID, &c.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

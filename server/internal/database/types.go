@@ -69,6 +69,8 @@ type Call struct {
 	TranscriptText     string  `json:"transcriptText,omitempty"`
 	TranscriptStatus   string  `json:"transcriptStatus,omitempty"`
 	TranscriptProvider string  `json:"transcriptProvider,omitempty"`
+	Origin             string  `json:"origin,omitempty"`
+	SenderUserID       string  `json:"senderUserId,omitempty"`
 	CreatedAt          int64   `json:"createdAt"`
 }
 
@@ -117,6 +119,7 @@ type User struct {
 	Email     string `json:"email"`
 	Role      string `json:"role"`
 	Status    string `json:"status"`
+	TxEnabled bool   `json:"txEnabled"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
 }
@@ -159,14 +162,15 @@ type TalkgroupInfo struct {
 
 // RadioSet is a named, user-owned collection of talkgroup IDs used to filter the call log.
 type RadioSet struct {
-	ID         string   `json:"id"`
-	UserID     string   `json:"userId,omitempty"`
-	Name       string   `json:"name"`
-	Talkgroups []int    `json:"talkgroups"`
-	SourceIDs  []string `json:"sourceIds,omitempty"`
-	ShareToken *string  `json:"shareToken,omitempty"`
-	CreatedAt  int64    `json:"createdAt"`
-	UpdatedAt  int64    `json:"updatedAt"`
+	ID            string   `json:"id"`
+	UserID        string   `json:"userId,omitempty"`
+	Name          string   `json:"name"`
+	Talkgroups    []int    `json:"talkgroups"`
+	SourceIDs     []string `json:"sourceIds,omitempty"`
+	ShareToken    *string  `json:"shareToken,omitempty"`
+	PTTTalkgroup  *int     `json:"pttTalkgroup,omitempty"`
+	CreatedAt     int64    `json:"createdAt"`
+	UpdatedAt     int64    `json:"updatedAt"`
 }
 
 // ListCallsParams configures filtering and sorting for ListCalls.

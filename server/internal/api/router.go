@@ -81,6 +81,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Delete(radioSetByIDRoute, handle.handleDeleteRadioSet)
 		r.Post("/api/v1/radio-sets/{id}/share", handle.handleGenerateShareToken)
 		r.Delete("/api/v1/radio-sets/{id}/share", handle.handleRevokeShareToken)
+		r.Post("/api/v1/radio-sets/{id}/ptt", handle.handlePTTUpload)
 		r.Get("/api/v1/sources", handle.handleListIngestionSources)
 		r.Put("/api/v1/sources", handle.handleUpsertIngestionSource)
 		r.Delete("/api/v1/sources/{id}", handle.handleDeleteIngestionSource)

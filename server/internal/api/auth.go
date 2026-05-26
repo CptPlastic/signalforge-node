@@ -20,9 +20,10 @@ type authContextKey string
 const userContextKey authContextKey = "user"
 
 type authUser struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	ID        string `json:"id"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	TxEnabled bool   `json:"txEnabled"`
 }
 
 type requestMagicLinkBody struct {
@@ -30,7 +31,7 @@ type requestMagicLinkBody struct {
 }
 
 func toAuthUser(user database.User) authUser {
-	return authUser{ID: user.ID, Email: user.Email, Role: user.Role}
+	return authUser{ID: user.ID, Email: user.Email, Role: user.Role, TxEnabled: user.TxEnabled}
 }
 
 func getAuthUser(ctx context.Context) (authUser, bool) {

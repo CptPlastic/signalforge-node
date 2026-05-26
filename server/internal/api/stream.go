@@ -24,6 +24,8 @@ type streamCallMeta struct {
 	SystemLabel    string  `json:"systemLabel"`
 	AudioType      string  `json:"audioType"`
 	TranscriptText string  `json:"transcriptText,omitempty"`
+	Origin         string  `json:"origin,omitempty"`
+	SenderUserID   string  `json:"senderUserId,omitempty"`
 }
 
 type streamChunk struct {
@@ -63,6 +65,8 @@ func (sh *streamHub) push(call *database.Call, audio []byte) {
 		SystemLabel:    call.SystemLabel,
 		AudioType:      call.AudioType,
 		TranscriptText: call.TranscriptText,
+		Origin:         call.Origin,
+		SenderUserID:   call.SenderUserID,
 	}
 	chunk := streamChunk{audio: audio, meta: meta}
 
@@ -154,6 +158,8 @@ type playerWSCallMsg struct {
 	SystemLabel    string  `json:"systemLabel"`
 	AudioType      string  `json:"audioType"`
 	TranscriptText string  `json:"transcriptText,omitempty"`
+	Origin         string  `json:"origin,omitempty"`
+	SenderUserID   string  `json:"senderUserId,omitempty"`
 	Audio          []byte  `json:"audio"` // base64-encoded in JSON output
 }
 
@@ -194,8 +200,14 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 		"readable_sources", len(sourceIDs),
 	)
 
+	// Public-share subscribers also see PTT calls on the set's virtual PTT talkgroup.
+	subscribedTalkgroups := rs.Talkgroups
+	if rs.PTTTalkgroup != nil {
+		subscribedTalkgroups = append(append([]int(nil), rs.Talkgroups...), *rs.PTTTalkgroup)
+	}
+
 	// Subscribe before seeding so no live calls are missed during the seed phase.
-	ch, unsubscribe := h.streamHub.subscribe(rs.UserID, rs.Talkgroups, sourceIDs)
+	ch, unsubscribe := h.streamHub.subscribe(rs.UserID, subscribedTalkgroups, sourceIDs)
 	defer unsubscribe()
 
 	sendCall := func(meta streamCallMeta, audio []byte) error {
@@ -211,6 +223,8 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 			SystemLabel:    meta.SystemLabel,
 			AudioType:      meta.AudioType,
 			TranscriptText: meta.TranscriptText,
+			Origin:         meta.Origin,
+			SenderUserID:   meta.SenderUserID,
 			Audio:          audio,
 		}
 		data, err := json.Marshal(msg)
@@ -244,6 +258,8 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 					SystemLabel:    c.SystemLabel,
 					AudioType:      c.AudioType,
 					TranscriptText: c.TranscriptText,
+					Origin:         c.Origin,
+					SenderUserID:   c.SenderUserID,
 				}
 				if err := sendCall(meta, audio); err != nil {
 					return

@@ -10,6 +10,11 @@ import (
 )
 
 // CreateRadioSet inserts a new radio set owned by the given user.
+//
+// Each radio set is auto-allocated a unique PTT talkgroup ID from the
+// ptt_talkgroup_seq sequence (range 9_000_001+). This virtual TG is used by
+// the in-hub push-to-talk feature; subscribers of the set receive PTT calls
+// alongside real RF traffic.
 func (d *DB) CreateRadioSet(userID, name string, talkgroups []int) (RadioSet, error) {
 	id := randomToken("rs_")
 	now := time.Now().Unix()
@@ -17,20 +22,32 @@ func (d *DB) CreateRadioSet(userID, name string, talkgroups []int) (RadioSet, er
 	if err != nil {
 		return RadioSet{}, err
 	}
+	var pttTG int
+	if err := d.db.QueryRow(`SELECT nextval('ptt_talkgroup_seq')`).Scan(&pttTG); err != nil {
+		return RadioSet{}, fmt.Errorf("allocate ptt talkgroup: %w", err)
+	}
 	_, err = d.db.Exec(`
-		INSERT INTO radio_sets (id, user_id, name, talkgroups, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		id, userID, name, string(tgsJSON), now, now)
+		INSERT INTO radio_sets (id, user_id, name, talkgroups, ptt_talkgroup, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		id, userID, name, string(tgsJSON), pttTG, now, now)
 	if err != nil {
 		return RadioSet{}, err
 	}
-	return RadioSet{ID: id, UserID: userID, Name: name, Talkgroups: talkgroups, CreatedAt: now, UpdatedAt: now}, nil
+	return RadioSet{
+		ID:           id,
+		UserID:       userID,
+		Name:         name,
+		Talkgroups:   talkgroups,
+		PTTTalkgroup: &pttTG,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}, nil
 }
 
 // ListRadioSets returns all radio sets owned by the given user.
 func (d *DB) ListRadioSets(userID string) ([]RadioSet, error) {
 	rows, err := d.db.Query(`
-		SELECT id, user_id, name, talkgroups, share_token, created_at, updated_at
+		SELECT id, user_id, name, talkgroups, share_token, ptt_talkgroup, created_at, updated_at
 		FROM radio_sets
 		WHERE user_id = $1
 		ORDER BY created_at ASC`, userID)
@@ -52,7 +69,7 @@ func (d *DB) ListRadioSets(userID string) ([]RadioSet, error) {
 // ListAllRadioSets returns all radio sets for admin visibility.
 func (d *DB) ListAllRadioSets() ([]RadioSet, error) {
 	rows, err := d.db.Query(`
-		SELECT id, user_id, name, talkgroups, share_token, created_at, updated_at
+		SELECT id, user_id, name, talkgroups, share_token, ptt_talkgroup, created_at, updated_at
 		FROM radio_sets
 		ORDER BY created_at ASC`)
 	if err != nil {
@@ -105,7 +122,7 @@ func (d *DB) ListSourceIDsForTalkgroups(talkgroups []int) ([]string, error) {
 // GetRadioSet returns a single radio set by ID, scoped to the given user.
 func (d *DB) GetRadioSet(id, userID string) (RadioSet, bool, error) {
 	row := d.db.QueryRow(`
-		SELECT id, user_id, name, talkgroups, share_token, created_at, updated_at
+		SELECT id, user_id, name, talkgroups, share_token, ptt_talkgroup, created_at, updated_at
 		FROM radio_sets WHERE id = $1 AND user_id = $2`, id, userID)
 	rs, err := scanRadioSet(row)
 	if err != nil {
@@ -159,11 +176,16 @@ func scanRadioSet(row scannable) (RadioSet, error) {
 	var rs RadioSet
 	var tgsRaw string
 	var shareToken sql.NullString
-	if err := row.Scan(&rs.ID, &rs.UserID, &rs.Name, &tgsRaw, &shareToken, &rs.CreatedAt, &rs.UpdatedAt); err != nil {
+	var pttTalkgroup sql.NullInt64
+	if err := row.Scan(&rs.ID, &rs.UserID, &rs.Name, &tgsRaw, &shareToken, &pttTalkgroup, &rs.CreatedAt, &rs.UpdatedAt); err != nil {
 		return RadioSet{}, err
 	}
 	if shareToken.Valid {
 		rs.ShareToken = &shareToken.String
+	}
+	if pttTalkgroup.Valid {
+		v := int(pttTalkgroup.Int64)
+		rs.PTTTalkgroup = &v
 	}
 	rs.Talkgroups = make([]int, 0)
 	if err := json.Unmarshal([]byte(tgsRaw), &rs.Talkgroups); err != nil {
@@ -192,7 +214,7 @@ func (d *DB) ClearRadioSetShareToken(id, userID string) error {
 // Returns nil (no error) when the token is not found.
 func (d *DB) GetRadioSetByShareToken(token string) (*RadioSet, error) {
 	row := d.db.QueryRow(
-		`SELECT id, user_id, name, talkgroups, share_token, created_at, updated_at
+		`SELECT id, user_id, name, talkgroups, share_token, ptt_talkgroup, created_at, updated_at
 		 FROM radio_sets WHERE share_token = $1`, token)
 	rs, err := scanRadioSet(row)
 	if err != nil {
