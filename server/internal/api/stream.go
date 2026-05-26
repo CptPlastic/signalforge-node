@@ -577,16 +577,16 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
       osc.type = 'sine';
       osc.frequency.value = freq;
       gain.gain.setValueAtTime(0, now + startOffset);
-      gain.gain.linearRampToValueAtTime(peak, now + startOffset + 0.01);
-      gain.gain.setValueAtTime(peak, now + startOffset + duration - 0.015);
+      gain.gain.linearRampToValueAtTime(peak, now + startOffset + 0.025);
+      gain.gain.setValueAtTime(peak, now + startOffset + duration - 0.04);
       gain.gain.linearRampToValueAtTime(0, now + startOffset + duration);
       osc.connect(gain).connect(ctx.destination);
       osc.start(now + startOffset);
       osc.stop(now + startOffset + duration + 0.02);
     }
-    beep(1500, 0, 0.08);
-    beep(1800, 0.09, 0.10);
-    return new Promise(function(resolve){ setTimeout(resolve, 220); });
+    beep(900, 0, 0.10);
+    beep(1150, 0.11, 0.12);
+    return new Promise(function(resolve){ setTimeout(resolve, 250); });
   }
 
   function playNext() {
@@ -608,7 +608,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     showCall(item.meta);
     audio.src = curBlobURL;
 		applyVolume(audio);
-    var chirpReady = item.meta.origin === 'ptt' ? playChirp((audio.volume || 1) * 0.5) : Promise.resolve();
+    var chirpReady = item.meta.origin === 'ptt' ? playChirp((audio.volume || 1) * 0.35) : Promise.resolve();
     chirpReady.then(function(){
       return audio.play();
     }).catch(function() {

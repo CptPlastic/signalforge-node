@@ -866,7 +866,7 @@ function App() {
         .catch(console.error)
     }
     audioRef.current = audio
-    const chirpReady = call.origin === 'ptt' ? playChirp(audioVolume * 0.6) : Promise.resolve()
+    const chirpReady = call.origin === 'ptt' ? playChirp(audioVolume * 0.35) : Promise.resolve()
     chirpReady.then(() => audio.play())
       .then(() => setPlayingId(call.id))
       .catch((err) => {

@@ -21,8 +21,9 @@ function getContext(): AudioContext | null {
 
 // playChirp emits a short two-tone "incoming PTT" notification (Nextel-style),
 // then resolves so the caller can start the actual audio playback afterwards.
-// Volume is 0..1; defaults to 0.25 so it sits below typical voice audio.
-export function playChirp(volume = 0.25): Promise<void> {
+// Volume is 0..1; defaults to 0.15 so it sits well below voice audio.
+// Frequencies are kept below 1.2 kHz to avoid the 2–4 kHz "piercing" range.
+export function playChirp(volume = 0.15): Promise<void> {
   const audioCtx = getContext()
   if (!audioCtx || volume <= 0) return Promise.resolve()
   if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {})
@@ -37,16 +38,16 @@ export function playChirp(volume = 0.25): Promise<void> {
     osc.type = 'sine'
     osc.frequency.value = freq
     gain.gain.setValueAtTime(0, now + startOffset)
-    gain.gain.linearRampToValueAtTime(peak, now + startOffset + 0.01)
-    gain.gain.setValueAtTime(peak, now + startOffset + duration - 0.015)
+    gain.gain.linearRampToValueAtTime(peak, now + startOffset + 0.025)
+    gain.gain.setValueAtTime(peak, now + startOffset + duration - 0.04)
     gain.gain.linearRampToValueAtTime(0, now + startOffset + duration)
     osc.connect(gain).connect(audioCtx.destination)
     osc.start(now + startOffset)
     osc.stop(now + startOffset + duration + 0.02)
   }
 
-  beep(1500, 0, 0.08)
-  beep(1800, 0.09, 0.1)
+  beep(900, 0, 0.1)
+  beep(1150, 0.11, 0.12)
 
-  return new Promise((resolve) => globalThis.setTimeout(resolve, 220))
+  return new Promise((resolve) => globalThis.setTimeout(resolve, 250))
 }
