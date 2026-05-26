@@ -34,6 +34,7 @@ type RadioSetsViewProps = Readonly<{
   setRsVolume: Dispatch<SetStateAction<number>>
   setSelectedDeviceId: Dispatch<SetStateAction<string>>
   setSelectedSetID: Dispatch<SetStateAction<string>>
+  onOpenPTTMode: (radioSetId: string) => void
 }>
 
 function radioSetSubmitLabel(rsLoading: boolean, rsEditID: string | null): string {
@@ -89,6 +90,7 @@ export function RadioSetsView({
   setRsVolume,
   setSelectedDeviceId,
   setSelectedSetID,
+  onOpenPTTMode,
 }: RadioSetsViewProps) {
   const filteredTalkgroups = useMemo(() => {
     const query = rsTGSearch.trim().toLowerCase()
@@ -324,7 +326,16 @@ export function RadioSetsView({
                       </label>
                     )}
                     {authUser?.txEnabled && radioSet.pttTalkgroup !== undefined && (
-                      <PTTButton radioSetId={radioSet.id} />
+                      <>
+                        <PTTButton radioSetId={radioSet.id} />
+                        <button
+                          onClick={() => onOpenPTTMode(radioSet.id)}
+                          className="px-2 py-1 sm:py-0.5 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10"
+                          title="Open dedicated PTT mode with spacebar binding"
+                        >
+                          KEY
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => generateShareLink(radioSet.id)}

@@ -21,6 +21,7 @@ import { AppNav } from './components/AppNav'
 import { AuthenticatedView } from './components/ActiveView'
 import { AccountView } from './components/account/AccountView'
 import { CallRow } from './components/calls/CallRow'
+import { RadioSetPTTView } from './components/radio-sets/RadioSetPTTView'
 import { RadioSetsView } from './components/radio-sets/RadioSetsView'
 import { SignalForgeLogo } from './components/SignalForgeLogo'
 import { useOverallStatus } from './hooks/useOverallStatus'
@@ -362,6 +363,7 @@ function App() {
   const [radioSets, setRadioSets] = useState<RadioSet[]>([])
   const [selectedSetID, setSelectedSetID] = useState('')
   const [rsPlayingID, setRsPlayingID] = useState<string | null>(null)
+  const [pttSetID, setPTTSetID] = useState<string | null>(null)
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedDeviceId, setSelectedDeviceId] = useState('')
   const [distinctTalkgroups, setDistinctTalkgroups] = useState<TalkgroupInfo[]>([])
@@ -2003,39 +2005,48 @@ function App() {
       </AuthenticatedView>
 
       <AuthenticatedView activeView={activeView} authUser={authUser} view="radio-sets">
-        <RadioSetsView
-          authUser={authUser}
-          audioDevices={audioDevices}
-          audioRef={audioRef}
-          distinctTalkgroups={distinctTalkgroups}
-          enumerateAudioDevices={enumerateAudioDevices}
-          radioSets={radioSets}
-          rsCreateTGs={rsCreateTGs}
-          rsEditID={rsEditID}
-          rsEditName={rsEditName}
-          rsEditTGs={rsEditTGs}
-          rsError={rsError}
-          rsLoading={rsLoading}
-          rsName={rsName}
-          rsPlayingID={rsPlayingID}
-          rsTGSearch={rsTGSearch}
-          rsVolume={rsVolume}
-          selectedDeviceId={selectedDeviceId}
-          selectedSetID={selectedSetID}
-          setRadioSets={setRadioSets}
-          setRsCreateTGs={setRsCreateTGs}
-          setRsEditID={setRsEditID}
-          setRsEditName={setRsEditName}
-          setRsEditTGs={setRsEditTGs}
-          setRsError={setRsError}
-          setRsLoading={setRsLoading}
-          setRsName={setRsName}
-          setRsPlayingID={setRsPlayingID}
-          setRsTGSearch={setRsTGSearch}
-          setRsVolume={setRsVolume}
-          setSelectedDeviceId={setSelectedDeviceId}
-          setSelectedSetID={setSelectedSetID}
-        />
+        {(() => {
+          const pttSet = pttSetID ? radioSets.find((rs) => rs.id === pttSetID) : null
+          if (pttSet) {
+            return <RadioSetPTTView radioSet={pttSet} onBack={() => setPTTSetID(null)} />
+          }
+          return (
+            <RadioSetsView
+              authUser={authUser}
+              audioDevices={audioDevices}
+              audioRef={audioRef}
+              distinctTalkgroups={distinctTalkgroups}
+              enumerateAudioDevices={enumerateAudioDevices}
+              radioSets={radioSets}
+              rsCreateTGs={rsCreateTGs}
+              rsEditID={rsEditID}
+              rsEditName={rsEditName}
+              rsEditTGs={rsEditTGs}
+              rsError={rsError}
+              rsLoading={rsLoading}
+              rsName={rsName}
+              rsPlayingID={rsPlayingID}
+              rsTGSearch={rsTGSearch}
+              rsVolume={rsVolume}
+              selectedDeviceId={selectedDeviceId}
+              selectedSetID={selectedSetID}
+              setRadioSets={setRadioSets}
+              setRsCreateTGs={setRsCreateTGs}
+              setRsEditID={setRsEditID}
+              setRsEditName={setRsEditName}
+              setRsEditTGs={setRsEditTGs}
+              setRsError={setRsError}
+              setRsLoading={setRsLoading}
+              setRsName={setRsName}
+              setRsPlayingID={setRsPlayingID}
+              setRsTGSearch={setRsTGSearch}
+              setRsVolume={setRsVolume}
+              setSelectedDeviceId={setSelectedDeviceId}
+              setSelectedSetID={setSelectedSetID}
+              onOpenPTTMode={setPTTSetID}
+            />
+          )
+        })()}
       </AuthenticatedView>
 
       <AuthenticatedView activeView={activeView} authUser={authUser} view="integrations">

@@ -22,9 +22,12 @@ function newClientId(): string {
 type Props = Readonly<{
   radioSetId: string
   disabled?: boolean
+  enableSpacebar?: boolean
+  deviceId?: string
+  onTransmitted?: (info: { durationSeconds: number; at: number }) => void
 }>
 
-export function PTTButton({ radioSetId, disabled }: Props) {
+export function PTTButton({ radioSetId, disabled, enableSpacebar, deviceId, onTransmitted }: Props) {
   const [state, setState] = useState<State>('idle')
   const [error, setError] = useState<string>('')
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -49,7 +52,10 @@ export function PTTButton({ radioSetId, disabled }: Props) {
     if (state !== 'idle' || disabled || releaseLockRef.current) return
     setError('')
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const audioConstraints: MediaTrackConstraints | true = deviceId
+        ? { deviceId: { exact: deviceId } }
+        : true
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints })
       streamRef.current = stream
       const mimeType = pickMimeType()
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
@@ -69,6 +75,7 @@ export function PTTButton({ radioSetId, disabled }: Props) {
         setState('uploading')
         try {
           await api.uploadPTT(radioSetId, blob, elapsed / 1000, newClientId())
+          onTransmitted?.({ durationSeconds: elapsed / 1000, at: Date.now() })
           setState('idle')
         } catch (err) {
           const message = err instanceof ApiError ? `Upload failed (${err.status})` : 'Upload failed'
@@ -90,7 +97,7 @@ export function PTTButton({ radioSetId, disabled }: Props) {
       setState('error')
       globalThis.setTimeout(() => setState((current) => (current === 'error' ? 'idle' : current)), 2500)
     }
-  }, [disabled, radioSetId, state, stopStream])
+  }, [deviceId, disabled, onTransmitted, radioSetId, state, stopStream])
 
   const stopRecording = useCallback(() => {
     releaseLockRef.current = false
@@ -99,6 +106,7 @@ export function PTTButton({ radioSetId, disabled }: Props) {
   }, [])
 
   useEffect(() => {
+    if (!enableSpacebar) return
     function shouldIgnoreKey(event: KeyboardEvent): boolean {
       if (event.code !== 'Space') return true
       if (event.repeat) return true
@@ -128,7 +136,7 @@ export function PTTButton({ radioSetId, disabled }: Props) {
       globalThis.removeEventListener('keydown', onKeyDown)
       globalThis.removeEventListener('keyup', onKeyUp)
     }
-  }, [startRecording, stopRecording])
+  }, [enableSpacebar, startRecording, stopRecording])
 
   useEffect(() => () => stopStream(), [stopStream])
 
@@ -166,7 +174,7 @@ export function PTTButton({ radioSetId, disabled }: Props) {
       onContextMenu={(event) => event.preventDefault()}
       disabled={disabled || state === 'uploading'}
       className={`px-3 py-2 sm:py-1 border rounded text-[11px] uppercase tracking-wider select-none disabled:opacity-30 disabled:cursor-not-allowed ${colorClass}`}
-      title="Hold to transmit (or hold spacebar)"
+      title={enableSpacebar ? 'Hold to transmit (or hold spacebar)' : 'Hold to transmit'}
     >
       {labelByState[state]}
     </button>
