@@ -49,6 +49,8 @@ export type Call = {
   transcriptText?: string
   transcriptStatus?: string
   transcriptProvider?: string
+  origin?: string
+  senderUserId?: string
   createdAt: number
 }
 

@@ -89,6 +89,14 @@ export function CallRow({
               {statusLabel}
             </span>
           )}
+          {call.origin === 'ptt' && (
+            <span
+              className="px-1.5 py-0.5 border border-console-amber rounded text-[9px] text-console-amber uppercase tracking-widest"
+              title={call.senderUserId ? `Sent by user ${call.senderUserId}` : 'Push-to-talk transmission'}
+            >
+              PTT
+            </span>
+          )}
         </div>
       </td>
       <td className="py-2 px-3 font-semibold text-console-accent tabular-nums">

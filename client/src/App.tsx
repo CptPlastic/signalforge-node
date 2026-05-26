@@ -27,6 +27,7 @@ import { SignalForgeLogo } from './components/SignalForgeLogo'
 import { useOverallStatus } from './hooks/useOverallStatus'
 import { useUpdateCheck } from './hooks/useUpdateCheck'
 import { buildFilteredCalls, formatCallLogCount, formatSavedCallCount } from './lib/callFilters'
+import { playChirp } from './lib/chirp'
 import { fmtDateTime, fmtTime, getErrorMessage } from './lib/format'
 import { maybePlayActiveRadioSetCall } from './lib/radioSetPlayback'
 import {
@@ -856,7 +857,8 @@ function App() {
     }
     const audio = audioRef.current ?? new Audio()
     audio.src = `/api/v1/calls/${call.id}/audio?play=1`
-    audio.volume = Math.max(1, rsVolumeRef.current) / 100
+    const audioVolume = Math.max(1, rsVolumeRef.current) / 100
+    audio.volume = audioVolume
     audio.onended = () => setPlayingId(null)
     if (selectedDeviceId && 'setSinkId' in audio) {
       (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> })
@@ -864,7 +866,8 @@ function App() {
         .catch(console.error)
     }
     audioRef.current = audio
-    audio.play()
+    const chirpReady = call.origin === 'ptt' ? playChirp(audioVolume * 0.6) : Promise.resolve()
+    chirpReady.then(() => audio.play())
       .then(() => setPlayingId(call.id))
       .catch((err) => {
         console.error(err)

@@ -375,6 +375,9 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
 .log-tg-cell{overflow:hidden;min-width:0}
 .log-tg{font-size:10px;color:#484848;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
 .log-transcript{font-size:8px;color:#2c2c2c;white-space:normal;word-break:break-word;letter-spacing:.02em;line-height:1.35;margin-top:2px;display:block}
+.ptt-badge{display:inline-block;font-size:8px;color:#fbbf24;border:1px solid #5a3f06;padding:0 4px;margin-left:6px;letter-spacing:.16em;text-transform:uppercase;vertical-align:1px}
+.disp-meta .ptt-badge{font-size:9px;margin-left:8px}
+.log-row.ptt{box-shadow:inset 2px 0 0 #fbbf24}
 </style>
 </head>
 <body>
@@ -497,11 +500,12 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
 
   function renderLog() {
     var rows = callLog.map(function(c) {
-      return '<div class="log-row' + (c.flash ? ' flash' : '') + '">' +
+      var classes = 'log-row' + (c.flash ? ' flash' : '') + (c.ptt ? ' ptt' : '');
+      return '<div class="' + classes + '">' +
         '<span class="log-cell log-time">' + esc(c.time) + '</span>' +
         '<span class="log-cell log-sys">' + esc(c.sys) + '</span>' +
         '<span class="log-tg-cell">' +
-          '<span class="log-tg">' + esc(c.tg) + '</span>' +
+          '<span class="log-tg">' + esc(c.tg) + (c.ptt ? '<span class="ptt-badge">PTT</span>' : '') + '</span>' +
           (c.transcript ? '<span class="log-transcript">' + esc(c.transcript) + '</span>' : '') +
         '</span>' +
         '</div>';
@@ -518,7 +522,14 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     var parts = [];
     if (meta.talkgroupGroup) parts.push(meta.talkgroupGroup);
     if (meta.systemLabel) parts.push(meta.systemLabel);
-    document.getElementById('disp-meta').textContent = parts.join(' \u00b7 ');
+    var dispMeta = document.getElementById('disp-meta');
+    dispMeta.textContent = parts.join(' \u00b7 ');
+    if (meta.origin === 'ptt') {
+      var badge = document.createElement('span');
+      badge.className = 'ptt-badge';
+      badge.textContent = 'PTT';
+      dispMeta.appendChild(badge);
+    }
 
     var freq = [];
     if (meta.frequency) freq.push((meta.frequency / 1e6).toFixed(4) + ' MHz');
@@ -532,7 +543,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     var timeStr = String(ts.getHours()).padStart(2,'0') + ':' +
       String(ts.getMinutes()).padStart(2,'0') + ':' +
       String(ts.getSeconds()).padStart(2,'0');
-    callLog.unshift({ time: timeStr, sys: meta.systemLabel || '-', tg: meta.talkgroupLabel || ('#' + meta.talkgroup), transcript: meta.transcriptText || '', flash: true });
+    callLog.unshift({ time: timeStr, sys: meta.systemLabel || '-', tg: meta.talkgroupLabel || ('#' + meta.talkgroup), transcript: meta.transcriptText || '', flash: true, ptt: meta.origin === 'ptt' });
     if (callLog.length > 50) callLog.pop();
     renderLog();
     setTimeout(function() { if (callLog.length) { callLog[0].flash = false; renderLog(); } }, 1800);
@@ -544,6 +555,38 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
         album: cfg.name || ''
       });
     }
+  }
+
+  var chirpCtx = null;
+  function getChirpCtx() {
+    if (chirpCtx) return chirpCtx;
+    var Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return null;
+    try { chirpCtx = new Ctor(); } catch(_) { chirpCtx = null; }
+    return chirpCtx;
+  }
+  function playChirp(volume) {
+    var ctx = getChirpCtx();
+    if (!ctx || !(volume > 0)) return Promise.resolve();
+    if (ctx.state === 'suspended') { try { ctx.resume(); } catch(_){} }
+    var now = ctx.currentTime;
+    var peak = Math.max(0, Math.min(1, volume));
+    function beep(freq, startOffset, duration) {
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, now + startOffset);
+      gain.gain.linearRampToValueAtTime(peak, now + startOffset + 0.01);
+      gain.gain.setValueAtTime(peak, now + startOffset + duration - 0.015);
+      gain.gain.linearRampToValueAtTime(0, now + startOffset + duration);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + startOffset);
+      osc.stop(now + startOffset + duration + 0.02);
+    }
+    beep(1500, 0, 0.08);
+    beep(1800, 0.09, 0.10);
+    return new Promise(function(resolve){ setTimeout(resolve, 220); });
   }
 
   function playNext() {
@@ -565,7 +608,10 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     showCall(item.meta);
     audio.src = curBlobURL;
 		applyVolume(audio);
-		audio.play().catch(function() {
+    var chirpReady = item.meta.origin === 'ptt' ? playChirp((audio.volume || 1) * 0.5) : Promise.resolve();
+    chirpReady.then(function(){
+      return audio.play();
+    }).catch(function() {
 			playbackBlocked = true;
 			document.getElementById('live-btn').textContent = 'PLAY';
 			document.getElementById('live-btn').className = 'btn';
