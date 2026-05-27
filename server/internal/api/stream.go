@@ -239,8 +239,11 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Seed with recent calls so the client has audio to play immediately on connect.
-	if len(rs.Talkgroups) > 0 {
-		seedCalls, seedErr := h.db.GetRecentCallsForTalkgroups(rs.UserID, rs.Talkgroups, 5)
+	// Include the virtual PTT talkgroup in the seed query so recent PTT calls
+	// show up in the player history on reconnect, not just live new ones.
+	seedTalkgroups := subscribedTalkgroups
+	if len(seedTalkgroups) > 0 {
+		seedCalls, seedErr := h.db.GetRecentCallsForTalkgroups(rs.UserID, seedTalkgroups, 5)
 		if seedErr != nil {
 			h.logger.Error("public stream seed query failed", "radio_set_id", rs.ID, "error", seedErr)
 		} else {
@@ -862,11 +865,15 @@ func (h *handler) handlePublicLastCall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	if len(rs.Talkgroups) == 0 {
+	queryTalkgroups := rs.Talkgroups
+	if rs.PTTTalkgroup != nil {
+		queryTalkgroups = append(append([]int(nil), rs.Talkgroups...), *rs.PTTTalkgroup)
+	}
+	if len(queryTalkgroups) == 0 {
 		http.Error(w, "no talkgroups", http.StatusNotFound)
 		return
 	}
-	ids, err := h.db.GetRecentCallIDsForTalkgroups(rs.UserID, rs.Talkgroups, 1)
+	ids, err := h.db.GetRecentCallIDsForTalkgroups(rs.UserID, queryTalkgroups, 1)
 	if err != nil || len(ids) == 0 {
 		http.Error(w, "no calls", http.StatusNotFound)
 		return

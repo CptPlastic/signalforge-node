@@ -21,6 +21,7 @@ import { AppNav } from './components/AppNav'
 import { AuthenticatedView } from './components/ActiveView'
 import { AccountView } from './components/account/AccountView'
 import { CallRow } from './components/calls/CallRow'
+import { DispatcherView } from './components/radio-sets/DispatcherView'
 import { RadioSetPTTView } from './components/radio-sets/RadioSetPTTView'
 import { RadioSetsView } from './components/radio-sets/RadioSetsView'
 import { SignalForgeLogo } from './components/SignalForgeLogo'
@@ -365,6 +366,7 @@ function App() {
   const [selectedSetID, setSelectedSetID] = useState('')
   const [rsPlayingID, setRsPlayingID] = useState<string | null>(null)
   const [pttSetID, setPTTSetID] = useState<string | null>(null)
+  const [dispatcherActive, setDispatcherActive] = useState(false)
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedDeviceId, setSelectedDeviceId] = useState('')
   const [distinctTalkgroups, setDistinctTalkgroups] = useState<TalkgroupInfo[]>([])
@@ -1301,7 +1303,15 @@ function App() {
       : []
 
     const setTalkgroups = selectedSetID
-      ? (radioSets.find((rs) => rs.id === selectedSetID)?.talkgroups ?? [])
+      ? (() => {
+          const set = radioSets.find((rs) => rs.id === selectedSetID)
+          if (!set) return []
+          // Include the virtual PTT talkgroup so dispatcher/PTT calls show up
+          // when this set is the active filter — they live on a separate TG.
+          return set.pttTalkgroup !== undefined
+            ? [...set.talkgroups, set.pttTalkgroup]
+            : set.talkgroups
+        })()
       : []
 
     if (!q && !groupFilter && favTalkgroups.length === 0 && setTalkgroups.length === 0) {
@@ -2014,6 +2024,9 @@ function App() {
 
       <AuthenticatedView activeView={activeView} authUser={authUser} view="radio-sets">
         {(() => {
+          if (dispatcherActive) {
+            return <DispatcherView radioSets={radioSets} onBack={() => setDispatcherActive(false)} />
+          }
           const pttSet = pttSetID ? radioSets.find((rs) => rs.id === pttSetID) : null
           if (pttSet) {
             return <RadioSetPTTView radioSet={pttSet} onBack={() => setPTTSetID(null)} />
@@ -2052,6 +2065,7 @@ function App() {
               setSelectedDeviceId={setSelectedDeviceId}
               setSelectedSetID={setSelectedSetID}
               onOpenPTTMode={setPTTSetID}
+              onOpenDispatcher={() => setDispatcherActive(true)}
             />
           )
         })()}

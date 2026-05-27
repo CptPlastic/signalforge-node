@@ -401,9 +401,43 @@ export const api = {
     }
     return body as PTTUploadResponse
   },
+  uploadPTTBroadcast: async (
+    radioSetIds: string[],
+    audio: Blob,
+    durationSeconds: number,
+    clientId: string,
+  ): Promise<PTTBroadcastResponse> => {
+    const form = new FormData()
+    const ext = audio.type.includes('webm') ? 'webm' : audio.type.includes('mp4') ? 'm4a' : 'bin'
+    form.append('audio', audio, `ptt-${clientId}.${ext}`)
+    form.append('duration', String(durationSeconds))
+    form.append('clientId', clientId)
+    form.append('radioSetIds', radioSetIds.join(','))
+    const response = await fetch('/api/v1/ptt/broadcast', {
+      method: 'POST',
+      body: form,
+    })
+    const isJSON = response.headers.get('content-type')?.includes('application/json')
+    const body = isJSON ? await response.json() : await response.text()
+    if (!response.ok) {
+      throw new ApiError(`PTT broadcast failed: ${response.status}`, response.status, body)
+    }
+    return body as PTTBroadcastResponse
+  },
 }
 
 export type PTTUploadResponse = {
   callId: number
   talkgroup: number
+}
+
+export type PTTBroadcastResult = {
+  radioSetId: string
+  callId?: number
+  talkgroup?: number
+  error?: string
+}
+
+export type PTTBroadcastResponse = {
+  results: PTTBroadcastResult[]
 }

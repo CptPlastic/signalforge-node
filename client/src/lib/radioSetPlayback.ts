@@ -20,7 +20,10 @@ export function maybePlayActiveRadioSetCall({
     if (activeID) {
       setRadioSets((sets) => {
         const activeSet = sets.find((radioSet) => radioSet.id === activeID)
-        if (activeSet?.talkgroups.includes(call.talkgroup)) {
+        const matchesSet =
+          activeSet?.talkgroups.includes(call.talkgroup) ||
+          activeSet?.pttTalkgroup === call.talkgroup
+        if (matchesSet) {
           setPlayingId((currentPlaying) => {
             if (!currentPlaying) {
               playCall(call)

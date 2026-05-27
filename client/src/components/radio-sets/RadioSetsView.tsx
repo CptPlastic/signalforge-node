@@ -35,6 +35,7 @@ type RadioSetsViewProps = Readonly<{
   setSelectedDeviceId: Dispatch<SetStateAction<string>>
   setSelectedSetID: Dispatch<SetStateAction<string>>
   onOpenPTTMode: (radioSetId: string) => void
+  onOpenDispatcher: () => void
 }>
 
 function radioSetSubmitLabel(rsLoading: boolean, rsEditID: string | null): string {
@@ -91,6 +92,7 @@ export function RadioSetsView({
   setSelectedDeviceId,
   setSelectedSetID,
   onOpenPTTMode,
+  onOpenDispatcher,
 }: RadioSetsViewProps) {
   const filteredTalkgroups = useMemo(() => {
     const query = rsTGSearch.trim().toLowerCase()
@@ -197,9 +199,20 @@ export function RadioSetsView({
 
   return (
     <main className="console-panel flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="console-label text-xs">RADIO SETS</span>
-        <span className="text-xs text-console-muted tabular-nums">{radioSets.length} sets</span>
+        <div className="flex items-center gap-2">
+          {authUser?.txEnabled && authUser?.dispatcherEnabled && (
+            <button
+              onClick={onOpenDispatcher}
+              className="px-2 py-1 sm:py-0.5 border border-console-amber text-console-amber rounded text-[10px] uppercase tracking-wider hover:bg-console-amber/10"
+              title="Broadcast a single PTT to multiple radio sets at once"
+            >
+              DISPATCHER
+            </button>
+          )}
+          <span className="text-xs text-console-muted tabular-nums">{radioSets.length} sets</span>
+        </div>
       </div>
 
       {rsError && (
