@@ -1,10 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, ApiError, type PTTBroadcastResult, type RadioSet } from '../../lib/api'
+import { api, ApiError, type Call, type PTTBroadcastResult, type RadioSet } from '../../lib/api'
+import { playChirp } from '../../lib/chirp'
 
 type Props = Readonly<{
   radioSets: RadioSet[]
+  latestCall: Call | null
   onBack: () => void
 }>
+
+// How long a set card stays "lit" (pulsing + showing call info) after a call
+// lands on it. Refreshed on each new matching call.
+const ACTIVITY_LINGER_MS = 8000
+
+type Activity = {
+  call: Call
+  expiresAt: number
+}
 
 type State = 'idle' | 'recording' | 'uploading' | 'error'
 
@@ -24,7 +35,7 @@ function newClientId(): string {
   return `disp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-export function DispatcherView({ radioSets, onBack }: Props) {
+export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
   const eligibleSets = useMemo(
     () => radioSets.filter((rs) => rs.pttTalkgroup !== undefined),
     [radioSets],
@@ -36,6 +47,8 @@ export function DispatcherView({ radioSets, onBack }: Props) {
   const [state, setState] = useState<State>('idle')
   const [error, setError] = useState<string>('')
   const [lastResults, setLastResults] = useState<PTTBroadcastResult[] | null>(null)
+  const [activityById, setActivityById] = useState<Map<string, Activity>>(new Map())
+  const [monitorOn, setMonitorOn] = useState(true)
 
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -43,6 +56,8 @@ export function DispatcherView({ radioSets, onBack }: Props) {
   const startedAtRef = useRef<number>(0)
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const targetIdsRef = useRef<string[]>([])
+  const monitorAudioRef = useRef<HTMLAudioElement | null>(null)
+  const seenCallIdsRef = useRef<Set<number>>(new Set())
 
   const toggleSet = (id: string) => {
     setSelectedIds((prev) => {
@@ -78,6 +93,11 @@ export function DispatcherView({ radioSets, onBack }: Props) {
     setLastResults(null)
     // Snapshot the target list so a checkbox change during recording doesn't change destinations.
     targetIdsRef.current = Array.from(selectedIds)
+    // Pause any in-progress monitor playback — dispatcher shouldn't hear chatter
+    // through their own headphones while they're trying to talk.
+    if (monitorAudioRef.current && !monitorAudioRef.current.paused) {
+      monitorAudioRef.current.pause()
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
@@ -129,8 +149,7 @@ export function DispatcherView({ radioSets, onBack }: Props) {
   }, [selectedIds, state, stopStream])
 
   const stopRecording = useCallback(() => {
-    const recorder = recorderRef.current
-    if (recorder && recorder.state === 'recording') recorder.stop()
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
   }, [])
 
   useEffect(() => {
@@ -166,22 +185,98 @@ export function DispatcherView({ radioSets, onBack }: Props) {
 
   useEffect(() => () => stopStream(), [stopStream])
 
+  // Process incoming live calls: figure out which currently-selected sets a
+  // call matches, light those cards up, and (optionally) play the audio
+  // through the monitor element. Each call only fires this logic once even
+  // though latestCall re-references can happen.
+  useEffect(() => {
+    if (!latestCall) return
+    if (seenCallIdsRef.current.has(latestCall.id)) return
+    seenCallIdsRef.current.add(latestCall.id)
+
+    const matchingSetIds: string[] = []
+    for (const rs of radioSets) {
+      if (!selectedIds.has(rs.id)) continue
+      const matches =
+        rs.talkgroups.includes(latestCall.talkgroup) ||
+        rs.pttTalkgroup === latestCall.talkgroup
+      if (matches) matchingSetIds.push(rs.id)
+    }
+    if (matchingSetIds.length === 0) return
+
+    const expiresAt = Date.now() + ACTIVITY_LINGER_MS
+    setActivityById((prev) => {
+      const next = new Map(prev)
+      for (const id of matchingSetIds) {
+        next.set(id, { call: latestCall, expiresAt })
+      }
+      return next
+    })
+
+    // Monitor audio: only auto-play when (a) the user toggle is on,
+    // (b) we're not currently transmitting, and (c) nothing else is currently
+    // playing in the monitor element. Overlapping calls light up the card
+    // but don't fight for the speakers.
+    const transmitting = state === 'recording' || state === 'uploading'
+    const monitor = monitorAudioRef.current
+    if (monitorOn && !transmitting && monitor?.paused) {
+      monitor.src = `/api/v1/calls/${latestCall.id}/audio?play=1`
+      const chirpReady = latestCall.origin === 'ptt'
+        ? playChirp((monitor.volume || 1) * 0.35)
+        : Promise.resolve()
+      chirpReady.then(() => monitor.play()).catch(() => {})
+    }
+  }, [latestCall, radioSets, selectedIds, state, monitorOn])
+
+  // Garbage-collect expired activity entries on a tick so cards stop pulsing.
+  useEffect(() => {
+    if (activityById.size === 0) return
+    const timer = globalThis.setInterval(() => {
+      const now = Date.now()
+      setActivityById((prev) => {
+        let changed = false
+        const next = new Map(prev)
+        for (const [id, activity] of prev) {
+          if (activity.expiresAt <= now) {
+            next.delete(id)
+            changed = true
+          }
+        }
+        return changed ? next : prev
+      })
+    }, 500)
+    return () => globalThis.clearInterval(timer)
+  }, [activityById.size])
+
+  // Stop monitor audio when leaving the dispatcher view (component unmount).
+  useEffect(() => {
+    return () => {
+      const monitor = monitorAudioRef.current
+      if (monitor) {
+        monitor.pause()
+        monitor.src = ''
+      }
+    }
+  }, [])
+
   const buttonLabel: Record<State, string> = {
     idle: `BROADCAST · HOLD TO TALK (${selectedIds.size} set${selectedIds.size === 1 ? '' : 's'})`,
     recording: 'TRANSMITTING TO ALL SELECTED SETS…',
     uploading: 'SENDING…',
     error: error || 'ERROR',
   }
-  const buttonColor =
-    state === 'recording'
-      ? 'border-console-error text-console-error bg-console-error/10'
-      : state === 'uploading'
-        ? 'border-console-accent text-console-accent'
-        : state === 'error'
-          ? 'border-console-error text-console-error'
-          : selectedIds.size === 0
-            ? 'border-console-border text-console-muted opacity-50'
-            : 'border-console-amber text-console-amber hover:bg-console-amber/10'
+  let buttonColor: string
+  if (state === 'recording') {
+    buttonColor = 'border-console-error text-console-error bg-console-error/10'
+  } else if (state === 'uploading') {
+    buttonColor = 'border-console-accent text-console-accent'
+  } else if (state === 'error') {
+    buttonColor = 'border-console-error text-console-error'
+  } else if (selectedIds.size === 0) {
+    buttonColor = 'border-console-border text-console-muted opacity-50'
+  } else {
+    buttonColor = 'border-console-amber text-console-amber hover:bg-console-amber/10'
+  }
 
   return (
     <main className="p-3 sm:p-4 flex flex-col gap-4 max-w-3xl mx-auto">
@@ -193,7 +288,24 @@ export function DispatcherView({ radioSets, onBack }: Props) {
           ← Radio sets
         </button>
         <span className="text-[10px] text-console-muted uppercase tracking-wider">Dispatcher mode</span>
+        <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={monitorOn}
+            onChange={(event) => {
+              const next = event.target.checked
+              setMonitorOn(next)
+              if (!next && monitorAudioRef.current) {
+                monitorAudioRef.current.pause()
+              }
+            }}
+            className="accent-console-accent"
+          />
+          <span className={monitorOn ? 'text-console-accent' : 'text-console-muted'}>Monitor</span>
+        </label>
       </div>
+
+      <audio ref={monitorAudioRef} preload="none" />
 
       <div className="border border-console-border rounded p-3 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
@@ -224,25 +336,44 @@ export function DispatcherView({ radioSets, onBack }: Props) {
           <div className="grid gap-1.5 sm:grid-cols-2">
             {eligibleSets.map((rs) => {
               const selected = selectedIds.has(rs.id)
+              const activity = selected ? activityById.get(rs.id) : undefined
+              const active = activity !== undefined
+              let cardClass: string
+              if (active) {
+                cardClass = 'border-console-accent bg-console-accent/10 text-console-text shadow-[0_0_0_1px_rgba(0,255,65,0.6)_inset] animate-pulse'
+              } else if (selected) {
+                cardClass = 'border-console-amber bg-console-amber/5 text-console-text'
+              } else {
+                cardClass = 'border-console-border text-console-muted hover:border-console-accent'
+              }
               return (
                 <label
                   key={rs.id}
-                  className={`flex items-center gap-2 px-2 py-1.5 border rounded text-xs cursor-pointer select-none ${
-                    selected
-                      ? 'border-console-amber bg-console-amber/5 text-console-text'
-                      : 'border-console-border text-console-muted hover:border-console-accent'
-                  }`}
+                  className={`flex flex-col gap-1 px-2 py-1.5 border rounded text-xs cursor-pointer select-none ${cardClass}`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    onChange={() => toggleSet(rs.id)}
-                    className="accent-console-amber"
-                  />
-                  <span className="flex-1 truncate">{rs.name}</span>
-                  <span className="text-[10px] tabular-nums text-console-muted">
-                    TG {rs.pttTalkgroup}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => toggleSet(rs.id)}
+                      className="accent-console-amber"
+                    />
+                    <span className="flex-1 truncate">{rs.name}</span>
+                    <span className="text-[10px] tabular-nums text-console-muted">
+                      TG {rs.pttTalkgroup}
+                    </span>
+                  </div>
+                  {active && activity && (
+                    <div className="flex items-center gap-2 text-[10px] pl-6">
+                      <span className="text-console-accent uppercase tracking-wider">● LIVE</span>
+                      <span className="truncate flex-1">
+                        {activity.call.talkgroupLabel || `TG ${activity.call.talkgroup}`}
+                        {activity.call.origin === 'ptt' && activity.call.senderEmail
+                          ? ` · ${activity.call.senderEmail.split('@')[0]}`
+                          : ''}
+                      </span>
+                    </div>
+                  )}
                 </label>
               )
             })}

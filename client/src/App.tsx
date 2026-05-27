@@ -367,6 +367,10 @@ function App() {
   const [rsPlayingID, setRsPlayingID] = useState<string | null>(null)
   const [pttSetID, setPTTSetID] = useState<string | null>(null)
   const [dispatcherActive, setDispatcherActive] = useState(false)
+  // latestCall is a one-shot "an incoming call just arrived over the WS"
+  // signal for live-monitoring views (currently DispatcherView). It updates
+  // only on WS call events — historical-rows merges don't touch it.
+  const [latestCall, setLatestCall] = useState<Call | null>(null)
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedDeviceId, setSelectedDeviceId] = useState('')
   const [distinctTalkgroups, setDistinctTalkgroups] = useState<TalkgroupInfo[]>([])
@@ -785,6 +789,7 @@ function App() {
         onMessage: (msg) => {
           if (msg.type === 'call') {
             setCalls((prev) => mergeCalls(prev, [msg.call]))
+            setLatestCall(msg.call)
             setDistinctTalkgroups((prev) => upsertTalkgroupInfo(prev, msg.call))
             if (msg.call.talkgroupGroup) {
               setAllGroups((prev) => appendSortedGroup(prev, msg.call.talkgroupGroup))
@@ -2025,7 +2030,13 @@ function App() {
       <AuthenticatedView activeView={activeView} authUser={authUser} view="radio-sets">
         {(() => {
           if (dispatcherActive) {
-            return <DispatcherView radioSets={radioSets} onBack={() => setDispatcherActive(false)} />
+            return (
+              <DispatcherView
+                radioSets={radioSets}
+                latestCall={latestCall}
+                onBack={() => setDispatcherActive(false)}
+              />
+            )
           }
           const pttSet = pttSetID ? radioSets.find((rs) => rs.id === pttSetID) : null
           if (pttSet) {
