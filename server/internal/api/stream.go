@@ -26,6 +26,7 @@ type streamCallMeta struct {
 	TranscriptText string  `json:"transcriptText,omitempty"`
 	Origin         string  `json:"origin,omitempty"`
 	SenderUserID   string  `json:"senderUserId,omitempty"`
+	SenderEmail    string  `json:"senderEmail,omitempty"`
 }
 
 type streamChunk struct {
@@ -67,6 +68,7 @@ func (sh *streamHub) push(call *database.Call, audio []byte) {
 		TranscriptText: call.TranscriptText,
 		Origin:         call.Origin,
 		SenderUserID:   call.SenderUserID,
+		SenderEmail:    call.SenderEmail,
 	}
 	chunk := streamChunk{audio: audio, meta: meta}
 
@@ -160,6 +162,7 @@ type playerWSCallMsg struct {
 	TranscriptText string  `json:"transcriptText,omitempty"`
 	Origin         string  `json:"origin,omitempty"`
 	SenderUserID   string  `json:"senderUserId,omitempty"`
+	SenderEmail    string  `json:"senderEmail,omitempty"`
 	Audio          []byte  `json:"audio"` // base64-encoded in JSON output
 }
 
@@ -225,6 +228,7 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 			TranscriptText: meta.TranscriptText,
 			Origin:         meta.Origin,
 			SenderUserID:   meta.SenderUserID,
+			SenderEmail:    meta.SenderEmail,
 			Audio:          audio,
 		}
 		data, err := json.Marshal(msg)
@@ -260,6 +264,7 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 					TranscriptText: c.TranscriptText,
 					Origin:         c.Origin,
 					SenderUserID:   c.SenderUserID,
+					SenderEmail:    c.SenderEmail,
 				}
 				if err := sendCall(meta, audio); err != nil {
 					return
@@ -419,7 +424,8 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     <button class="copy-btn" id="copy-btn" onclick="copyStream()">COPY</button>
   </div>
 </div>
-<audio id="audio" preload="none"></audio>
+<audio id="audio" preload="none" playsinline></audio>
+<audio id="audio-keepalive" preload="auto" loop playsinline></audio>
 <script>
 (function(){
   var cfg = {{.Config}};
@@ -428,7 +434,60 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
   document.getElementById('stream-url-txt').textContent = wsURL;
 
   var audio = document.getElementById('audio');
+  var keepAlive = document.getElementById('audio-keepalive');
+  var keepAliveStarted = false;
   var ws = null;
+
+  // buildSilentWavBlob makes a half-second silent 16-bit mono WAV that we
+  // loop forever on a second <audio> element. Mobile browsers (especially
+  // iOS Safari) release the audio session when the only playing audio
+  // element pauses — which happens every time we swap audio.src between
+  // calls. Keeping a continuously-playing silent element alongside makes
+  // the OS think audio is always playing, so the session survives screen
+  // sleep and the gaps between live calls.
+  function buildSilentWavBlob() {
+    var sampleRate = 8000;
+    var seconds = 0.5;
+    var numSamples = sampleRate * seconds;
+    var dataSize = numSamples * 2;
+    var buf = new ArrayBuffer(44 + dataSize);
+    var view = new DataView(buf);
+    function writeAscii(off, s) {
+      for (var i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
+    }
+    writeAscii(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeAscii(8, 'WAVE');
+    writeAscii(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeAscii(36, 'data');
+    view.setUint32(40, dataSize, true);
+    return new Blob([buf], { type: 'audio/wav' });
+  }
+  function startKeepAlive() {
+    if (keepAliveStarted || !keepAlive) return;
+    keepAliveStarted = true;
+    keepAlive.src = URL.createObjectURL(buildSilentWavBlob());
+    keepAlive.loop = true;
+    // Some browsers skip processing of fully-muted streams, so use a
+    // floor value that's well below audible.
+    keepAlive.volume = 0.001;
+    keepAlive.play().catch(function() {
+      // If the gesture was somehow lost, allow a future toggleLive to retry.
+      keepAliveStarted = false;
+    });
+  }
+  function setMediaPlaybackState(state) {
+    if ('mediaSession' in navigator) {
+      try { navigator.mediaSession.playbackState = state; } catch(_) {}
+    }
+  }
   var queue = [];       // [{meta, blobURL}]
   var playing = false;
 	var liveActive = true;
@@ -501,11 +560,16 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
   function renderLog() {
     var rows = callLog.map(function(c) {
       var classes = 'log-row' + (c.flash ? ' flash' : '') + (c.ptt ? ' ptt' : '');
+      var pttBadge = '';
+      if (c.ptt) {
+        var senderLabel = c.senderEmail ? (' · ' + esc(c.senderEmail.split('@')[0])) : '';
+        pttBadge = '<span class="ptt-badge" title="' + esc(c.senderEmail || '') + '">PTT' + senderLabel + '</span>';
+      }
       return '<div class="' + classes + '">' +
         '<span class="log-cell log-time">' + esc(c.time) + '</span>' +
         '<span class="log-cell log-sys">' + esc(c.sys) + '</span>' +
         '<span class="log-tg-cell">' +
-          '<span class="log-tg">' + esc(c.tg) + (c.ptt ? '<span class="ptt-badge">PTT</span>' : '') + '</span>' +
+          '<span class="log-tg">' + esc(c.tg) + pttBadge + '</span>' +
           (c.transcript ? '<span class="log-transcript">' + esc(c.transcript) + '</span>' : '') +
         '</span>' +
         '</div>';
@@ -527,7 +591,9 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     if (meta.origin === 'ptt') {
       var badge = document.createElement('span');
       badge.className = 'ptt-badge';
-      badge.textContent = 'PTT';
+      var senderLocalPart = meta.senderEmail ? meta.senderEmail.split('@')[0] : '';
+      badge.textContent = senderLocalPart ? ('PTT · ' + senderLocalPart) : 'PTT';
+      if (meta.senderEmail) badge.title = meta.senderEmail;
       dispMeta.appendChild(badge);
     }
 
@@ -543,7 +609,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
     var timeStr = String(ts.getHours()).padStart(2,'0') + ':' +
       String(ts.getMinutes()).padStart(2,'0') + ':' +
       String(ts.getSeconds()).padStart(2,'0');
-    callLog.unshift({ time: timeStr, sys: meta.systemLabel || '-', tg: meta.talkgroupLabel || ('#' + meta.talkgroup), transcript: meta.transcriptText || '', flash: true, ptt: meta.origin === 'ptt' });
+    callLog.unshift({ time: timeStr, sys: meta.systemLabel || '-', tg: meta.talkgroupLabel || ('#' + meta.talkgroup), transcript: meta.transcriptText || '', flash: true, ptt: meta.origin === 'ptt', senderEmail: meta.senderEmail || '' });
     if (callLog.length > 50) callLog.pop();
     renderLog();
     setTimeout(function() { if (callLog.length) { callLog[0].flash = false; renderLog(); } }, 1800);
@@ -683,6 +749,9 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
 
   window.toggleLive = function() {
 		var btn = document.getElementById('live-btn');
+		// Any branch of this handler runs inside a user gesture, so this is
+		// the right moment to spin up the silent keep-alive stream.
+		startKeepAlive();
 		if (liveActive && playbackBlocked) {
 			playbackBlocked = false;
 			playing = true;
@@ -690,12 +759,14 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
 				btn.textContent = 'LIVE ON';
 				btn.className = 'btn on';
 				setStatus('live', 'LIVE');
+				setMediaPlaybackState('playing');
 			}).catch(function() {
 				playbackBlocked = true;
 				playing = false;
 				btn.textContent = 'PLAY';
 				btn.className = 'btn';
 				setStatus('err', 'TAP PLAY');
+				setMediaPlaybackState('paused');
 			});
 			return;
 		}
@@ -712,6 +783,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
       btn.textContent = 'LIVE OFF';
       btn.className = 'btn';
       setStatus('err', 'OFF');
+      setMediaPlaybackState('paused');
     } else {
       liveActive = true;
       btn.textContent = 'LIVE ON';
@@ -719,6 +791,7 @@ body{color:#d4d4d4;font-family:'Courier New',Courier,monospace;height:100dvh;dis
       reconnectDelay = 1000;
 			reconnectAttempts = 0;
       connect();
+      setMediaPlaybackState('playing');
     }
   };
 

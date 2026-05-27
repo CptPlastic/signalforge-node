@@ -51,6 +51,7 @@ export type Call = {
   transcriptProvider?: string
   origin?: string
   senderUserId?: string
+  senderEmail?: string
   createdAt: number
 }
 

@@ -91,10 +91,10 @@ export function CallRow({
           )}
           {call.origin === 'ptt' && (
             <span
-              className="px-1.5 py-0.5 border border-console-amber rounded text-[9px] text-console-amber uppercase tracking-widest"
-              title={call.senderUserId ? `Sent by user ${call.senderUserId}` : 'Push-to-talk transmission'}
+              className="px-1.5 py-0.5 border border-console-amber rounded text-[9px] text-console-amber uppercase tracking-widest whitespace-nowrap"
+              title={call.senderEmail || (call.senderUserId ? `user ${call.senderUserId}` : 'Push-to-talk transmission')}
             >
-              PTT
+              PTT{call.senderEmail ? ` · ${call.senderEmail.split('@')[0]}` : ''}
             </span>
           )}
         </div>

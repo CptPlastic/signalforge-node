@@ -115,6 +115,7 @@ func (h *handler) handlePTTUpload(w http.ResponseWriter, r *http.Request) {
 		AudioType:      audioType,
 		Origin:         "ptt",
 		SenderUserID:   user.ID,
+		SenderEmail:    user.Email,
 		CreatedAt:      now,
 	}
 

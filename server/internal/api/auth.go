@@ -94,13 +94,24 @@ func (h *handler) canManageSource(w http.ResponseWriter, r *http.Request, source
 
 func (h *handler) withUserContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie(sessionCookieName)
-		if err != nil || strings.TrimSpace(cookie.Value) == "" {
+		// Session token is delivered either as an HttpOnly cookie (web) or as
+		// an `Authorization: Bearer <token>` header (native clients without a
+		// cookie jar — currently the React Native mobile app).
+		sessionToken := ""
+		if cookie, err := r.Cookie(sessionCookieName); err == nil {
+			sessionToken = strings.TrimSpace(cookie.Value)
+		}
+		if sessionToken == "" {
+			if header := r.Header.Get("Authorization"); strings.HasPrefix(header, "Bearer ") {
+				sessionToken = strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
+			}
+		}
+		if sessionToken == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		user, found, err := h.db.GetUserBySessionToken(cookie.Value)
+		user, found, err := h.db.GetUserBySessionToken(sessionToken)
 		if err != nil {
 			h.logger.Error("session lookup failed", "error", err)
 			next.ServeHTTP(w, r)
@@ -224,9 +235,13 @@ func (h *handler) handleVerifyMagicLink(w http.ResponseWriter, r *http.Request) 
 		"email": user.Email,
 	})
 
+	// Native clients (mobile) can't read the HttpOnly cookie, so we also
+	// return the session token in the JSON body. Web ignores this and uses
+	// the cookie as before.
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "ok",
-		"user":   toAuthUser(user),
+		"status":       "ok",
+		"user":         toAuthUser(user),
+		"sessionToken": sessionToken,
 	})
 }
 

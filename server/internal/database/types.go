@@ -71,7 +71,11 @@ type Call struct {
 	TranscriptProvider string  `json:"transcriptProvider,omitempty"`
 	Origin             string  `json:"origin,omitempty"`
 	SenderUserID       string  `json:"senderUserId,omitempty"`
-	CreatedAt          int64   `json:"createdAt"`
+	// SenderEmail is a transient enrichment populated by the PTT handler for
+	// live WS broadcasts. It is not stored in the calls table, so historical
+	// PTT calls fetched from the DB will leave it empty — that's intentional.
+	SenderEmail string `json:"senderEmail,omitempty"`
+	CreatedAt   int64  `json:"createdAt"`
 }
 
 // TranscriptionJob is a queued call ready for an external worker.
