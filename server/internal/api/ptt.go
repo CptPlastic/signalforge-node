@@ -172,3 +172,183 @@ func pttWriteJSON(w http.ResponseWriter, status int, body any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
+
+// pttBroadcastResult is the per-set outcome of a single broadcast call.
+// Empty Error means the set was delivered to; CallID/Talkgroup are zero on failure.
+type pttBroadcastResult struct {
+	RadioSetID string `json:"radioSetId"`
+	CallID     int64  `json:"callId,omitempty"`
+	Talkgroup  int    `json:"talkgroup,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
+type pttBroadcastResponse struct {
+	Results []pttBroadcastResult `json:"results"`
+}
+
+// handlePTTBroadcast fans a single PTT recording out to many radio sets at once.
+// Used by dispatcher-mode clients to address multiple talkgroups with one keying.
+//
+// Multipart fields:
+//
+//	audio        required, the recorded clip
+//	duration     optional float seconds
+//	clientId     required idempotency base — per-set keys are derived as `<clientId>:<radioSetId>`
+//	radioSetIds  required, comma-separated list of radio set IDs to deliver to
+//
+// Auth: session cookie/bearer. Caller must have both tx_enabled and dispatcher_enabled.
+// Per-set failures are reported in the response Results rather than failing the whole call,
+// so a partial multi-set delivery still surfaces what landed.
+func (h *handler) handlePTTBroadcast(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.requireAuthenticated(w, r)
+	if !ok {
+		return
+	}
+	if !user.TxEnabled || !user.DispatcherEnabled {
+		http.Error(w, "dispatcher broadcast not enabled for this user", http.StatusForbidden)
+		return
+	}
+	if isGuest(user) {
+		http.Error(w, "guests cannot transmit", http.StatusForbidden)
+		return
+	}
+
+	if err := r.ParseMultipartForm(maxPTTSize); err != nil {
+		http.Error(w, "invalid multipart form", http.StatusBadRequest)
+		return
+	}
+
+	clientID := strings.TrimSpace(r.FormValue("clientId"))
+	if clientID == "" {
+		http.Error(w, "missing clientId", http.StatusBadRequest)
+		return
+	}
+
+	rawIDs := strings.TrimSpace(r.FormValue("radioSetIds"))
+	if rawIDs == "" {
+		http.Error(w, "missing radioSetIds", http.StatusBadRequest)
+		return
+	}
+	radioSetIDs := splitAndTrim(rawIDs, ",")
+	if len(radioSetIDs) == 0 {
+		http.Error(w, "no radio sets specified", http.StatusBadRequest)
+		return
+	}
+
+	f, audioHeader, err := r.FormFile("audio")
+	if err != nil {
+		http.Error(w, "missing audio", http.StatusBadRequest)
+		return
+	}
+	defer f.Close()
+	audio, err := io.ReadAll(f)
+	if err != nil {
+		http.Error(w, "read audio", http.StatusInternalServerError)
+		return
+	}
+	if len(audio) <= 44 {
+		http.Error(w, "audio too small", http.StatusBadRequest)
+		return
+	}
+
+	audioType := resolveAudioType("", audioHeader.Filename, audioHeader.Header.Get("Content-Type"))
+	duration := formFloat(r, "duration")
+	if duration == 0 {
+		duration = estimateAudioDuration(audio, audioType)
+	}
+
+	results := make([]pttBroadcastResult, 0, len(radioSetIDs))
+	for _, radioSetID := range radioSetIDs {
+		results = append(results, h.deliverPTTToSet(user, radioSetID, clientID, audio, audioHeader.Filename, audioType, duration))
+	}
+
+	h.logger.Info("ptt broadcast delivered",
+		"sender_user_id", user.ID,
+		"radio_set_count", len(radioSetIDs),
+		"audio_bytes", len(audio),
+	)
+
+	pttWriteJSON(w, http.StatusOK, pttBroadcastResponse{Results: results})
+}
+
+// deliverPTTToSet inserts a synthetic PTT call onto one radio set's PTT talkgroup
+// and pushes it through the stream hub + authenticated WS. Per-set idempotency
+// is enforced via a derived clientId (`<base>:<setId>`) so retries are safe.
+func (h *handler) deliverPTTToSet(
+	user authUser,
+	radioSetID, baseClientID string,
+	audio []byte,
+	audioName, audioType string,
+	duration float64,
+) pttBroadcastResult {
+	clientID := baseClientID + ":" + radioSetID
+
+	rs, found, err := h.db.GetRadioSetForPTT(radioSetID)
+	if err != nil {
+		h.logger.Error("ptt broadcast: lookup radio set failed", "error", err, "radio_set_id", radioSetID)
+		return pttBroadcastResult{RadioSetID: radioSetID, Error: "lookup radio set"}
+	}
+	if !found {
+		return pttBroadcastResult{RadioSetID: radioSetID, Error: "not found"}
+	}
+	if rs.PTTTalkgroup == nil {
+		return pttBroadcastResult{RadioSetID: radioSetID, Error: "no ptt talkgroup"}
+	}
+
+	if existingCallID, ok, err := h.db.GetPTTUploadCallID(clientID); err != nil {
+		h.logger.Error("ptt broadcast: idempotency lookup failed", "error", err, "radio_set_id", radioSetID)
+		return pttBroadcastResult{RadioSetID: radioSetID, Error: "idempotency lookup"}
+	} else if ok {
+		return pttBroadcastResult{RadioSetID: radioSetID, CallID: existingCallID, Talkgroup: *rs.PTTTalkgroup}
+	}
+
+	now := time.Now().Unix()
+	call := &database.Call{
+		UserID:         rs.UserID,
+		DateTime:       now,
+		Talkgroup:      *rs.PTTTalkgroup,
+		TalkgroupLabel: ptTalkgroupLabel(rs, user),
+		TalkgroupGroup: "PTT",
+		Duration:       duration,
+		AudioName:      audioName,
+		AudioType:      audioType,
+		Origin:         "ptt",
+		SenderUserID:   user.ID,
+		SenderEmail:    user.Email,
+		CreatedAt:      now,
+	}
+	id, err := h.db.InsertCall(call, audio)
+	if err != nil {
+		h.logger.Error("ptt broadcast: insert call failed", "error", err, "radio_set_id", radioSetID)
+		return pttBroadcastResult{RadioSetID: radioSetID, Error: "store call"}
+	}
+	call.ID = id
+
+	if err := h.db.RecordPTTUpload(clientID, id, user.ID); err != nil {
+		if existingID, found, lookupErr := h.db.GetPTTUploadCallID(clientID); lookupErr == nil && found && existingID != id {
+			h.logger.Warn("ptt broadcast: idempotency race resolved",
+				"client_id", clientID, "winning_call_id", existingID, "losing_call_id", id,
+			)
+			return pttBroadcastResult{RadioSetID: radioSetID, CallID: existingID, Talkgroup: *rs.PTTTalkgroup}
+		}
+		h.logger.Error("ptt broadcast: record upload failed", "error", err)
+	}
+
+	h.prepareInsertedCallTranscriptStatus(call)
+	h.streamHub.push(call, audio)
+	h.broadcastCall(call, "")
+
+	return pttBroadcastResult{RadioSetID: radioSetID, CallID: id, Talkgroup: *rs.PTTTalkgroup}
+}
+
+func splitAndTrim(s, sep string) []string {
+	parts := strings.Split(s, sep)
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}

@@ -11,3 +11,8 @@ export function updateUserStatusDraft(userID: string, status: UserRecord['status
 export function updateUserTxEnabledDraft(userID: string, txEnabled: boolean) {
   return (users: UserRecord[]): UserRecord[] => users.map((user) => user.id === userID ? { ...user, txEnabled } : user)
 }
+
+export function updateUserDispatcherEnabledDraft(userID: string, dispatcherEnabled: boolean) {
+  return (users: UserRecord[]): UserRecord[] =>
+    users.map((user) => user.id === userID ? { ...user, dispatcherEnabled } : user)
+}

@@ -1,7 +1,12 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { AuthUser, AuditLogEntry, UserRecord } from '../../lib/api'
 import { fmtDateTime } from '../../lib/format'
-import { updateUserRoleDraft, updateUserStatusDraft, updateUserTxEnabledDraft } from '../../lib/userDrafts'
+import {
+  updateUserDispatcherEnabledDraft,
+  updateUserRoleDraft,
+  updateUserStatusDraft,
+  updateUserTxEnabledDraft,
+} from '../../lib/userDrafts'
 import type { AppView } from '../../types/app'
 import { ActiveView } from '../ActiveView'
 
@@ -184,6 +189,7 @@ function UserManagementPanel({
             <th className="py-1.5 px-2 text-left font-normal">Role</th>
             <th className="py-1.5 px-2 text-left font-normal">Status</th>
             <th className="py-1.5 px-2 text-left font-normal">TX</th>
+            <th className="py-1.5 px-2 text-left font-normal">Dispatch</th>
             <th className="py-1.5 px-2 text-left font-normal">Created</th>
             <th className="py-1.5 px-2 text-left font-normal">Updated</th>
             <th className="py-1.5 px-2 text-left font-normal">Actions</th>
@@ -226,6 +232,19 @@ function UserManagementPanel({
                   <span className="uppercase tracking-wider">{user.txEnabled ? 'On' : 'Off'}</span>
                 </label>
               </td>
+              <td className="py-2 px-2">
+                <label className="flex items-center gap-1.5 text-[10px] text-console-muted cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={user.dispatcherEnabled}
+                    onChange={(event) =>
+                      setUsers(updateUserDispatcherEnabledDraft(user.id, event.target.checked))
+                    }
+                    className="accent-console-accent"
+                  />
+                  <span className="uppercase tracking-wider">{user.dispatcherEnabled ? 'On' : 'Off'}</span>
+                </label>
+              </td>
               <td className="py-2 px-2 text-console-muted">{fmtDateTime(user.createdAt)}</td>
               <td className="py-2 px-2 text-console-muted">{fmtDateTime(user.updatedAt)}</td>
               <td className="py-2 px-2">
@@ -259,7 +278,7 @@ function UserManagementPanel({
           ))}
           {users.length === 0 && (
             <tr>
-              <td className="py-3 px-2 text-console-muted" colSpan={7}>No users</td>
+              <td className="py-3 px-2 text-console-muted" colSpan={8}>No users</td>
             </tr>
           )}
         </tbody>

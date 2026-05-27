@@ -215,7 +215,11 @@ func (d *DB) migrate() error {
 		END $$;
 
 		-- PTT Phase 1: per-hub push-to-talk inside a radio set.
-		ALTER TABLE users      ADD COLUMN IF NOT EXISTS tx_enabled     BOOLEAN NOT NULL DEFAULT FALSE;
+		-- dispatcher_enabled lets a user broadcast a single PTT to many radio
+		-- sets at once via the /ptt/broadcast endpoint (e.g. a dispatcher who
+		-- coordinates multiple talkgroups).
+		ALTER TABLE users      ADD COLUMN IF NOT EXISTS tx_enabled         BOOLEAN NOT NULL DEFAULT FALSE;
+		ALTER TABLE users      ADD COLUMN IF NOT EXISTS dispatcher_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 		ALTER TABLE radio_sets ADD COLUMN IF NOT EXISTS ptt_talkgroup  INTEGER;
 		ALTER TABLE calls      ADD COLUMN IF NOT EXISTS origin         TEXT    NOT NULL DEFAULT 'rf';
 		ALTER TABLE calls      ADD COLUMN IF NOT EXISTS sender_user_id TEXT;

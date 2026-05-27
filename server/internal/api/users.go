@@ -15,9 +15,10 @@ const (
 )
 
 type updateUserRequest struct {
-	Role      string `json:"role"`
-	Status    string `json:"status"`
-	TxEnabled *bool  `json:"txEnabled,omitempty"`
+	Role              string `json:"role"`
+	Status            string `json:"status"`
+	TxEnabled         *bool  `json:"txEnabled,omitempty"`
+	DispatcherEnabled *bool  `json:"dispatcherEnabled,omitempty"`
 }
 
 func normalizeUserRole(role string) string {
@@ -147,6 +148,14 @@ func (h *handler) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		auditMeta["txEnabled"] = *req.TxEnabled
+	}
+	if req.DispatcherEnabled != nil {
+		if _, dispErr := h.db.SetUserDispatcherEnabled(userID, *req.DispatcherEnabled); dispErr != nil {
+			h.logger.Error("update user dispatcher_enabled failed", "user_id", userID, "error", dispErr)
+			http.Error(w, updateUserError, http.StatusInternalServerError)
+			return
+		}
+		auditMeta["dispatcherEnabled"] = *req.DispatcherEnabled
 	}
 	_ = h.db.AppendAuditLog(admin.ID, "admin.user_updated", "user", userID, auditMeta)
 

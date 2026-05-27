@@ -146,14 +146,17 @@ func (d *DB) VerifyMagicLinkToken(token string, sessionTTL time.Duration) (User,
 func (d *DB) GetUserBySessionToken(token string) (User, bool, error) {
 	var user User
 	err := d.db.QueryRow(`
-		SELECT u.id, u.email, u.role, u.status, COALESCE(u.tx_enabled, FALSE), u.created_at, u.updated_at
+		SELECT u.id, u.email, u.role, u.status,
+		       COALESCE(u.tx_enabled, FALSE),
+		       COALESCE(u.dispatcher_enabled, FALSE),
+		       u.created_at, u.updated_at
 		FROM auth_sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.token = $1
 		  AND s.revoked_at = 0
 		  AND s.expires_at >= $2
 		  AND u.status = 'active'
-	`, token, time.Now().Unix()).Scan(&user.ID, &user.Email, &user.Role, &user.Status, &user.TxEnabled, &user.CreatedAt, &user.UpdatedAt)
+	`, token, time.Now().Unix()).Scan(&user.ID, &user.Email, &user.Role, &user.Status, &user.TxEnabled, &user.DispatcherEnabled, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return User{}, false, nil
@@ -191,7 +194,10 @@ func (d *DB) GetSessionExpiresAt(token string) (int64, bool, error) {
 // ListUsers returns all users for admin management.
 func (d *DB) ListUsers() ([]User, error) {
 	rows, err := d.db.Query(`
-		SELECT id, email, role, status, COALESCE(tx_enabled, FALSE), created_at, updated_at
+		SELECT id, email, role, status,
+		       COALESCE(tx_enabled, FALSE),
+		       COALESCE(dispatcher_enabled, FALSE),
+		       created_at, updated_at
 		FROM users
 		ORDER BY created_at ASC
 	`)
@@ -203,7 +209,7 @@ func (d *DB) ListUsers() ([]User, error) {
 	users := make([]User, 0)
 	for rows.Next() {
 		var user User
-		if err := rows.Scan(&user.ID, &user.Email, &user.Role, &user.Status, &user.TxEnabled, &user.CreatedAt, &user.UpdatedAt); err != nil {
+		if err := rows.Scan(&user.ID, &user.Email, &user.Role, &user.Status, &user.TxEnabled, &user.DispatcherEnabled, &user.CreatedAt, &user.UpdatedAt); err != nil {
 			return nil, err
 		}
 		users = append(users, user)
@@ -235,6 +241,24 @@ func (d *DB) SetUserTxEnabled(userID string, enabled bool) (bool, error) {
 	result, err := d.db.Exec(`
 		UPDATE users
 		SET tx_enabled = $2, updated_at = $3
+		WHERE id = $1
+	`, userID, enabled, time.Now().Unix())
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
+// SetUserDispatcherEnabled toggles a user's multi-set broadcast capability.
+// The second return value is false when the user does not exist.
+func (d *DB) SetUserDispatcherEnabled(userID string, enabled bool) (bool, error) {
+	result, err := d.db.Exec(`
+		UPDATE users
+		SET dispatcher_enabled = $2, updated_at = $3
 		WHERE id = $1
 	`, userID, enabled, time.Now().Unix())
 	if err != nil {

@@ -172,6 +172,7 @@ export type AuthUser = {
   email: string
   role: 'admin' | 'user' | 'guest'
   txEnabled?: boolean
+  dispatcherEnabled?: boolean
 }
 
 export type UserRecord = {
@@ -180,6 +181,7 @@ export type UserRecord = {
   role: 'admin' | 'user' | 'guest'
   status: 'active' | 'pending' | 'disabled'
   txEnabled: boolean
+  dispatcherEnabled: boolean
   createdAt: number
   updatedAt: number
 }
@@ -289,7 +291,10 @@ export const api = {
   users: () => request<UserRecord[]>('/api/v1/users'),
   updateUser: (
     id: string,
-    payload: Pick<UserRecord, 'role' | 'status'> & { txEnabled?: boolean },
+    payload: Pick<UserRecord, 'role' | 'status'> & {
+      txEnabled?: boolean
+      dispatcherEnabled?: boolean
+    },
   ) =>
     request<{ status: string }>(`/api/v1/users/${encodeURIComponent(id)}`, {
       method: 'PATCH',
