@@ -293,3 +293,45 @@ func (h *handler) handleMe(w http.ResponseWriter, r *http.Request) {
 		"sessionExpiresAt": sessionExpiresAt,
 	})
 }
+
+// handleRefreshSession extends the caller's active session by a fresh TTL.
+// Used by the web client's "RE-AUTH" banner to keep a session alive without
+// going through the full magic-link round-trip.
+func (h *handler) handleRefreshSession(w http.ResponseWriter, r *http.Request) {
+	if _, ok := getAuthUser(r.Context()); !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	token := sessionTokenFromRequest(r)
+	if token == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	newExpiresAt, ok, err := h.db.ExtendSession(token, 24*time.Hour)
+	if err != nil {
+		h.logger.Error("extend session failed", "error", err)
+		http.Error(w, "refresh failed", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.Error(w, "session not found", http.StatusUnauthorized)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"sessionExpiresAt": newExpiresAt,
+	})
+}
+
+// sessionTokenFromRequest returns the active session token sourced from either
+// the session cookie or an Authorization: Bearer header.
+func sessionTokenFromRequest(r *http.Request) string {
+	if cookie, err := r.Cookie(sessionCookieName); err == nil {
+		if v := strings.TrimSpace(cookie.Value); v != "" {
+			return v
+		}
+	}
+	if header := r.Header.Get("Authorization"); strings.HasPrefix(header, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
+	}
+	return ""
+}

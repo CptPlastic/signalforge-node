@@ -173,6 +173,30 @@ func (d *DB) RevokeSession(token string) error {
 	return err
 }
 
+// ExtendSession sets a session's expires_at to now+ttl, returning the new
+// expiration. Returns (0, false, nil) if the session is unknown or already
+// revoked — callers should require re-auth in that case.
+func (d *DB) ExtendSession(token string, ttl time.Duration) (int64, bool, error) {
+	newExpiresAt := time.Now().Add(ttl).Unix()
+	result, err := d.db.Exec(`
+		UPDATE auth_sessions
+		SET expires_at = $1
+		WHERE token = $2
+		  AND revoked_at = 0
+	`, newExpiresAt, token)
+	if err != nil {
+		return 0, false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, false, err
+	}
+	if rows == 0 {
+		return 0, false, nil
+	}
+	return newExpiresAt, true, nil
+}
+
 // GetSessionExpiresAt returns the expiration for an active session token.
 func (d *DB) GetSessionExpiresAt(token string) (int64, bool, error) {
 	var expiresAt int64

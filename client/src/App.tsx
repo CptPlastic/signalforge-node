@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ApiError,
   api,
@@ -696,6 +696,17 @@ function App() {
   }
   setSessionWarning('')
   }, [authUser, nowUnix, sessionExpiresAt])
+
+  const handleRefreshSession = useCallback(async () => {
+    setAuthError('')
+    try {
+      const { sessionExpiresAt: newExpiresAt } = await api.refreshSession()
+      setSessionExpiresAt(newExpiresAt || null)
+      setSessionWarning('')
+    } catch (err) {
+      setAuthError(getErrorMessage(err, 'Could not refresh session'))
+    }
+  }, [])
 
   // Poll sources frequently as a safety net for metrics and status.
   useEffect(() => {
@@ -1716,7 +1727,7 @@ function App() {
       <div className="flex items-center justify-between gap-3">
       <span>{sessionWarning}</span>
       <button
-        onClick={() => setActiveView('account')}
+        onClick={handleRefreshSession}
         className="px-2 py-1 border border-console-error rounded text-[10px] hover:bg-console-error hover:bg-opacity-10"
       >
         RE-AUTH

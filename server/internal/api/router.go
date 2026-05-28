@@ -42,6 +42,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Post("/api/v1/auth/magic-link", handle.handleRequestMagicLink)
 		r.Get("/api/v1/auth/verify", handle.handleVerifyMagicLink)
 		r.Post("/api/v1/auth/logout", handle.handleLogout)
+		r.Post("/api/v1/auth/refresh", handle.handleRefreshSession)
 		r.Get("/api/v1/auth/me", handle.handleMe)
 		r.Get("/api/v1/hub/identity", handle.handleGetHubIdentity)
 		r.Put("/api/v1/hub/identity", handle.handleUpdateHubIdentity)
