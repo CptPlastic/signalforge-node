@@ -37,6 +37,7 @@ import {
   type SmoothedSourceStatus,
 } from './lib/sourceStatus'
 import { WebSocketClient } from './lib/ws'
+import { isMobileUserAgent, tryOpenSignalforgeApp } from './lib/mobileAuthHandoff'
 import type { AppView } from './types/app'
 
 type WsCallEvent = { type: 'call'; call: Call; sourceId?: string }
@@ -339,6 +340,7 @@ function App() {
   const [authToken, setAuthToken] = useState('')
   const [authMessage, setAuthMessage] = useState('')
   const [authError, setAuthError] = useState('')
+  const [mobileAppHandoff, setMobileAppHandoff] = useState<{ token: string } | null>(null)
   const [hubIdentity, setHubIdentity] = useState<HubIdentity | null>(null)
   const [hubDraft, setHubDraft] = useState<HubIdentityDraft>({ name: '', publicUrl: '', region: '', contact: '', federationEnabled: false })
   const [hubLoading, setHubLoading] = useState(false)
@@ -633,6 +635,14 @@ function App() {
   const token = new URLSearchParams(globalThis.window.location.search).get('token')
   if (!token) return
 
+  globalThis.window.history.replaceState({}, '', globalThis.window.location.pathname)
+
+  if (isMobileUserAgent()) {
+    setMobileAppHandoff({ token })
+    tryOpenSignalforgeApp(globalThis.window.location.origin, token)
+    return
+  }
+
   setAuthToken(token)
   setAuthLoading(true)
   setAuthMessage('')
@@ -646,10 +656,30 @@ function App() {
     setAuthError(getErrorMessage(err, 'Magic-link verification failed'))
     })
     .finally(() => {
-    globalThis.window.history.replaceState({}, '', globalThis.window.location.pathname)
     setAuthLoading(false)
     })
   }, [])
+
+  const continueMagicLinkInBrowser = () => {
+    if (!mobileAppHandoff) return
+    const token = mobileAppHandoff.token
+    setMobileAppHandoff(null)
+    setAuthToken(token)
+    setAuthLoading(true)
+    setAuthMessage('')
+    setAuthError('')
+    api.verifyMagicLink(token)
+      .then(async (result) => {
+        setAuthUser(result.user)
+        await finalizeVerifiedSession(result.user.email, result.user.role)
+      })
+      .catch((err) => {
+        setAuthError(getErrorMessage(err, 'Magic-link verification failed'))
+      })
+      .finally(() => {
+        setAuthLoading(false)
+      })
+  }
 
   useEffect(() => {
   if (activeView !== 'account') return
@@ -1705,6 +1735,22 @@ function App() {
 
   return (
     <div className="min-h-screen bg-console-bg text-console-text font-mono px-3 py-3 sm:px-6 sm:py-5 flex flex-col gap-3 sm:gap-4 overflow-x-hidden">
+      {mobileAppHandoff && !authUser ? (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 bg-console-bg/95 p-6 text-center">
+          <SignalForgeLogo className="h-10 w-auto opacity-90" />
+          <p className="text-console-accent text-sm uppercase tracking-wider">Opening SignalForge app…</p>
+          <p className="text-console-muted text-xs max-w-sm leading-relaxed">
+            Tap the link in your email to sign in. If the app did not open, use the button below to sign in here instead.
+          </p>
+          <button
+            type="button"
+            onClick={continueMagicLinkInBrowser}
+            className="px-4 py-2 border border-console-border text-console-muted rounded text-xs uppercase tracking-wider hover:border-console-accent hover:text-console-accent"
+          >
+            Continue in browser
+          </button>
+        </div>
+      ) : null}
       <AppHeader
         authUser={authUser}
         headerVersionLabel={headerVersionLabel}
