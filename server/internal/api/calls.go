@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,12 +14,6 @@ import (
 )
 
 func (h *handler) broadcastCall(call *database.Call, sourceID string) {
-	type wsEvent struct {
-		Type     string         `json:"type"`
-		Call     *database.Call `json:"call"`
-		SourceID string         `json:"sourceId,omitempty"`
-	}
-
 	sources, err := h.db.ListIngestionSources(false)
 	if err != nil {
 		h.logger.Error("list sources for live call access failed", "error", err)
@@ -37,8 +32,102 @@ func (h *handler) broadcastCall(call *database.Call, sourceID string) {
 		if !h.canReadCall(user, visibleCall, sourceByID, sharedSourceIDs) {
 			redactCall(&visibleCall)
 		}
-		return wsEvent{Type: "call", Call: &visibleCall, SourceID: sourceID}
+		return wsCallEvent{Type: "call", Call: &visibleCall, SourceID: sourceID}
 	})
+}
+
+// wsCallEvent is the WebSocket frame shape for a single call, used for both live
+// broadcasts and ?since= replay so reconnecting clients see an identical format.
+type wsCallEvent struct {
+	Type     string         `json:"type"`
+	Call     *database.Call `json:"call"`
+	SourceID string         `json:"sourceId,omitempty"`
+}
+
+// wsReplayCompleteEvent is sent once after a reconnecting client's missed-call
+// replay finishes. Its presence also advertises that the hub supports replay, so
+// clients can skip their HTTP catch-up fallback.
+type wsReplayCompleteEvent struct {
+	Type  string `json:"type"`
+	Since int64  `json:"since"`
+	Count int    `json:"count"`
+}
+
+// replayMissedCalls streams calls newer than the client's ?since= cursor over the
+// existing WebSocket, then sends a replay_complete sentinel. Calls are redacted
+// per the connecting user exactly as live broadcasts are. It always sends the
+// sentinel (even with no cursor or no calls) to advertise replay support.
+func (h *handler) replayMissedCalls(hb *hub, client *hubClient, r *http.Request) {
+	since := parseSinceParam(r)
+	count := 0
+
+	if since > 0 {
+		count = h.replayCallsSince(hb, client, since)
+	}
+
+	data, err := json.Marshal(wsReplayCompleteEvent{Type: "replay_complete", Since: since, Count: count})
+	if err != nil {
+		h.logger.Error("ws replay_complete marshal failed", "error", err)
+		return
+	}
+	hb.enqueueTo(client, data)
+}
+
+func (h *handler) replayCallsSince(hb *hub, client *hubClient, since int64) int {
+	calls, err := h.db.ListCallsSince(since, 200)
+	if err != nil {
+		h.logger.Error("ws replay list calls failed", "error", err)
+		return 0
+	}
+	if len(calls) == 0 {
+		return 0
+	}
+
+	sourceByID, err := h.sourceAccessMap()
+	if err != nil {
+		h.logger.Error("ws replay list sources failed", "error", err)
+		return 0
+	}
+	sharedSourceIDs, err := h.sharedSourceIDsForUser(client.user)
+	if err != nil {
+		h.logger.Error("ws replay list source shares failed", "error", err)
+		sharedSourceIDs = map[string]bool{}
+	}
+	clearTranscripts := h.cfg.TranscriptionWorkerToken == ""
+
+	sent := 0
+	for i := range calls {
+		call := calls[i]
+		if !h.canReadCall(client.user, call, sourceByID, sharedSourceIDs) {
+			redactCall(&call)
+		}
+		if clearTranscripts {
+			call.TranscriptText = ""
+			call.TranscriptStatus = ""
+			call.TranscriptProvider = ""
+		}
+		data, marshalErr := json.Marshal(wsCallEvent{Type: "call", Call: &call})
+		if marshalErr != nil {
+			h.logger.Error("ws replay marshal call failed", "error", marshalErr)
+			continue
+		}
+		hb.enqueueTo(client, data)
+		sent++
+	}
+	return sent
+}
+
+// parseSinceParam reads the ?since=<callId> cursor from the WebSocket URL.
+func parseSinceParam(r *http.Request) int64 {
+	raw := strings.TrimSpace(r.URL.Query().Get("since"))
+	if raw == "" {
+		return 0
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }
 
 // handleListCallGroups returns all distinct talkgroup_group values stored in the DB.

@@ -192,6 +192,45 @@ func (d *DB) ListCalls(params ListCallsParams) ([]Call, error) {
 	return calls, rows.Err()
 }
 
+// ListCallsSince returns calls with id greater than sinceID ordered ascending by
+// id (no audio blobs). It is used to replay missed calls to a reconnecting
+// WebSocket client so no traffic is lost across a dropped connection.
+func (d *DB) ListCallsSince(sinceID int64, limit int) ([]Call, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+
+	rows, err := d.db.Query(`
+		SELECT c.id, COALESCE(c.user_id, ''), COALESCE(c.source_id, ''), c.datetime, c.system, c.system_label, c.talkgroup, c.talkgroup_label,
+		       c.talkgroup_group, c.talkgroup_tag, c.frequency, c.duration,
+		       c.audio_name, c.audio_type, COALESCE(ct.transcript, ''), COALESCE(ct.status, ''), COALESCE(ct.provider, ''),
+		       COALESCE(c.origin, 'rf'), COALESCE(c.sender_user_id, ''), c.created_at
+		FROM calls c
+		LEFT JOIN call_transcripts ct ON ct.call_id = c.id
+		WHERE c.id > $1
+		ORDER BY c.id ASC
+		LIMIT $2`, sinceID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	calls := make([]Call, 0)
+	for rows.Next() {
+		var c Call
+		if err := rows.Scan(
+			&c.ID, &c.UserID, &c.SourceID, &c.DateTime, &c.System, &c.SystemLabel,
+			&c.Talkgroup, &c.TalkgroupLabel, &c.TalkgroupGroup, &c.TalkgroupTag,
+			&c.Frequency, &c.Duration, &c.AudioName, &c.AudioType, &c.TranscriptText, &c.TranscriptStatus, &c.TranscriptProvider,
+			&c.Origin, &c.SenderUserID, &c.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		calls = append(calls, c)
+	}
+	return calls, rows.Err()
+}
+
 func normalizeListCallsPaging(params ListCallsParams) (int, int) {
 	limit := params.Limit
 	if limit <= 0 || limit > 1000 {
