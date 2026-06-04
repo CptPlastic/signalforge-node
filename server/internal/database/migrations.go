@@ -37,7 +37,9 @@ func (d *DB) migrate() error {
 			created_at   BIGINT  NOT NULL,
 			FOREIGN KEY (user_id) REFERENCES users(id)
 		);
+		ALTER TABLE auth_magic_links ADD COLUMN IF NOT EXISTS code TEXT NOT NULL DEFAULT '';
 		CREATE INDEX IF NOT EXISTS idx_auth_magic_links_email ON auth_magic_links(email);
+		CREATE INDEX IF NOT EXISTS idx_auth_magic_links_email_code ON auth_magic_links(email, code);
 		CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id);
 		CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 		CREATE INDEX IF NOT EXISTS idx_audit_log_user_created ON audit_log(user_id, created_at DESC);

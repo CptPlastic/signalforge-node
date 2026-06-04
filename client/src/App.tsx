@@ -88,6 +88,16 @@ function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text).catch(console.error)
 }
 
+// verifyAuthEntry picks the right verification call: a short numeric value is
+// the in-app 6-digit code; anything else is a full magic-link token pasted
+// from the email.
+function verifyAuthEntry(email: string, entry: string) {
+  if (/^\d{4,8}$/.test(entry)) {
+    return api.verifyMagicCode(email, entry)
+  }
+  return api.verifyMagicLink(entry)
+}
+
 function trustTextClass(trustLevel = 'community'): string {
   switch (trustLevel) {
     case 'official':
@@ -1216,8 +1226,10 @@ function App() {
       setAuthMessage(`Access requested for ${email}. An admin must approve this account before login.`)
       return
     }
-    setAuthMessage(`Magic link issued for ${email}. Check inbox; in non-production token may be returned inline.`)
-    if (result.token) {
+    setAuthMessage(`Code sent to ${email}. Enter the 6-digit code below, or tap the link in the email.`)
+    if (result.code) {
+      setAuthToken(result.code)
+    } else if (result.token) {
       setAuthToken(result.token)
     }
   } catch (err) {
@@ -1228,9 +1240,9 @@ function App() {
   }
 
   async function verifyMagicLinkToken() {
-  const token = authToken.trim()
-  if (!token) {
-    setAuthError('Token is required')
+  const entry = authToken.trim()
+  if (!entry) {
+    setAuthError('Enter the code from your email')
     return
   }
 
@@ -1238,11 +1250,13 @@ function App() {
   setAuthError('')
   setAuthMessage('')
   try {
-    const result = await api.verifyMagicLink(token)
+    // A short numeric entry is the in-app 6-digit code; anything else is a
+    // full magic-link token pasted from the email.
+    const result = await verifyAuthEntry(authEmail.trim(), entry)
     setAuthUser(result.user)
     await finalizeVerifiedSession(result.user.email, result.user.role)
   } catch (err) {
-    setAuthError(getErrorMessage(err, 'Magic-link verification failed'))
+    setAuthError(getErrorMessage(err, 'Sign-in verification failed'))
   } finally {
     setAuthLoading(false)
   }

@@ -133,9 +133,11 @@ type User struct {
 type AuditLogEntry struct {
 	ID         int64           `json:"id"`
 	UserID     string          `json:"userId,omitempty"`
+	UserEmail  string          `json:"userEmail,omitempty"`
 	Action     string          `json:"action"`
 	TargetType string          `json:"targetType"`
 	TargetID   string          `json:"targetId"`
+	TargetEmail string         `json:"targetEmail,omitempty"`
 	Metadata   json.RawMessage `json:"metadata"`
 	CreatedAt  int64           `json:"createdAt"`
 }

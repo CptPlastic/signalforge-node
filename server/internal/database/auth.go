@@ -51,31 +51,109 @@ func (d *DB) EnsureUserByEmail(email string) (User, error) {
 }
 
 // CreateMagicLinkToken creates a one-time magic-link token for a user's email.
-func (d *DB) CreateMagicLinkToken(email string, ttl time.Duration) (string, User, error) {
+// It also generates a short 6-digit code stored on the same row so the caller
+// can offer an in-app code entry as an alternative to clicking the link.
+func (d *DB) CreateMagicLinkToken(email string, ttl time.Duration) (string, string, User, error) {
 	user, err := d.EnsureUserByEmail(email)
 	if err != nil {
-		return "", User{}, err
+		return "", "", User{}, err
 	}
 	if user.Status == "pending" {
-		return "", user, ErrPendingUser
+		return "", "", user, ErrPendingUser
 	}
 	if user.Status != "active" {
-		return "", User{}, ErrInactiveUser
+		return "", "", User{}, ErrInactiveUser
 	}
 
 	token := randomToken("ml_")
+	code := randomNumericCode(6)
 	now := time.Now().Unix()
 	expiresAt := time.Now().Add(ttl).Unix()
 
 	_, err = d.db.Exec(`
-		INSERT INTO auth_magic_links (token, user_id, email, expires_at, used_at, created_at)
-		VALUES ($1, $2, $3, $4, 0, $5)
-	`, token, user.ID, user.Email, expiresAt, now)
+		INSERT INTO auth_magic_links (token, user_id, email, code, expires_at, used_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, 0, $6)
+	`, token, user.ID, user.Email, code, expiresAt, now)
 	if err != nil {
-		return "", User{}, err
+		return "", "", User{}, err
 	}
 
-	return token, user, nil
+	return token, code, user, nil
+}
+
+// VerifyMagicLinkCode validates and consumes a one-time 6-digit code for the
+// given email, then creates a session. This lets a user finish sign-in without
+// leaving the app to click the emailed link.
+func (d *DB) VerifyMagicLinkCode(email, code string, sessionTTL time.Duration) (User, string, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	code = strings.TrimSpace(code)
+	if email == "" || code == "" {
+		return User{}, "", sql.ErrNoRows
+	}
+
+	tx, err := d.db.Begin()
+	if err != nil {
+		return User{}, "", err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	var token string
+	var userID string
+	var expiresAt int64
+	var usedAt int64
+	err = tx.QueryRow(`
+		SELECT token, user_id, expires_at, used_at
+		FROM auth_magic_links
+		WHERE email = $1 AND code = $2
+		ORDER BY created_at DESC
+		LIMIT 1
+		FOR UPDATE
+	`, email, code).Scan(&token, &userID, &expiresAt, &usedAt)
+	if err != nil {
+		return User{}, "", err
+	}
+
+	now := time.Now().Unix()
+	if usedAt > 0 || expiresAt < now {
+		return User{}, "", sql.ErrNoRows
+	}
+
+	if _, err := tx.Exec(`UPDATE auth_magic_links SET used_at = $1 WHERE token = $2`, now, token); err != nil {
+		return User{}, "", err
+	}
+
+	sessionToken := randomToken("sess_")
+	sessionExpiresAt := time.Now().Add(sessionTTL).Unix()
+	if _, err := tx.Exec(`
+		INSERT INTO auth_sessions (token, user_id, expires_at, revoked_at, created_at)
+		VALUES ($1, $2, $3, 0, $4)
+	`, sessionToken, userID, sessionExpiresAt, now); err != nil {
+		return User{}, "", err
+	}
+
+	var user User
+	err = tx.QueryRow(`
+		SELECT id, email, role, status, created_at, updated_at
+		FROM users
+		WHERE id = $1
+	`, userID).Scan(&user.ID, &user.Email, &user.Role, &user.Status, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		return User{}, "", err
+	}
+	if user.Status == "pending" {
+		return User{}, "", ErrPendingUser
+	}
+	if user.Status != "active" {
+		return User{}, "", ErrInactiveUser
+	}
+
+	if err := tx.Commit(); err != nil {
+		return User{}, "", err
+	}
+
+	return user, sessionToken, nil
 }
 
 // VerifyMagicLinkToken validates and consumes a one-time magic-link token, then creates a session.
@@ -306,23 +384,23 @@ func (d *DB) DeleteUser(userID string) (bool, error) {
 		_ = tx.Rollback()
 	}()
 
-	if _, err := tx.Exec(`DELETE FROM auth_sessions WHERE user_id = $1`, userID); err != nil {
-		return false, err
+	steps := []string{
+		`DELETE FROM auth_sessions WHERE user_id = $1`,
+		`DELETE FROM auth_magic_links WHERE user_id = $1`,
+		`UPDATE audit_log SET user_id = NULL WHERE user_id = $1`,
+		`UPDATE hub_invites SET created_by_user_id = NULL WHERE created_by_user_id = $1`,
+		`DELETE FROM ingestion_source_keys WHERE user_id = $1`,
+		`DELETE FROM ingestion_source_user_shares WHERE user_id = $1`,
+		`DELETE FROM radio_sets WHERE user_id = $1`,
+		`DELETE FROM ptt_uploads WHERE user_id = $1`,
+		`DELETE FROM ingestion_sources WHERE user_id = $1`,
+		`DELETE FROM calls WHERE sender_user_id = $1`,
+		`DELETE FROM calls WHERE user_id = $1`,
 	}
-	if _, err := tx.Exec(`DELETE FROM auth_magic_links WHERE user_id = $1`, userID); err != nil {
-		return false, err
-	}
-	if _, err := tx.Exec(`DELETE FROM ingestion_source_keys WHERE user_id = $1`, userID); err != nil {
-		return false, err
-	}
-	if _, err := tx.Exec(`DELETE FROM ingestion_source_user_shares WHERE user_id = $1`, userID); err != nil {
-		return false, err
-	}
-	if _, err := tx.Exec(`DELETE FROM ingestion_sources WHERE user_id = $1`, userID); err != nil {
-		return false, err
-	}
-	if _, err := tx.Exec(`DELETE FROM calls WHERE user_id = $1`, userID); err != nil {
-		return false, err
+	for _, q := range steps {
+		if _, err := tx.Exec(q, userID); err != nil {
+			return false, err
+		}
 	}
 	result, err := tx.Exec(`DELETE FROM users WHERE id = $1`, userID)
 	if err != nil {

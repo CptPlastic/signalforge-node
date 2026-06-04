@@ -191,9 +191,11 @@ export type UserRecord = {
 export type AuditLogEntry = {
   id: number
   userId?: string
+  userEmail?: string
   action: string
   targetType: string
   targetId: string
+  targetEmail?: string
   metadata: Record<string, unknown>
   createdAt: number
 }
@@ -221,6 +223,7 @@ export type MagicLinkRequestResponse = {
   status: 'ok' | 'pending'
   user: AuthUser
   token?: string
+  code?: string
   verifyUrl?: string
 }
 
@@ -288,6 +291,11 @@ export const api = {
     }),
   verifyMagicLink: (token: string) =>
     request<AuthSessionResponse>(`/api/v1/auth/verify?token=${encodeURIComponent(token)}`),
+  verifyMagicCode: (email: string, code: string) =>
+    request<AuthSessionResponse>('/api/v1/auth/verify-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    }),
   logout: () => request<{ status: string }>('/api/v1/auth/logout', { method: 'POST' }),
   refreshSession: () =>
     request<{ sessionExpiresAt: number }>('/api/v1/auth/refresh', { method: 'POST' }),

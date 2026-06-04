@@ -138,8 +138,10 @@ func (h *handler) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	auditMeta := map[string]any{
-		"role":   role,
-		"status": status,
+		"role":        role,
+		"status":      status,
+		"actorEmail":  admin.Email,
+		"targetEmail": target.Email,
 	}
 	if req.TxEnabled != nil {
 		if _, txErr := h.db.SetUserTxEnabled(userID, *req.TxEnabled); txErr != nil {
@@ -204,7 +206,10 @@ func (h *handler) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, userNotFoundText, http.StatusNotFound)
 		return
 	}
-	_ = h.db.AppendAuditLog(admin.ID, "admin.user_deleted", "user", userID, map[string]any{})
+	_ = h.db.AppendAuditLog(admin.ID, "admin.user_deleted", "user", userID, map[string]any{
+		"actorEmail":  admin.Email,
+		"targetEmail": target.Email,
+	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

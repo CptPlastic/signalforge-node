@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react'
+import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import type { AuthUser, AuditLogEntry, UserRecord } from '../../lib/api'
 import { fmtDateTime } from '../../lib/format'
 import {
@@ -67,6 +67,15 @@ type UserManagementPanelProps = Pick<
 
 type AuditLogPanelProps = Pick<AccountViewProps, 'auditLogs' | 'auditLoading' | 'onRefreshAuditLogs'>
 
+function formatAuditIdentity(email: string | undefined, id: string | undefined): string {
+  const normalizedEmail = (email || '').trim()
+  const normalizedID = (id || '').trim()
+  if (normalizedEmail && normalizedID) return `${normalizedEmail} (${normalizedID})`
+  if (normalizedEmail) return normalizedEmail
+  if (normalizedID) return normalizedID
+  return 'system'
+}
+
 function SessionPanel({ authUser, authLoading, onLogoutSession }: SessionPanelProps) {
   if (!authUser) return null
 
@@ -105,18 +114,21 @@ function AuthAccessCard({
       <div className="border border-console-border rounded p-4 sm:p-5 flex flex-col gap-4">
         <div className="flex flex-col gap-2 text-center sm:text-left">
           <p className="console-label text-xs">ACCOUNT ACCESS</p>
-          <h2 className="text-sm sm:text-base text-console-text">Sign in with your email and finish the token step in one place.</h2>
-          <p className="text-[11px] text-console-muted">Request the magic link, then paste the token from your inbox below.</p>
+          <h2 className="text-sm sm:text-base text-console-text">Sign in with your email — no app switching required.</h2>
+          <p className="text-[11px] text-console-muted">Request a code, then enter the 6-digit code from your email right here.</p>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
           <div className="border border-console-border rounded p-3 flex flex-col gap-3 bg-console-bg/30">
-            <p className="console-label text-xs">STEP 1: REQUEST LOGIN</p>
-            <p className="text-[11px] text-console-muted">Enter your email address and request a magic link.</p>
+            <p className="console-label text-xs">STEP 1: REQUEST CODE</p>
+            <p className="text-[11px] text-console-muted">Enter your email address and request a sign-in code.</p>
             <input
               value={authEmail}
               onChange={(event) => onAuthEmailChange(event.target.value)}
               placeholder="your.email@example.com"
+              type="email"
+              autoComplete="email"
+              inputMode="email"
               className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
               disabled={authLoading}
             />
@@ -125,22 +137,26 @@ function AuthAccessCard({
               className="w-full sm:w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
               disabled={authLoading || !authEmail.trim()}
             >
-              {authLoading ? 'WORKING...' : 'REQUEST MAGIC LINK'}
+              {authLoading ? 'WORKING...' : 'SEND CODE'}
             </button>
           </div>
 
           <div className="border border-console-border rounded p-3 flex flex-col gap-3 bg-console-bg/30">
-            <p className="console-label text-xs">STEP 2: VERIFY TOKEN</p>
+            <p className="console-label text-xs">STEP 2: ENTER CODE</p>
             <p className="text-[11px] text-console-muted">
               {awaitingMagicLink
-                ? 'Magic link requested. Copy the token from your email and paste it below.'
-                : 'Check your email for a link. Copy the token and paste it below.'}
+                ? 'Code sent. Enter the 6-digit code from your email below.'
+                : 'Check your email for a 6-digit code and enter it below.'}
             </p>
             <input
               value={authToken}
               onChange={(event) => onAuthTokenChange(event.target.value)}
-              placeholder="paste token from email"
-              className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
+              placeholder="123456"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={64}
+              className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs tracking-widest outline-none focus:border-console-accent"
               disabled={authLoading}
             />
             <button
@@ -185,6 +201,7 @@ function UserManagementPanel({
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="border-b border-console-border text-[10px] uppercase tracking-widest text-console-muted">
+            <th className="py-1.5 px-2 text-left font-normal">ID</th>
             <th className="py-1.5 px-2 text-left font-normal">Email</th>
             <th className="py-1.5 px-2 text-left font-normal">Role</th>
             <th className="py-1.5 px-2 text-left font-normal">Status</th>
@@ -198,6 +215,7 @@ function UserManagementPanel({
         <tbody>
           {users.map((user) => (
             <tr key={user.id} className={`border-b border-console-border/70 ${user.status === 'pending' ? 'bg-console-accent/5' : ''}`}>
+              <td className="py-2 px-2 font-mono text-[10px] text-console-muted">{user.id}</td>
               <td className="py-2 px-2">{user.email}</td>
               <td className="py-2 px-2">
                 <select
@@ -278,7 +296,7 @@ function UserManagementPanel({
           ))}
           {users.length === 0 && (
             <tr>
-              <td className="py-3 px-2 text-console-muted" colSpan={8}>No users</td>
+              <td className="py-3 px-2 text-console-muted" colSpan={9}>No users</td>
             </tr>
           )}
         </tbody>
@@ -288,6 +306,26 @@ function UserManagementPanel({
 }
 
 function AuditLogPanel({ auditLogs, auditLoading, onRefreshAuditLogs }: AuditLogPanelProps) {
+  const [actionFilter, setActionFilter] = useState<string>('all')
+  const [textFilter, setTextFilter] = useState('')
+
+  const actionOptions = useMemo(() => {
+    const unique = new Set<string>()
+    for (const entry of auditLogs) unique.add(entry.action)
+    return Array.from(unique).sort((a, b) => a.localeCompare(b))
+  }, [auditLogs])
+
+  const normalizedTextFilter = textFilter.trim().toLowerCase()
+  const filteredAuditLogs = useMemo(() => {
+    return auditLogs.filter((entry) => {
+      if (actionFilter !== 'all' && entry.action !== actionFilter) return false
+      if (!normalizedTextFilter) return true
+      const actor = `${entry.userEmail || ''} ${entry.userId || ''}`.toLowerCase()
+      const target = `${entry.targetEmail || ''} ${entry.targetId || ''} ${entry.targetType || ''}`.toLowerCase()
+      return actor.includes(normalizedTextFilter) || target.includes(normalizedTextFilter)
+    })
+  }, [auditLogs, actionFilter, normalizedTextFilter])
+
   return (
     <div className="border border-console-border rounded p-3 overflow-auto">
       <div className="flex items-center justify-between mb-2">
@@ -300,6 +338,24 @@ function AuditLogPanel({ auditLogs, auditLoading, onRefreshAuditLogs }: AuditLog
           {auditLoading ? 'LOADING...' : 'REFRESH'}
         </button>
       </div>
+      <div className="mb-3 grid gap-2 md:grid-cols-[180px_minmax(0,1fr)]">
+        <select
+          value={actionFilter}
+          onChange={(event) => setActionFilter(event.target.value)}
+          className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs"
+        >
+          <option value="all">All actions</option>
+          {actionOptions.map((action) => (
+            <option key={action} value={action}>{action}</option>
+          ))}
+        </select>
+        <input
+          value={textFilter}
+          onChange={(event) => setTextFilter(event.target.value)}
+          placeholder="Filter by email or ID"
+          className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
+        />
+      </div>
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="border-b border-console-border text-[10px] uppercase tracking-widest text-console-muted">
@@ -310,15 +366,17 @@ function AuditLogPanel({ auditLogs, auditLoading, onRefreshAuditLogs }: AuditLog
           </tr>
         </thead>
         <tbody>
-          {auditLogs.map((entry) => (
+          {filteredAuditLogs.map((entry) => (
             <tr key={entry.id} className="border-b border-console-border/70">
               <td className="py-2 px-2 text-console-muted">{fmtDateTime(entry.createdAt)}</td>
               <td className="py-2 px-2">{entry.action}</td>
-              <td className="py-2 px-2 text-console-muted">{entry.targetType}:{entry.targetId}</td>
-              <td className="py-2 px-2 text-console-muted">{entry.userId || 'system'}</td>
+              <td className="py-2 px-2 text-console-muted">
+                {entry.targetType}: {formatAuditIdentity(entry.targetEmail, entry.targetId)}
+              </td>
+              <td className="py-2 px-2 text-console-muted">{formatAuditIdentity(entry.userEmail, entry.userId)}</td>
             </tr>
           ))}
-          {auditLogs.length === 0 && (
+          {filteredAuditLogs.length === 0 && (
             <tr>
               <td className="py-3 px-2 text-console-muted" colSpan={4}>No audit entries</td>
             </tr>

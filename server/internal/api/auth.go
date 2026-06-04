@@ -31,6 +31,11 @@ type requestMagicLinkBody struct {
 	Email string `json:"email"`
 }
 
+type verifyMagicCodeBody struct {
+	Email string `json:"email"`
+	Code  string `json:"code"`
+}
+
 func toAuthUser(user database.User) authUser {
 	return authUser{
 		ID:                user.ID,
@@ -147,13 +152,13 @@ func (h *handler) handleRequestMagicLink(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	token, user, err := h.db.CreateMagicLinkToken(email, 15*time.Minute)
+	token, code, user, err := h.db.CreateMagicLinkToken(email, 15*time.Minute)
 	if err != nil {
 		h.writeCreateMagicLinkError(w, user, err)
 		return
 	}
 	verifyURL := h.magicLinkVerifyURL(r, token)
-	if err := h.sendMagicLinkEmail(r.Context(), user.Email, verifyURL, token); err != nil {
+	if err := h.sendMagicLinkEmail(r.Context(), user.Email, verifyURL, token, code); err != nil {
 		h.logger.Error("send magic link email failed", "error", err, "email", user.Email)
 		http.Error(w, h.magicLinkSendErrorMessage(err), http.StatusInternalServerError)
 		return
@@ -168,6 +173,7 @@ func (h *handler) handleRequestMagicLink(w http.ResponseWriter, r *http.Request)
 	})
 	if h.cfg.AppEnv != "production" {
 		response["token"] = token
+		response["code"] = code
 		response["verifyUrl"] = verifyURL
 	}
 
@@ -212,23 +218,56 @@ func (h *handler) handleVerifyMagicLink(w http.ResponseWriter, r *http.Request) 
 
 	user, sessionToken, err := h.db.VerifyMagicLinkToken(token, 24*time.Hour)
 	if err != nil {
-		if err == database.ErrPendingUser {
-			http.Error(w, "account pending approval", http.StatusForbidden)
-			return
-		}
-		if err == database.ErrInactiveUser {
-			http.Error(w, "account disabled", http.StatusForbidden)
-			return
-		}
-		if err == sql.ErrNoRows {
-			http.Error(w, "invalid or expired token", http.StatusUnauthorized)
-			return
-		}
-		h.logger.Error("verify magic link failed", "error", err)
-		http.Error(w, "verify token", http.StatusInternalServerError)
+		h.writeVerifyError(w, err)
 		return
 	}
 
+	h.issueSession(w, user, sessionToken)
+}
+
+// handleVerifyMagicCode verifies a short 6-digit code entered in-app, avoiding
+// the email round-trip of clicking the magic link.
+func (h *handler) handleVerifyMagicCode(w http.ResponseWriter, r *http.Request) {
+	var req verifyMagicCodeBody
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	code := strings.TrimSpace(req.Code)
+	if email == "" || code == "" {
+		http.Error(w, "missing email or code", http.StatusBadRequest)
+		return
+	}
+
+	user, sessionToken, err := h.db.VerifyMagicLinkCode(email, code, 24*time.Hour)
+	if err != nil {
+		h.writeVerifyError(w, err)
+		return
+	}
+
+	h.issueSession(w, user, sessionToken)
+}
+
+// writeVerifyError maps verification errors to HTTP responses shared by the
+// link- and code-based sign-in handlers.
+func (h *handler) writeVerifyError(w http.ResponseWriter, err error) {
+	switch err {
+	case database.ErrPendingUser:
+		http.Error(w, "account pending approval", http.StatusForbidden)
+	case database.ErrInactiveUser:
+		http.Error(w, "account disabled", http.StatusForbidden)
+	case sql.ErrNoRows:
+		http.Error(w, "invalid or expired code", http.StatusUnauthorized)
+	default:
+		h.logger.Error("verify sign-in failed", "error", err)
+		http.Error(w, "verify failed", http.StatusInternalServerError)
+	}
+}
+
+// issueSession sets the session cookie, records the login, and returns the
+// session payload shared by the link- and code-based sign-in handlers.
+func (h *handler) issueSession(w http.ResponseWriter, user database.User, sessionToken string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    sessionToken,
