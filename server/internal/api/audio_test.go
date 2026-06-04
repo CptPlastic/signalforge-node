@@ -53,6 +53,21 @@ func TestBrowserPlayableAudioRejectsAIFF(t *testing.T) {
 	}
 }
 
+func TestPTTAudioNeedsNormalize(t *testing.T) {
+	if pttAudioNeedsNormalize("audio/mp4") {
+		t.Fatal("expected mp4 to skip normalize")
+	}
+	if pttAudioNeedsNormalize("audio/mpeg") {
+		t.Fatal("expected mp3 to skip normalize")
+	}
+	if !pttAudioNeedsNormalize("audio/webm") {
+		t.Fatal("expected webm to require normalize")
+	}
+	if !pttAudioNeedsNormalize("audio/webm;codecs=opus") {
+		t.Fatal("expected webm opus to require normalize")
+	}
+}
+
 func TestAudioNameWithExt(t *testing.T) {
 	if got := audioNameWithExt("call.aiff", ".mp3"); got != "call.mp3" {
 		t.Fatalf("expected call.mp3, got %q", got)

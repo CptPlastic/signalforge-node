@@ -1,3 +1,5 @@
+import { pttUploadFilename } from './pttRecording'
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -388,8 +390,7 @@ export const api = {
     clientId: string,
   ): Promise<PTTUploadResponse> => {
     const form = new FormData()
-    const ext = audio.type.includes('webm') ? 'webm' : audio.type.includes('mp4') ? 'm4a' : 'bin'
-    form.append('audio', audio, `ptt-${clientId}.${ext}`)
+    form.append('audio', audio, pttUploadFilename(clientId, audio.type))
     form.append('duration', String(durationSeconds))
     form.append('clientId', clientId)
     const response = await fetch(`/api/v1/radio-sets/${encodeURIComponent(id)}/ptt`, {
@@ -410,8 +411,7 @@ export const api = {
     clientId: string,
   ): Promise<PTTBroadcastResponse> => {
     const form = new FormData()
-    const ext = audio.type.includes('webm') ? 'webm' : audio.type.includes('mp4') ? 'm4a' : 'bin'
-    form.append('audio', audio, `ptt-${clientId}.${ext}`)
+    form.append('audio', audio, pttUploadFilename(clientId, audio.type))
     form.append('duration', String(durationSeconds))
     form.append('clientId', clientId)
     form.append('radioSetIds', radioSetIds.join(','))

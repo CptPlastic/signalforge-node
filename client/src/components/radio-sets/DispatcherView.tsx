@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError, type Call, type PTTBroadcastResult, type RadioSet } from '../../lib/api'
 import { playChirp } from '../../lib/chirp'
+import { pickPttMimeType, pttBlobMimeType } from '../../lib/pttRecording'
 
 type Props = Readonly<{
   radioSets: RadioSet[]
@@ -21,14 +22,6 @@ type State = 'idle' | 'recording' | 'uploading' | 'error'
 
 const MIN_DURATION_MS = 300
 const MAX_DURATION_MS = 30_000
-
-function pickMimeType(): string {
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
-  for (const type of candidates) {
-    if (globalThis.MediaRecorder && MediaRecorder.isTypeSupported(type)) return type
-  }
-  return ''
-}
 
 function newClientId(): string {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
@@ -101,7 +94,7 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
-      const mimeType = pickMimeType()
+      const mimeType = pickPttMimeType()
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
       chunksRef.current = []
       recorder.ondataavailable = (event) => {
@@ -114,7 +107,7 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
           setState('idle')
           return
         }
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+        const blob = new Blob(chunksRef.current, { type: pttBlobMimeType(recorder.mimeType) })
         chunksRef.current = []
         setState('uploading')
         try {

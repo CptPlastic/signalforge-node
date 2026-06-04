@@ -19,7 +19,14 @@ func serveAudioBytes(w http.ResponseWriter, r *http.Request, audio []byte, audio
 	if strings.TrimSpace(audioName) == "" {
 		audioName = "call-audio.mp3"
 	}
-	if !download && !browserPlayableAudio(audioType, audioName) {
+	// WebM/Opus PTT from older browser uploads is not playable on iOS; serve M4A instead.
+	if pttAudioNeedsNormalize(audioType) {
+		if m4a, err := transcodeAudioToM4A(r.Context(), audio); err == nil {
+			audio = m4a
+			audioType = pttPreferredAudioType
+			audioName = audioNameWithExt(audioName, ".m4a")
+		}
+	} else if !download && !browserPlayableAudio(audioType, audioName) {
 		if mp3, err := transcodeAudioToMP3(r.Context(), audio); err == nil {
 			audio = mp3
 			audioType = "audio/mpeg"
@@ -74,6 +81,58 @@ func transcodeAudioToMP3(ctx context.Context, audio []byte) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-vn", "-f", "mp3", "-codec:a", "libmp3lame", "-b:a", "64k", "pipe:1")
 	cmd.Stdin = bytes.NewReader(audio)
 	return cmd.Output()
+}
+
+// pttPreferredAudioType is what mobile (iOS) and the web console store/play without conversion.
+const pttPreferredAudioType = "audio/mp4"
+
+// pttAudioNeedsNormalize reports whether uploaded PTT should be transcoded to M4A/AAC.
+func pttAudioNeedsNormalize(audioType string) bool {
+	t := strings.ToLower(strings.TrimSpace(strings.Split(audioType, ";")[0]))
+	switch t {
+	case "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/aac", "audio/mpeg", "audio/mp3":
+		return false
+	default:
+		return true
+	}
+}
+
+func transcodeAudioToM4A(ctx context.Context, audio []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		"ffmpeg",
+		"-hide_banner", "-loglevel", "error",
+		"-i", "pipe:0",
+		"-vn",
+		"-c:a", "aac",
+		"-b:a", "64k",
+		"-movflags", "+faststart",
+		"-f", "mp4",
+		"pipe:1",
+	)
+	cmd.Stdin = bytes.NewReader(audio)
+	return cmd.Output()
+}
+
+// normalizePTTAudio converts browser WebM/Opus clips to M4A so all clients share one format.
+func normalizePTTAudio(ctx context.Context, audio []byte, audioType, audioName string) ([]byte, string, string, error) {
+	if !pttAudioNeedsNormalize(audioType) {
+		if audioType == "" {
+			audioType = pttPreferredAudioType
+		}
+		if strings.TrimSpace(audioName) == "" {
+			audioName = "ptt.m4a"
+		}
+		return audio, audioType, audioName, nil
+	}
+	out, err := transcodeAudioToM4A(ctx, audio)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("transcode ptt to m4a: %w", err)
+	}
+	return out, pttPreferredAudioType, audioNameWithExt(audioName, ".m4a"), nil
 }
 
 func audioNameWithExt(audioName, ext string) string {

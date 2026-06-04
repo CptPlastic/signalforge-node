@@ -98,6 +98,16 @@ func (h *handler) handlePTTUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	audioType := resolveAudioType("", audioHeader.Filename, audioHeader.Header.Get("Content-Type"))
+	audioName := audioHeader.Filename
+	normalized, normType, normName, err := normalizePTTAudio(r.Context(), audio, audioType, audioName)
+	if err != nil {
+		h.logger.Error("ptt: normalize audio failed", "error", err, "audio_type", audioType)
+		http.Error(w, "unsupported audio format", http.StatusBadRequest)
+		return
+	}
+	audio = normalized
+	audioType = normType
+	audioName = normName
 	duration := formFloat(r, "duration")
 	if duration == 0 {
 		duration = estimateAudioDuration(audio, audioType)
@@ -111,7 +121,7 @@ func (h *handler) handlePTTUpload(w http.ResponseWriter, r *http.Request) {
 		TalkgroupLabel: ptTalkgroupLabel(rs, user),
 		TalkgroupGroup: "PTT",
 		Duration:       duration,
-		AudioName:      audioHeader.Filename,
+		AudioName:      audioName,
 		AudioType:      audioType,
 		Origin:         "ptt",
 		SenderUserID:   user.ID,
@@ -252,6 +262,16 @@ func (h *handler) handlePTTBroadcast(w http.ResponseWriter, r *http.Request) {
 	}
 
 	audioType := resolveAudioType("", audioHeader.Filename, audioHeader.Header.Get("Content-Type"))
+	audioName := audioHeader.Filename
+	normalized, normType, normName, err := normalizePTTAudio(r.Context(), audio, audioType, audioName)
+	if err != nil {
+		h.logger.Error("ptt broadcast: normalize audio failed", "error", err, "audio_type", audioType)
+		http.Error(w, "unsupported audio format", http.StatusBadRequest)
+		return
+	}
+	audio = normalized
+	audioType = normType
+	audioName = normName
 	duration := formFloat(r, "duration")
 	if duration == 0 {
 		duration = estimateAudioDuration(audio, audioType)
@@ -259,7 +279,7 @@ func (h *handler) handlePTTBroadcast(w http.ResponseWriter, r *http.Request) {
 
 	results := make([]pttBroadcastResult, 0, len(radioSetIDs))
 	for _, radioSetID := range radioSetIDs {
-		results = append(results, h.deliverPTTToSet(user, radioSetID, clientID, audio, audioHeader.Filename, audioType, duration))
+		results = append(results, h.deliverPTTToSet(user, radioSetID, clientID, audio, audioName, audioType, duration))
 	}
 
 	h.logger.Info("ptt broadcast delivered",

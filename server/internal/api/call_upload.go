@@ -284,6 +284,10 @@ func resolveAudioType(uploadType, audioName, audioPartType string) string {
 		return "audio/wav"
 	case ".aac":
 		return "audio/aac"
+	case ".webm":
+		return "audio/webm"
+	case ".ogg", ".oga":
+		return "audio/ogg"
 	}
 
 	if ext != "" {
