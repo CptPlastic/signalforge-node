@@ -1,6 +1,7 @@
 # SignalForge Node
 
-![SignalForge Node banner](.github/assets/signalforge-node-banner.svg)
+<img width="2752" height="1536" alt="Community_Radio_Monitoring_Ecosystem_Overview" src="https://github.com/user-attachments/assets/61a8a75e-634a-4ff8-8ca9-3ac47aaab028" />
+
 
 Buildable public source for running a SignalForge/P7 Scanner community node.
 
