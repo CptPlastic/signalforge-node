@@ -282,7 +282,8 @@ export function RadioSetsView({
       ) : (
         <div className="flex flex-col gap-2">
           {radioSets.map((radioSet) => {
-            const canManageRadioSet = radioSet.userId === authUser?.id
+            const canManageRadioSet =
+              radioSet.userId === authUser?.id || authUser?.role === 'admin'
             const isScanning = rsPlayingID === radioSet.id
             return (
               <div key={radioSet.id} className="border border-console-border rounded p-2.5 flex flex-col gap-2">

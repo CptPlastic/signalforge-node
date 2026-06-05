@@ -16,6 +16,14 @@ type radioSetRequest struct {
 	Talkgroups []int  `json:"talkgroups"`
 }
 
+// resolveRadioSet returns a set the caller may manage: own sets for everyone, any set for admins.
+func (h *handler) resolveRadioSet(id string, user authUser) (database.RadioSet, bool, error) {
+	if isAdmin(user) {
+		return h.db.GetRadioSetForPTT(id)
+	}
+	return h.db.GetRadioSet(id, user.ID)
+}
+
 func (h *handler) handleListRadioSets(w http.ResponseWriter, r *http.Request) {
 	user, ok := h.requireAuthenticated(w, r)
 	if !ok {
@@ -80,7 +88,7 @@ func (h *handler) handleGetRadioSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	rs, found, err := h.db.GetRadioSet(id, user.ID)
+	rs, found, err := h.resolveRadioSet(id, user)
 	if err != nil {
 		h.logger.Error("get radio set failed", "error", err)
 		http.Error(w, "query radio set", http.StatusInternalServerError)
@@ -112,7 +120,17 @@ func (h *handler) handleUpdateRadioSet(w http.ResponseWriter, r *http.Request) {
 	if req.Talkgroups == nil {
 		req.Talkgroups = []int{}
 	}
-	if err := h.db.UpdateRadioSet(id, user.ID, req.Name, req.Talkgroups); err != nil {
+	rs, found, err := h.resolveRadioSet(id, user)
+	if err != nil {
+		h.logger.Error("resolve radio set for update failed", "error", err)
+		http.Error(w, "query radio set", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := h.db.UpdateRadioSet(id, rs.UserID, req.Name, req.Talkgroups); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
@@ -121,7 +139,7 @@ func (h *handler) handleUpdateRadioSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "update radio set", http.StatusInternalServerError)
 		return
 	}
-	rs, _, _ := h.db.GetRadioSet(id, user.ID)
+	rs, _, _ = h.resolveRadioSet(id, user)
 	writeJSON(w, http.StatusOK, rs)
 }
 
@@ -131,7 +149,17 @@ func (h *handler) handleDeleteRadioSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	if err := h.db.DeleteRadioSet(id, user.ID); err != nil {
+	rs, found, err := h.resolveRadioSet(id, user)
+	if err != nil {
+		h.logger.Error("resolve radio set for delete failed", "error", err)
+		http.Error(w, "query radio set", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := h.db.DeleteRadioSet(id, rs.UserID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
@@ -150,7 +178,7 @@ func (h *handler) handleGenerateShareToken(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	id := chi.URLParam(r, "id")
-	rs, found, err := h.db.GetRadioSet(id, user.ID)
+	rs, found, err := h.resolveRadioSet(id, user)
 	if err != nil {
 		h.logger.Error("get radio set before share token failed", "error", err)
 		http.Error(w, "query radio set", http.StatusInternalServerError)
@@ -166,12 +194,12 @@ func (h *handler) handleGenerateShareToken(w http.ResponseWriter, r *http.Reques
 	}
 
 	token := database.NewShareToken()
-	if err := h.db.SetRadioSetShareToken(id, user.ID, token); err != nil {
+	if err := h.db.SetRadioSetShareToken(id, rs.UserID, token); err != nil {
 		h.logger.Error("set share token failed", "error", err)
 		http.Error(w, "set share token", http.StatusInternalServerError)
 		return
 	}
-	rs, ok2, err := h.db.GetRadioSet(id, user.ID)
+	rs, ok2, err := h.resolveRadioSet(id, user)
 	if err != nil || !ok2 {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -186,12 +214,22 @@ func (h *handler) handleRevokeShareToken(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	id := chi.URLParam(r, "id")
-	if err := h.db.ClearRadioSetShareToken(id, user.ID); err != nil {
+	rs, found, err := h.resolveRadioSet(id, user)
+	if err != nil {
+		h.logger.Error("resolve radio set for revoke failed", "error", err)
+		http.Error(w, "query radio set", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := h.db.ClearRadioSetShareToken(id, rs.UserID); err != nil {
 		h.logger.Error("clear share token failed", "error", err)
 		http.Error(w, "clear share token", http.StatusInternalServerError)
 		return
 	}
-	rs, ok2, err := h.db.GetRadioSet(id, user.ID)
+	rs, ok2, err := h.resolveRadioSet(id, user)
 	if err != nil || !ok2 {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
