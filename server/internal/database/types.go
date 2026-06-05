@@ -131,15 +131,15 @@ type User struct {
 
 // AuditLogEntry represents a single audit event.
 type AuditLogEntry struct {
-	ID         int64           `json:"id"`
-	UserID     string          `json:"userId,omitempty"`
-	UserEmail  string          `json:"userEmail,omitempty"`
-	Action     string          `json:"action"`
-	TargetType string          `json:"targetType"`
-	TargetID   string          `json:"targetId"`
-	TargetEmail string         `json:"targetEmail,omitempty"`
-	Metadata   json.RawMessage `json:"metadata"`
-	CreatedAt  int64           `json:"createdAt"`
+	ID          int64           `json:"id"`
+	UserID      string          `json:"userId,omitempty"`
+	UserEmail   string          `json:"userEmail,omitempty"`
+	Action      string          `json:"action"`
+	TargetType  string          `json:"targetType"`
+	TargetID    string          `json:"targetId"`
+	TargetEmail string          `json:"targetEmail,omitempty"`
+	Metadata    json.RawMessage `json:"metadata"`
+	CreatedAt   int64           `json:"createdAt"`
 }
 
 // SourceAPIKey represents an API key for a source.
@@ -169,15 +169,15 @@ type TalkgroupInfo struct {
 
 // RadioSet is a named, user-owned collection of talkgroup IDs used to filter the call log.
 type RadioSet struct {
-	ID            string   `json:"id"`
-	UserID        string   `json:"userId,omitempty"`
-	Name          string   `json:"name"`
-	Talkgroups    []int    `json:"talkgroups"`
-	SourceIDs     []string `json:"sourceIds,omitempty"`
-	ShareToken    *string  `json:"shareToken,omitempty"`
-	PTTTalkgroup  *int     `json:"pttTalkgroup,omitempty"`
-	CreatedAt     int64    `json:"createdAt"`
-	UpdatedAt     int64    `json:"updatedAt"`
+	ID           string   `json:"id"`
+	UserID       string   `json:"userId,omitempty"`
+	Name         string   `json:"name"`
+	Talkgroups   []int    `json:"talkgroups"`
+	SourceIDs    []string `json:"sourceIds,omitempty"`
+	ShareToken   *string  `json:"shareToken,omitempty"`
+	PTTTalkgroup *int     `json:"pttTalkgroup,omitempty"`
+	CreatedAt    int64    `json:"createdAt"`
+	UpdatedAt    int64    `json:"updatedAt"`
 }
 
 // ListCallsParams configures filtering and sorting for ListCalls.

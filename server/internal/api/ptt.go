@@ -332,7 +332,7 @@ func (h *handler) deliverPTTToSet(
 		Duration:       duration,
 		AudioName:      audioName,
 		AudioType:      audioType,
-		Origin:         "ptt",
+		Origin:         "ptt-dispatch",
 		SenderUserID:   user.ID,
 		SenderEmail:    user.Email,
 		CreatedAt:      now,
