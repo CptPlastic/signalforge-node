@@ -47,8 +47,8 @@ func main() {
 	defer db.Close()
 	db.SetAutoApproveUsers(cfg.AuthAutoApproveUsers)
 	if err := bootstrapAuthAdmin(logger, db, cfg); err != nil {
-		logger.Error("failed to bootstrap auth admin", "error", err)
-		os.Exit(1)
+		// Misconfigured bootstrap credentials must not take down an otherwise healthy hub.
+		logger.Error("bootstrap auth admin failed; password login may be unavailable until fixed", "error", err)
 	}
 	if cfg.TranscriptionWorkerToken != "" {
 		if err := db.EnsureTranscriptionQueueRows(); err != nil {
