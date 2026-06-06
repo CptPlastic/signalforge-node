@@ -1799,7 +1799,7 @@ function App() {
     {!authUser && (
     <div className="console-panel border border-console-border text-console-accent text-xs px-4 py-6 sm:px-6 sm:py-8">
       <div className="mx-auto max-w-3xl text-center space-y-4">
-        <SignalForgeLogo className="mx-auto h-24 w-24 text-white drop-shadow-[0_0_16px_rgba(0,255,65,0.2)]" />
+        <SignalForgeLogo className="mx-auto h-24 w-24 text-white drop-shadow-[0_0_16px_rgba(255,170,0,0.2)]" />
         <div className="space-y-2">
           <p className="text-sm font-bold tracking-widest">[ SIGNALFORGE HUB ]</p>
           <p className="text-console-muted text-[11px] leading-6">

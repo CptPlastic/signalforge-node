@@ -90,7 +90,7 @@ export function AppHeader({
   return (
     <header className="console-panel flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3 min-w-0">
-        <SignalForgeLogo className="h-10 w-10 flex-shrink-0 text-white drop-shadow-[0_0_10px_rgba(0,255,65,0.18)]" />
+        <SignalForgeLogo className="h-10 w-10 flex-shrink-0 text-white drop-shadow-[0_0_10px_rgba(255,170,0,0.18)]" />
         <div className="min-w-0">
           <div className="text-lg font-bold tracking-widest truncate">SIGNALFORGE // HUB</div>
           <div className="flex items-center gap-2 min-w-0">

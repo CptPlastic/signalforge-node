@@ -12,7 +12,7 @@
 }
 
 ::selection {
-  background: #00ff41;
+  background: #ffaa00;
   color: #0a0a0a;
 }
 
@@ -27,7 +27,7 @@
 
 ::-webkit-scrollbar-thumb {
   background: #1f1f1f;
-  border: 1px solid #00ff41;
+  border: 1px solid #ffaa00;
 }
 
 @layer components {
@@ -66,13 +66,13 @@
 @keyframes accountTabAttention {
   0%,
   100% {
-    box-shadow: 0 0 0 rgba(0, 255, 65, 0);
-    background-color: rgba(0, 255, 65, 0.05);
+    box-shadow: 0 0 0 rgba(255, 170, 0, 0);
+    background-color: rgba(255, 170, 0, 0.05);
   }
 
   50% {
-    box-shadow: 0 0 10px rgba(0, 255, 65, 0.18);
-    background-color: rgba(0, 255, 65, 0.12);
+    box-shadow: 0 0 10px rgba(255, 170, 0, 0.18);
+    background-color: rgba(255, 170, 0, 0.12);
   }
 }
 

@@ -14,8 +14,8 @@
 - `border`: `#1f1f1f`
 - `text`: `#c9c9c9`
 - `muted`: `#555555`
-- `accent`: `#00ff41`
-- `amber`: `#ffb000`
+- `accent`: `#ffaa00` (hub PWA — warmer than mobile `#ffc700`; see [BRAND.md](https://signalforge.org/BRAND.md))
+- `amber`: `#ffc700`
 - `error`: `#ff4444`
 
 ## Package layout

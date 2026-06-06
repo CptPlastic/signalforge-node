@@ -22,10 +22,10 @@ function getStatusLabel(active: boolean, playing: boolean): string {
 
 function getRowClass(active: boolean, playing: boolean): string {
   if (playing) {
-    return 'border-console-accent/70 bg-console-accent/15 shadow-[inset_3px_0_0_rgba(0,255,65,0.85)]'
+    return 'border-console-accent/70 bg-console-accent/15 shadow-[inset_3px_0_0_rgba(255,170,0,0.85)]'
   }
   if (active) {
-    return 'border-console-accent/50 bg-console-accent/10 shadow-[inset_3px_0_0_rgba(0,255,65,0.45)]'
+    return 'border-console-accent/50 bg-console-accent/10 shadow-[inset_3px_0_0_rgba(255,170,0,0.45)]'
   }
   return 'border-console-border hover:bg-console-surface/60'
 }

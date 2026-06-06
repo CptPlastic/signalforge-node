@@ -1,5 +1,6 @@
 import type { Config } from 'tailwindcss'
 
+/** Hub console palette — warmer amber than native mobile. See signalforge.org/BRAND.md */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
@@ -11,8 +12,8 @@ export default {
           border: '#1f1f1f',
           text: '#c9c9c9',
           muted: '#555555',
-          accent: '#00ff41',
-          amber: '#ffb000',
+          accent: '#ffaa00',
+          amber: '#ffc700',
           error: '#ff4444',
         },
       },

@@ -333,7 +333,7 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
               const active = activity !== undefined
               let cardClass: string
               if (active) {
-                cardClass = 'border-console-accent bg-console-accent/10 text-console-text shadow-[0_0_0_1px_rgba(0,255,65,0.6)_inset] animate-pulse'
+                cardClass = 'border-console-accent bg-console-accent/10 text-console-text shadow-[0_0_0_1px_rgba(255,170,0,0.6)_inset] animate-pulse'
               } else if (selected) {
                 cardClass = 'border-console-amber bg-console-amber/5 text-console-text'
               } else {
