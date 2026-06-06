@@ -68,7 +68,7 @@ func (d *DB) SkipShortPendingTranscriptionJobs(minDurationSeconds float64) error
 	return err
 }
 
-// SkipUnselectedPendingTranscriptionJobs applies the talkgroup transcription allowlist to queued calls.
+// SkipUnselectedPendingTranscriptionJobs skips queued calls for talkgroups without TX enabled.
 func (d *DB) SkipUnselectedPendingTranscriptionJobs() error {
 	_, err := d.db.Exec(`
 		UPDATE call_transcripts ct
@@ -79,8 +79,7 @@ func (d *DB) SkipUnselectedPendingTranscriptionJobs() error {
 		    updated_at = $1
 		FROM calls c
 		WHERE ct.call_id = c.id
-		  AND ct.status = 'pending'
-		  AND EXISTS (SELECT 1 FROM talkgroup_settings WHERE transcribe = TRUE)
+		  AND ct.status IN ('pending', 'processing')
 		  AND NOT EXISTS (
 			SELECT 1 FROM talkgroup_settings ts
 			WHERE ts.talkgroup = c.talkgroup AND ts.transcribe = TRUE

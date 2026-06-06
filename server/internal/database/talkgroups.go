@@ -76,14 +76,13 @@ func (d *DB) UpsertTalkgroupSetting(s TalkgroupSetting) error {
 	return err
 }
 
-// ShouldTranscribeTalkgroup applies the operator talkgroup transcription allowlist.
+// ShouldTranscribeTalkgroup returns true only when the talkgroup has TX enabled.
 func (d *DB) ShouldTranscribeTalkgroup(talkgroup int) (bool, error) {
 	var allowed bool
 	err := d.db.QueryRow(`
-		SELECT NOT EXISTS (
-			SELECT 1 FROM talkgroup_settings WHERE transcribe = TRUE
-		) OR EXISTS (
-			SELECT 1 FROM talkgroup_settings WHERE talkgroup = $1 AND transcribe = TRUE
+		SELECT EXISTS (
+			SELECT 1 FROM talkgroup_settings
+			WHERE talkgroup = $1 AND transcribe = TRUE
 		)`, talkgroup).Scan(&allowed)
 	return allowed, err
 }
