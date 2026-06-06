@@ -22,10 +22,9 @@ export function DisplayModeSwitcher({ compact = false }: Readonly<{ compact?: bo
 
   const selectMode = useCallback((target: DisplayMode) => {
     if (target === 'light') {
-      if (mode === 'light') {
-        applyDisplayMode('dark')
-        setMode('dark')
-      }
+      const next = mode === 'light' ? 'dark' : 'light'
+      applyDisplayMode(next)
+      setMode(next)
       return
     }
     if (mode === target) {
@@ -92,7 +91,7 @@ export function DisplayModeSwitcher({ compact = false }: Readonly<{ compact?: bo
       </div>
       {!compact && (
         <span className="console-label text-[9px] opacity-80">
-          HOLD DARK FOR LIGHT · TACTICAL CYCLE SKIPS BRIGHTNESS
+          TAP LIGHT FOR DAY · HOLD DARK ON TOUCH · TACTICAL CYCLE SKIPS BRIGHTNESS
         </span>
       )}
     </div>
