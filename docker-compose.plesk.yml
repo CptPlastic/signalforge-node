@@ -7,8 +7,13 @@
 #   - CLIENT_PORT should match the port you set in the Plesk Docker proxy rule.
 #
 # Usage:
-#   cp .env.production.example .env   # fill in your values
+#   cp .env.production.example .env   # fill in your values (AUTH_*, POSTGRES_*, etc.)
 #   docker compose --env-file .env -f docker-compose.plesk.yml up -d
+#
+# The api service loads .env directly (env_file). Put AUTH_PASSWORD_LOGIN_ENABLED,
+# AUTH_BOOTSTRAP_EMAIL, and AUTH_BOOTSTRAP_PASSWORD in .env — no separate api-only copy step.
+# Auth vars (AUTH_*) live only in .env — they are not duplicated in environment: so empty
+# compose substitution cannot override your .env values.
 #
 # Minimal vars for first deploy in Portainer/Plesk:
 #   - POSTGRES_PASSWORD
@@ -45,6 +50,9 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    env_file:
+      - path: .env
+        required: false
     environment:
       LISTEN_ADDR: :8080
       DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-p7scanner}:${POSTGRES_PASSWORD:-change-me-strong}@postgres:5432/${POSTGRES_DB:-p7scanner}?sslmode=disable}
@@ -71,10 +79,6 @@ services:
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
       TRANSCRIPTION_WORKER_TOKEN: ${TRANSCRIPTION_WORKER_TOKEN:-}
       TRANSCRIPTION_MIN_DURATION_SECONDS: ${TRANSCRIPTION_MIN_DURATION_SECONDS:-0.75}
-      AUTH_BOOTSTRAP_EMAIL: ${AUTH_BOOTSTRAP_EMAIL:-}
-      AUTH_BOOTSTRAP_PASSWORD: ${AUTH_BOOTSTRAP_PASSWORD:-}
-      AUTH_PASSWORD_LOGIN_ENABLED: ${AUTH_PASSWORD_LOGIN_ENABLED:-false}
-      AUTH_AUTO_APPROVE_USERS: ${AUTH_AUTO_APPROVE_USERS:-false}
     depends_on:
       postgres:
         condition: service_healthy

@@ -23,6 +23,9 @@ services:
         GIT_SHA: ${GIT_SHA:-dev}
         BUILD_VERSION: ${BUILD_VERSION:-}
         BUILD_DATE: ${BUILD_DATE:-unknown}
+    env_file:
+      - path: .env
+        required: false
     environment:
       LISTEN_ADDR: :8080
       DATABASE_URL: postgres://p7scanner@postgres:5432/p7scanner?sslmode=disable

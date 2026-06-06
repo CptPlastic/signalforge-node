@@ -17,6 +17,9 @@ services:
   api:
     image: ${API_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-hub-api:${IMAGE_TAG:-latest}}
     restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
     environment:
       LISTEN_ADDR: :8080
       DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-p7scanner}:${POSTGRES_PASSWORD:-change-me-strong}@postgres:5432/${POSTGRES_DB:-p7scanner}?sslmode=disable}
@@ -42,10 +45,6 @@ services:
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
       TRANSCRIPTION_WORKER_TOKEN: ${TRANSCRIPTION_WORKER_TOKEN:-}
       TRANSCRIPTION_MIN_DURATION_SECONDS: ${TRANSCRIPTION_MIN_DURATION_SECONDS:-0.75}
-      AUTH_BOOTSTRAP_EMAIL: ${AUTH_BOOTSTRAP_EMAIL:-}
-      AUTH_BOOTSTRAP_PASSWORD: ${AUTH_BOOTSTRAP_PASSWORD:-}
-      AUTH_PASSWORD_LOGIN_ENABLED: ${AUTH_PASSWORD_LOGIN_ENABLED:-false}
-      AUTH_AUTO_APPROVE_USERS: ${AUTH_AUTO_APPROVE_USERS:-false}
     depends_on:
       postgres:
         condition: service_healthy

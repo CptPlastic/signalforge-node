@@ -616,7 +616,25 @@ function App() {
 
   // Load existing calls on mount
   useEffect(() => {
-    api.authCapabilities().then(setAuthCapabilities).catch(() => {})
+    void (async () => {
+      try {
+        setAuthCapabilities(await api.authCapabilities())
+        return
+      } catch {
+        // Fall back to /version when an older proxy blocks capabilities (rare).
+      }
+      try {
+        const version = await api.version()
+        setAuthCapabilities({
+          passwordLoginEnabled: Boolean(version.passwordLoginEnabled),
+          magicLinkEnabled: true,
+          emailDeliveryConfigured: Boolean(version.emailDeliveryConfigured),
+          autoApproveUsers: false,
+        })
+      } catch {
+        // Account view will show magic-link only.
+      }
+    })()
     Promise.all([
       api.calls({ limit: 500, sort: 'datetime', order: 'desc' }),
       api.talkgroupSettings(),

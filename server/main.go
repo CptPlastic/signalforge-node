@@ -38,6 +38,11 @@ func main() {
 	level.Set(cfg.LogLevel)
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
+	logger.Info("auth configuration",
+		"passwordLoginEnabled", cfg.AuthPasswordLoginEnabled,
+		"bootstrapEmailConfigured", cfg.AuthBootstrapEmail != "",
+		"autoApproveUsers", cfg.AuthAutoApproveUsers,
+	)
 
 	db, err := database.Open(cfg.DatabaseURL)
 	if err != nil {

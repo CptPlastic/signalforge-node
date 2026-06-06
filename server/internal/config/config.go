@@ -81,6 +81,12 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("invalid APP_ENV %q", cfg.AppEnv)
 	}
 
+	// If bootstrap credentials are configured, password login is implied even when
+	// operators forget AUTH_PASSWORD_LOGIN_ENABLED (common in Portainer/Plesk stacks).
+	if cfg.AuthBootstrapEmail != "" && strings.TrimSpace(cfg.AuthBootstrapPassword) != "" {
+		cfg.AuthPasswordLoginEnabled = true
+	}
+
 	return cfg, nil
 }
 
@@ -103,6 +109,7 @@ func getFirstEnv(keys []string, fallback string) string {
 
 func getBoolEnv(key string, fallback bool) bool {
 	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	value = strings.Trim(value, `"'`)
 	if value == "" {
 		return fallback
 	}

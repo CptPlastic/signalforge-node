@@ -226,6 +226,13 @@ function AuthAccessCard({
       </div>
       )}
 
+      {authCapabilities && !passwordEnabled && (
+        <p className="text-[10px] text-console-muted text-center sm:text-left">
+          Password sign-in is off on this hub (<code className="text-console-text">passwordLoginEnabled: false</code>).
+          Set <code className="text-console-text">AUTH_PASSWORD_LOGIN_ENABLED=true</code> or bootstrap credentials on the <strong>api</strong> service, then recreate the api container.
+        </p>
+      )}
+
       {!passwordEnabled && !emailEnabled && (
         <div className="border border-console-error/40 rounded p-4 text-[11px] text-console-error">
           No sign-in methods are configured on this hub. Set password login or Mailjet credentials.
