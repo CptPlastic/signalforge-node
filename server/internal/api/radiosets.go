@@ -12,8 +12,61 @@ import (
 )
 
 type radioSetRequest struct {
-	Name       string `json:"name"`
-	Talkgroups []int  `json:"talkgroups"`
+	Name            string   `json:"name"`
+	SelectionMode   string   `json:"selectionMode"`
+	Talkgroups      []int    `json:"talkgroups"`
+	TalkgroupGroups []string `json:"talkgroupGroups"`
+}
+
+func normalizeRadioSetRequest(req *radioSetRequest) {
+	req.Name = strings.TrimSpace(req.Name)
+	req.SelectionMode = strings.TrimSpace(req.SelectionMode)
+	if req.SelectionMode == "" {
+		req.SelectionMode = "talkgroups"
+	}
+	if req.Talkgroups == nil {
+		req.Talkgroups = []int{}
+	}
+	if req.TalkgroupGroups == nil {
+		req.TalkgroupGroups = []string{}
+	}
+	cleaned := make([]string, 0, len(req.TalkgroupGroups))
+	for _, group := range req.TalkgroupGroups {
+		group = strings.TrimSpace(group)
+		if group != "" {
+			cleaned = append(cleaned, group)
+		}
+	}
+	req.TalkgroupGroups = cleaned
+}
+
+func validateRadioSetRequest(req radioSetRequest) string {
+	if req.Name == "" {
+		return "name is required"
+	}
+	switch req.SelectionMode {
+	case "talkgroups", "groups":
+	default:
+		return "invalid selectionMode"
+	}
+	return ""
+}
+
+func (h *handler) attachRadioSetSourceIDs(sets []database.RadioSet) error {
+	for i := range sets {
+		var sourceIDs []string
+		var err error
+		if sets[i].IsGroupsMode() {
+			sourceIDs, err = h.db.ListSourceIDsForTalkgroupGroups(sets[i].TalkgroupGroups)
+		} else {
+			sourceIDs, err = h.db.ListSourceIDsForTalkgroups(sets[i].Talkgroups)
+		}
+		if err != nil {
+			return err
+		}
+		sets[i].SourceIDs = sourceIDs
+	}
+	return nil
 }
 
 // resolveRadioSet returns a set the caller may manage: own sets for everyone, any set for admins.
@@ -42,14 +95,10 @@ func (h *handler) handleListRadioSets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isAdmin(user) {
-		for i := range sets {
-			sourceIDs, sourceErr := h.db.ListSourceIDsForTalkgroups(sets[i].Talkgroups)
-			if sourceErr != nil {
-				h.logger.Error("list radio set sources failed", "error", sourceErr)
-				http.Error(w, "query radio set sources", http.StatusInternalServerError)
-				return
-			}
-			sets[i].SourceIDs = sourceIDs
+		if err := h.attachRadioSetSourceIDs(sets); err != nil {
+			h.logger.Error("list radio set sources failed", "error", err)
+			http.Error(w, "query radio set sources", http.StatusInternalServerError)
+			return
 		}
 	}
 	writeJSON(w, http.StatusOK, sets)
@@ -65,15 +114,12 @@ func (h *handler) handleCreateRadioSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	req.Name = strings.TrimSpace(req.Name)
-	if req.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
+	normalizeRadioSetRequest(&req)
+	if msg := validateRadioSetRequest(req); msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
-	if req.Talkgroups == nil {
-		req.Talkgroups = []int{}
-	}
-	rs, err := h.db.CreateRadioSet(user.ID, req.Name, req.Talkgroups)
+	rs, err := h.db.CreateRadioSet(user.ID, req.Name, req.SelectionMode, req.Talkgroups, req.TalkgroupGroups)
 	if err != nil {
 		h.logger.Error("create radio set failed", "error", err)
 		http.Error(w, "create radio set", http.StatusInternalServerError)
@@ -112,13 +158,10 @@ func (h *handler) handleUpdateRadioSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	req.Name = strings.TrimSpace(req.Name)
-	if req.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
+	normalizeRadioSetRequest(&req)
+	if msg := validateRadioSetRequest(req); msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
 		return
-	}
-	if req.Talkgroups == nil {
-		req.Talkgroups = []int{}
 	}
 	rs, found, err := h.resolveRadioSet(id, user)
 	if err != nil {
@@ -130,7 +173,7 @@ func (h *handler) handleUpdateRadioSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	if err := h.db.UpdateRadioSet(id, rs.UserID, req.Name, req.Talkgroups); err != nil {
+	if err := h.db.UpdateRadioSet(id, rs.UserID, req.Name, req.SelectionMode, req.Talkgroups, req.TalkgroupGroups); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return

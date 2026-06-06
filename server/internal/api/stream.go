@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/coder/websocket"
@@ -35,10 +36,11 @@ type streamChunk struct {
 }
 
 type streamListener struct {
-	ownerUserID string
-	talkgroups  map[int]struct{}
-	sourceIDs   map[string]struct{}
-	ch          chan streamChunk
+	ownerUserID     string
+	talkgroups      map[int]struct{}
+	talkgroupGroups map[string]struct{}
+	sourceIDs       map[string]struct{}
+	ch              chan streamChunk
 }
 
 // streamHub fans new calls out to all active HTTP stream and SSE listeners.
@@ -76,7 +78,7 @@ func (sh *streamHub) push(call *database.Call, audio []byte) {
 	defer sh.mu.Unlock()
 	delivered := 0
 	for _, l := range sh.listeners {
-		if _, ok := l.talkgroups[call.Talkgroup]; !ok {
+		if !l.matchesTalkgroup(call) {
 			continue
 		}
 		if !l.matchesCall(call) {
@@ -101,6 +103,21 @@ func (sh *streamHub) push(call *database.Call, audio []byte) {
 	)
 }
 
+func (l *streamListener) matchesTalkgroup(call *database.Call) bool {
+	if _, ok := l.talkgroups[call.Talkgroup]; ok {
+		return true
+	}
+	if len(l.talkgroupGroups) == 0 {
+		return false
+	}
+	group := strings.TrimSpace(call.TalkgroupGroup)
+	if group == "" {
+		return false
+	}
+	_, ok := l.talkgroupGroups[group]
+	return ok
+}
+
 func (l *streamListener) matchesCall(call *database.Call) bool {
 	if l.ownerUserID != "" && l.ownerUserID == call.UserID {
 		return true
@@ -114,10 +131,17 @@ func (l *streamListener) matchesCall(call *database.Call) bool {
 
 // subscribe registers a listener. Returns a receive-only channel and an
 // unsubscribe function that must be called (typically via defer).
-func (sh *streamHub) subscribe(ownerUserID string, talkgroups []int, sourceIDs []string) (<-chan streamChunk, func()) {
+func (sh *streamHub) subscribe(ownerUserID string, talkgroups []int, talkgroupGroups []string, sourceIDs []string) (<-chan streamChunk, func()) {
 	tgSet := make(map[int]struct{}, len(talkgroups))
 	for _, tg := range talkgroups {
 		tgSet[tg] = struct{}{}
+	}
+	groupSet := make(map[string]struct{}, len(talkgroupGroups))
+	for _, group := range talkgroupGroups {
+		group = strings.TrimSpace(group)
+		if group != "" {
+			groupSet[group] = struct{}{}
+		}
 	}
 	sourceIDSet := make(map[string]struct{}, len(sourceIDs))
 	for _, sourceID := range sourceIDs {
@@ -126,7 +150,13 @@ func (sh *streamHub) subscribe(ownerUserID string, talkgroups []int, sourceIDs [
 		}
 	}
 	ch := make(chan streamChunk, 32)
-	l := &streamListener{ownerUserID: ownerUserID, talkgroups: tgSet, sourceIDs: sourceIDSet, ch: ch}
+	l := &streamListener{
+		ownerUserID:     ownerUserID,
+		talkgroups:      tgSet,
+		talkgroupGroups: groupSet,
+		sourceIDs:       sourceIDSet,
+		ch:              ch,
+	}
 
 	sh.mu.Lock()
 	sh.listeners = append(sh.listeners, l)
@@ -166,6 +196,10 @@ type playerWSCallMsg struct {
 	Audio          []byte  `json:"audio"` // base64-encoded in JSON output
 }
 
+func (h *handler) seedPublicStreamCalls(rs *database.RadioSet, _ []int) ([]database.Call, error) {
+	return h.db.GetRecentCallsForRadioSet(rs.UserID, *rs, 5)
+}
+
 // handlePublicWS serves the public player via a single WebSocket connection.
 // Each message carries both call metadata and audio bytes (base64-encoded in JSON),
 // making audio and display atomically paired — the drift and race conditions that
@@ -199,18 +233,26 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 		"radio_set_id", rs.ID,
 		"radio_set_name", rs.Name,
 		"owner_user_id", rs.UserID,
+		"selection_mode", rs.SelectionMode,
 		"talkgroups", len(rs.Talkgroups),
+		"talkgroup_groups", len(rs.TalkgroupGroups),
 		"readable_sources", len(sourceIDs),
 	)
 
 	// Public-share subscribers also see PTT calls on the set's virtual PTT talkgroup.
-	subscribedTalkgroups := rs.Talkgroups
+	subscribedTalkgroups := make([]int, 0, len(rs.Talkgroups)+1)
+	subscribedGroups := make([]string, 0, len(rs.TalkgroupGroups))
+	if rs.IsGroupsMode() {
+		subscribedGroups = append(subscribedGroups, rs.TalkgroupGroups...)
+	} else {
+		subscribedTalkgroups = append(subscribedTalkgroups, rs.Talkgroups...)
+	}
 	if rs.PTTTalkgroup != nil {
-		subscribedTalkgroups = append(append([]int(nil), rs.Talkgroups...), *rs.PTTTalkgroup)
+		subscribedTalkgroups = append(subscribedTalkgroups, *rs.PTTTalkgroup)
 	}
 
 	// Subscribe before seeding so no live calls are missed during the seed phase.
-	ch, unsubscribe := h.streamHub.subscribe(rs.UserID, subscribedTalkgroups, sourceIDs)
+	ch, unsubscribe := h.streamHub.subscribe(rs.UserID, subscribedTalkgroups, subscribedGroups, sourceIDs)
 	defer unsubscribe()
 
 	sendCall := func(meta streamCallMeta, audio []byte) error {
@@ -239,39 +281,34 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Seed with recent calls so the client has audio to play immediately on connect.
-	// Include the virtual PTT talkgroup in the seed query so recent PTT calls
-	// show up in the player history on reconnect, not just live new ones.
-	seedTalkgroups := subscribedTalkgroups
-	if len(seedTalkgroups) > 0 {
-		seedCalls, seedErr := h.db.GetRecentCallsForTalkgroups(rs.UserID, seedTalkgroups, 5)
-		if seedErr != nil {
-			h.logger.Error("public stream seed query failed", "radio_set_id", rs.ID, "error", seedErr)
-		} else {
-			h.logger.Info("public stream seed query completed", "radio_set_id", rs.ID, "calls", len(seedCalls))
-			for _, c := range seedCalls {
-				audio, _, _, _, _, dbErr := h.db.GetCallAudio(c.ID)
-				if dbErr != nil {
-					h.logger.Error("public stream seed audio load failed", "radio_set_id", rs.ID, "call_id", c.ID, "error", dbErr)
-					continue
-				}
-				meta := streamCallMeta{
-					ID:             c.ID,
-					Talkgroup:      c.Talkgroup,
-					TalkgroupLabel: c.TalkgroupLabel,
-					TalkgroupGroup: c.TalkgroupGroup,
-					DateTime:       c.DateTime,
-					Duration:       c.Duration,
-					Frequency:      c.Frequency,
-					SystemLabel:    c.SystemLabel,
-					AudioType:      c.AudioType,
-					TranscriptText: c.TranscriptText,
-					Origin:         c.Origin,
-					SenderUserID:   c.SenderUserID,
-					SenderEmail:    c.SenderEmail,
-				}
-				if err := sendCall(meta, audio); err != nil {
-					return
-				}
+	seedCalls, seedErr := h.seedPublicStreamCalls(rs, subscribedTalkgroups)
+	if seedErr != nil {
+		h.logger.Error("public stream seed query failed", "radio_set_id", rs.ID, "error", seedErr)
+	} else if len(seedCalls) > 0 {
+		h.logger.Info("public stream seed query completed", "radio_set_id", rs.ID, "calls", len(seedCalls))
+		for _, c := range seedCalls {
+			audio, _, _, _, _, dbErr := h.db.GetCallAudio(c.ID)
+			if dbErr != nil {
+				h.logger.Error("public stream seed audio load failed", "radio_set_id", rs.ID, "call_id", c.ID, "error", dbErr)
+				continue
+			}
+			meta := streamCallMeta{
+				ID:             c.ID,
+				Talkgroup:      c.Talkgroup,
+				TalkgroupLabel: c.TalkgroupLabel,
+				TalkgroupGroup: c.TalkgroupGroup,
+				DateTime:       c.DateTime,
+				Duration:       c.Duration,
+				Frequency:      c.Frequency,
+				SystemLabel:    c.SystemLabel,
+				AudioType:      c.AudioType,
+				TranscriptText: c.TranscriptText,
+				Origin:         c.Origin,
+				SenderUserID:   c.SenderUserID,
+				SenderEmail:    c.SenderEmail,
+			}
+			if err := sendCall(meta, audio); err != nil {
+				return
 			}
 		}
 	}
@@ -959,24 +996,16 @@ func (h *handler) handlePublicLastCall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	queryTalkgroups := rs.Talkgroups
-	if rs.PTTTalkgroup != nil {
-		queryTalkgroups = append(append([]int(nil), rs.Talkgroups...), *rs.PTTTalkgroup)
-	}
-	if len(queryTalkgroups) == 0 {
-		http.Error(w, "no talkgroups", http.StatusNotFound)
-		return
-	}
-	ids, err := h.db.GetRecentCallIDsForTalkgroups(rs.UserID, queryTalkgroups, 1)
-	if err != nil || len(ids) == 0 {
+	calls, err := h.db.GetRecentCallsForRadioSet(rs.UserID, *rs, 1)
+	if err != nil || len(calls) == 0 {
 		http.Error(w, "no calls", http.StatusNotFound)
 		return
 	}
-	audio, audioType, audioName, _, _, err := h.db.GetCallAudio(ids[0])
+	audio, audioType, audioName, _, _, err := h.db.GetCallAudio(calls[len(calls)-1].ID)
 	if err != nil {
 		http.Error(w, "audio not found", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	serveAudioBytes(w, r, audio, audioType, defaultCallAudioName(ids[0], audioName), false, "no-store")
+	serveAudioBytes(w, r, audio, audioType, defaultCallAudioName(calls[len(calls)-1].ID, audioName), false, "no-store")
 }

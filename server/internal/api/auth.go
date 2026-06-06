@@ -36,6 +36,11 @@ type verifyMagicCodeBody struct {
 	Code  string `json:"code"`
 }
 
+type passwordLoginBody struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 func toAuthUser(user database.User) authUser {
 	return authUser{
 		ID:                user.ID,
@@ -137,6 +142,70 @@ func (h *handler) withUserContext(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), userContextKey, toAuthUser(user))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (h *handler) handleAuthCapabilities(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"passwordLoginEnabled":    h.cfg.AuthPasswordLoginEnabled,
+		"magicLinkEnabled":        true,
+		"emailDeliveryConfigured": h.emailDeliveryConfigured(),
+		"autoApproveUsers":        h.cfg.AuthAutoApproveUsers,
+	})
+}
+
+func (h *handler) emailDeliveryConfigured() bool {
+	return strings.TrimSpace(h.cfg.MailjetAPIKey) != "" &&
+		strings.TrimSpace(h.cfg.MailjetSecretKey) != "" &&
+		strings.TrimSpace(h.cfg.MailFromEmail) != ""
+}
+
+func (h *handler) handlePasswordLogin(w http.ResponseWriter, r *http.Request) {
+	if !h.cfg.AuthPasswordLoginEnabled {
+		http.Error(w, "password login disabled", http.StatusForbidden)
+		return
+	}
+
+	var req passwordLoginBody
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	password := strings.TrimSpace(req.Password)
+	if email == "" || !strings.Contains(email, "@") || password == "" {
+		http.Error(w, "invalid email or password", http.StatusBadRequest)
+		return
+	}
+
+	user, err := h.db.VerifyUserPassword(email, password)
+	if err != nil {
+		h.writePasswordLoginError(w, err)
+		return
+	}
+
+	sessionToken, err := h.db.CreateUserSession(user.ID, 24*time.Hour)
+	if err != nil {
+		h.logger.Error("create password login session failed", "error", err)
+		http.Error(w, "login failed", http.StatusInternalServerError)
+		return
+	}
+
+	h.issueSession(w, user, sessionToken)
+}
+
+func (h *handler) writePasswordLoginError(w http.ResponseWriter, err error) {
+	switch err {
+	case database.ErrPendingUser:
+		http.Error(w, "account pending approval", http.StatusForbidden)
+	case database.ErrInactiveUser:
+		http.Error(w, "account disabled", http.StatusForbidden)
+	case sql.ErrNoRows:
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+	default:
+		h.logger.Error("password login failed", "error", err)
+		http.Error(w, "login failed", http.StatusInternalServerError)
+	}
 }
 
 func (h *handler) handleRequestMagicLink(w http.ResponseWriter, r *http.Request) {

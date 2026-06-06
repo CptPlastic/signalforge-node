@@ -186,6 +186,7 @@ func listCallsParamsFromRequest(r *http.Request) database.ListCallsParams {
 		Order:      r.URL.Query().Get("order"),
 		Search:     r.URL.Query().Get("q"),
 		Group:      r.URL.Query().Get("group"),
+		Groups:     parseGroupsQuery(r.URL.Query().Get("groups")),
 		Talkgroups: parseTalkgroupsQuery(r.URL.Query().Get("talkgroups")),
 	}
 }
@@ -200,6 +201,17 @@ func boundedQueryInt(r *http.Request, key string, fallback, minValue, maxValue i
 		return fallback
 	}
 	return n
+}
+
+func parseGroupsQuery(raw string) []string {
+	groups := make([]string, 0)
+	for _, part := range strings.Split(raw, ",") {
+		group := strings.TrimSpace(part)
+		if group != "" {
+			groups = append(groups, group)
+		}
+	}
+	return groups
 }
 
 func parseTalkgroupsQuery(raw string) []int {

@@ -19,6 +19,9 @@ func (d *DB) EnsureUserByEmail(email string) (User, error) {
 	userID := fmt.Sprintf("usr_%d", time.Now().UnixMilli())
 	role := "user"
 	status := "pending"
+	if d.autoApproveUsers {
+		status = "active"
+	}
 	var userCount int
 	if err := d.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&userCount); err != nil {
 		return User{}, err
@@ -418,6 +421,91 @@ func (d *DB) DeleteUser(userID string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// CreateUserSession issues a new auth session for an active user.
+func (d *DB) CreateUserSession(userID string, sessionTTL time.Duration) (string, error) {
+	sessionToken := randomToken("sess_")
+	sessionExpiresAt := time.Now().Add(sessionTTL).Unix()
+	now := time.Now().Unix()
+	_, err := d.db.Exec(`
+		INSERT INTO auth_sessions (token, user_id, expires_at, revoked_at, created_at)
+		VALUES ($1, $2, $3, 0, $4)
+	`, sessionToken, userID, sessionExpiresAt, now)
+	if err != nil {
+		return "", err
+	}
+	return sessionToken, nil
+}
+
+// VerifyUserPassword returns the user when email and password match an active account.
+func (d *DB) VerifyUserPassword(email, password string) (User, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	password = strings.TrimSpace(password)
+	if email == "" || password == "" {
+		return User{}, sql.ErrNoRows
+	}
+
+	var user User
+	var passwordHash sql.NullString
+	err := d.db.QueryRow(`
+		SELECT id, email, role, status,
+		       COALESCE(tx_enabled, FALSE),
+		       COALESCE(dispatcher_enabled, FALSE),
+		       password_hash, created_at, updated_at
+		FROM users
+		WHERE email = $1
+	`, email).Scan(
+		&user.ID, &user.Email, &user.Role, &user.Status,
+		&user.TxEnabled, &user.DispatcherEnabled,
+		&passwordHash, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return User{}, err
+	}
+	if user.Status == "pending" {
+		return User{}, ErrPendingUser
+	}
+	if user.Status != "active" {
+		return User{}, ErrInactiveUser
+	}
+	if !passwordHash.Valid || strings.TrimSpace(passwordHash.String) == "" {
+		return User{}, sql.ErrNoRows
+	}
+	if err := comparePasswordHash(passwordHash.String, password); err != nil {
+		return User{}, sql.ErrNoRows
+	}
+	return user, nil
+}
+
+// BootstrapAuthUser creates or updates the bootstrap admin with a password hash.
+func (d *DB) BootstrapAuthUser(email, passwordHash string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+	passwordHash = strings.TrimSpace(passwordHash)
+	if email == "" || passwordHash == "" {
+		return nil
+	}
+	now := time.Now().Unix()
+
+	var existingID string
+	err := d.db.QueryRow(`SELECT id FROM users WHERE email = $1`, email).Scan(&existingID)
+	if errors.Is(err, sql.ErrNoRows) {
+		userID := fmt.Sprintf("usr_%d", time.Now().UnixMilli())
+		_, err = d.db.Exec(`
+			INSERT INTO users (id, email, role, status, password_hash, created_at, updated_at)
+			VALUES ($1, $2, 'admin', 'active', $3, $4, $4)
+		`, userID, email, passwordHash, now)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	_, err = d.db.Exec(`
+		UPDATE users
+		SET role = 'admin', status = 'active', password_hash = $2, updated_at = $3
+		WHERE id = $1
+	`, existingID, passwordHash, now)
+	return err
 }
 
 // CountActiveAdmins returns the number of active admin users.

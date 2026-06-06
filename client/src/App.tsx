@@ -2,7 +2,9 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import {
   ApiError,
   api,
+  type AuthCapabilities,
   type AuthUser,
+  type RadioSetSelectionMode,
   type AuditLogEntry,
   type Call,
   type FederationStatus,
@@ -348,6 +350,8 @@ function App() {
   const [authLoading, setAuthLoading] = useState(false)
   const [authEmail, setAuthEmail] = useState('')
   const [authToken, setAuthToken] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authCapabilities, setAuthCapabilities] = useState<AuthCapabilities | null>(null)
   const [authMessage, setAuthMessage] = useState('')
   const [authError, setAuthError] = useState('')
   const [mobileAppHandoff, setMobileAppHandoff] = useState<{ token: string } | null>(null)
@@ -388,10 +392,15 @@ function App() {
   const [distinctTalkgroups, setDistinctTalkgroups] = useState<TalkgroupInfo[]>([])
   const [rsName, setRsName] = useState('')
   const [rsCreateTGs, setRsCreateTGs] = useState<number[]>([])
+  const [rsCreateMode, setRsCreateMode] = useState<RadioSetSelectionMode>('talkgroups')
+  const [rsCreateGroups, setRsCreateGroups] = useState<string[]>([])
   const [rsTGSearch, setRsTGSearch] = useState('')
+  const [rsGroupSearch, setRsGroupSearch] = useState('')
   const [rsEditID, setRsEditID] = useState<string | null>(null)
   const [rsEditName, setRsEditName] = useState('')
   const [rsEditTGs, setRsEditTGs] = useState<number[]>([])
+  const [rsEditMode, setRsEditMode] = useState<RadioSetSelectionMode>('talkgroups')
+  const [rsEditGroups, setRsEditGroups] = useState<string[]>([])
   const [rsError, setRsError] = useState('')
   const [rsLoading, setRsLoading] = useState(false)
   const [rsVolume, setRsVolume] = useState(getStoredRadioSetVolume)
@@ -607,6 +616,7 @@ function App() {
 
   // Load existing calls on mount
   useEffect(() => {
+    api.authCapabilities().then(setAuthCapabilities).catch(() => {})
     Promise.all([
       api.calls({ limit: 500, sort: 'datetime', order: 'desc' }),
       api.talkgroupSettings(),
@@ -1212,6 +1222,33 @@ function App() {
     }
   }
 
+  async function passwordLogin() {
+    const email = authEmail.trim()
+    const password = authPassword
+    if (!email) {
+      setAuthError('Email is required')
+      return
+    }
+    if (!password) {
+      setAuthError('Password is required')
+      return
+    }
+
+    setAuthLoading(true)
+    setAuthError('')
+    setAuthMessage('')
+    try {
+      const result = await api.passwordLogin(email, password)
+      setAuthUser(result.user)
+      setAuthPassword('')
+      await finalizeVerifiedSession(result.user.email, result.user.role)
+    } catch (err) {
+      setAuthError(getErrorMessage(err, 'Sign-in failed'))
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
   async function requestMagicLink() {
   const email = authEmail.trim()
   if (!email) {
@@ -1367,19 +1404,15 @@ function App() {
           .map(([tg]) => Number(tg))
       : []
 
-    const setTalkgroups = selectedSetID
-      ? (() => {
-          const set = radioSets.find((rs) => rs.id === selectedSetID)
-          if (!set) return []
-          // Include the virtual PTT talkgroup so dispatcher/PTT calls show up
-          // when this set is the active filter — they live on a separate TG.
-          return set.pttTalkgroup !== undefined
-            ? [...set.talkgroups, set.pttTalkgroup]
-            : set.talkgroups
-        })()
+    const selectedSet = selectedSetID ? radioSets.find((rs) => rs.id === selectedSetID) : undefined
+    const setTalkgroups = selectedSet && selectedSet.selectionMode !== 'groups'
+      ? (selectedSet.pttTalkgroup !== undefined
+          ? [...selectedSet.talkgroups, selectedSet.pttTalkgroup]
+          : selectedSet.talkgroups)
       : []
+    const setGroups = selectedSet?.selectionMode === 'groups' ? (selectedSet.talkgroupGroups ?? []) : []
 
-    if (!q && !groupFilter && favTalkgroups.length === 0 && setTalkgroups.length === 0) {
+    if (!q && !groupFilter && favTalkgroups.length === 0 && setTalkgroups.length === 0 && setGroups.length === 0) {
       setServerResults(null)
       setServerLoading(false)
       return
@@ -1388,10 +1421,12 @@ function App() {
     const delay = q ? 300 : 0
     setServerLoading(true)
     const timer = setTimeout(() => {
-      const params: { limit: number; sort: 'datetime'; order: 'desc'; q?: string; group?: string; talkgroups?: number[] } = { limit: 1000, sort: 'datetime', order: 'desc' }
+      const params: { limit: number; sort: 'datetime'; order: 'desc'; q?: string; group?: string; groups?: string[]; talkgroups?: number[] } = { limit: 1000, sort: 'datetime', order: 'desc' }
       if (q) params.q = q
       if (groupFilter) params.group = groupFilter
-      if (setTalkgroups.length > 0) {
+      if (setGroups.length > 0) {
+        params.groups = setGroups
+      } else if (setTalkgroups.length > 0) {
         params.talkgroups = setTalkgroups
       } else if (favTalkgroups.length > 0) {
         params.talkgroups = favTalkgroups
@@ -2121,33 +2156,44 @@ function App() {
           return (
             <RadioSetsView
               authUser={authUser}
+              allGroups={allGroups}
               audioDevices={audioDevices}
               audioRef={audioRef}
               distinctTalkgroups={distinctTalkgroups}
               enumerateAudioDevices={enumerateAudioDevices}
               radioSets={radioSets}
               rsCreateTGs={rsCreateTGs}
+              rsCreateMode={rsCreateMode}
+              rsCreateGroups={rsCreateGroups}
               rsEditID={rsEditID}
               rsEditName={rsEditName}
               rsEditTGs={rsEditTGs}
+              rsEditMode={rsEditMode}
+              rsEditGroups={rsEditGroups}
               rsError={rsError}
               rsLoading={rsLoading}
               rsName={rsName}
               rsPlayingID={rsPlayingID}
               rsTGSearch={rsTGSearch}
+              rsGroupSearch={rsGroupSearch}
               rsVolume={rsVolume}
               selectedDeviceId={selectedDeviceId}
               selectedSetID={selectedSetID}
               setRadioSets={setRadioSets}
               setRsCreateTGs={setRsCreateTGs}
+              setRsCreateMode={setRsCreateMode}
+              setRsCreateGroups={setRsCreateGroups}
               setRsEditID={setRsEditID}
               setRsEditName={setRsEditName}
               setRsEditTGs={setRsEditTGs}
+              setRsEditMode={setRsEditMode}
+              setRsEditGroups={setRsEditGroups}
               setRsError={setRsError}
               setRsLoading={setRsLoading}
               setRsName={setRsName}
               setRsPlayingID={setRsPlayingID}
               setRsTGSearch={setRsTGSearch}
+              setRsGroupSearch={setRsGroupSearch}
               setRsVolume={setRsVolume}
               setSelectedDeviceId={setSelectedDeviceId}
               setSelectedSetID={setSelectedSetID}
@@ -2891,6 +2937,8 @@ function App() {
         authMessage={authMessage}
         authError={authError}
         awaitingMagicLink={awaitingMagicLink}
+        authCapabilities={authCapabilities}
+        authPassword={authPassword}
         users={users}
         setUsers={setUsers}
         usersLoading={usersLoading}
@@ -2899,8 +2947,10 @@ function App() {
         auditLoading={auditLoading}
         onAuthEmailChange={setAuthEmail}
         onAuthTokenChange={setAuthToken}
+        onAuthPasswordChange={setAuthPassword}
         onRequestMagicLink={requestMagicLink}
         onVerifyMagicLinkToken={verifyMagicLinkToken}
+        onPasswordLogin={passwordLogin}
         onLogoutSession={logoutSession}
         onRefreshUsers={refreshUsers}
         onSaveUser={saveUser}

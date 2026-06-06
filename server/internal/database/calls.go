@@ -157,6 +157,7 @@ func (d *DB) ListCalls(params ListCallsParams) ([]Call, error) {
 	}
 	appendSearchFilter(params.Search, &filters, &args, &argPos)
 	appendTalkgroupsFilter(params.Talkgroups, &filters, &args, &argPos)
+	appendGroupsFilter(params.Groups, &filters, &args, &argPos)
 	appendGroupFilter(params.Group, &filters, &args, &argPos)
 	if len(filters) > 0 {
 		baseQuery += " WHERE " + strings.Join(filters, " AND ")
@@ -185,6 +186,113 @@ func (d *DB) ListCalls(params ListCallsParams) ([]Call, error) {
 		calls = append(calls, c)
 	}
 	return calls, rows.Err()
+}
+
+// GetRecentCallsForTalkgroupGroups returns call metadata for recent calls whose
+// talkgroup_group is in groups, oldest-first, for public player seeding.
+func (d *DB) GetRecentCallsForTalkgroupGroups(userID string, groups []string, limit int) ([]Call, error) {
+	if len(groups) == 0 {
+		return nil, nil
+	}
+	args := make([]any, 0, len(groups)+2)
+	args = append(args, userID)
+	ph := make([]string, len(groups))
+	for i, group := range groups {
+		ph[i] = fmt.Sprintf("$%d", i+2)
+		args = append(args, group)
+	}
+	args = append(args, limit)
+	q := fmt.Sprintf(
+		`SELECT DISTINCT c.id, COALESCE(c.user_id,''), COALESCE(c.source_id,''), c.datetime, c.system, c.system_label,
+		        c.talkgroup, c.talkgroup_label, c.talkgroup_group, c.talkgroup_tag, c.frequency, c.duration,
+		        c.audio_name, c.audio_type, c.created_at
+		 FROM calls c
+		 LEFT JOIN ingestion_sources s ON s.id = c.source_id
+		 WHERE (c.user_id = $1 OR s.user_id = $1 OR s.is_shared = TRUE OR EXISTS (
+			 SELECT 1 FROM ingestion_source_keys k
+			 WHERE k.source_id = c.source_id AND k.user_id = $1
+		 ) OR EXISTS (
+			 SELECT 1 FROM ingestion_source_user_shares sh
+			 WHERE sh.source_id = c.source_id AND sh.user_id = $1
+		 ) OR (s.id LIKE 'remote\_%%' ESCAPE '\' AND s.enabled = TRUE AND s.deleted_at = 0))
+		 AND c.talkgroup_group IN (%s)
+		 ORDER BY c.datetime DESC
+		 LIMIT $%d`,
+		strings.Join(ph, ","), len(groups)+2,
+	)
+	rows, err := d.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var calls []Call
+	for rows.Next() {
+		var c Call
+		if err := rows.Scan(
+			&c.ID, &c.UserID, &c.SourceID, &c.DateTime, &c.System, &c.SystemLabel,
+			&c.Talkgroup, &c.TalkgroupLabel, &c.TalkgroupGroup, &c.TalkgroupTag,
+			&c.Frequency, &c.Duration, &c.AudioName, &c.AudioType, &c.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		calls = append(calls, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(calls)-1; i < j; i, j = i+1, j-1 {
+		calls[i], calls[j] = calls[j], calls[i]
+	}
+	return calls, nil
+}
+
+// GetRecentCallsForRadioSet seeds the public player with recent calls for a set.
+func (d *DB) GetRecentCallsForRadioSet(userID string, rs RadioSet, limit int) ([]Call, error) {
+	pttTalkgroups := make([]int, 0, 1)
+	if rs.PTTTalkgroup != nil {
+		pttTalkgroups = append(pttTalkgroups, *rs.PTTTalkgroup)
+	}
+	if rs.IsGroupsMode() {
+		if len(rs.TalkgroupGroups) == 0 && len(pttTalkgroups) == 0 {
+			return nil, nil
+		}
+		calls, err := d.GetRecentCallsForTalkgroupGroups(userID, rs.TalkgroupGroups, limit)
+		if err != nil || len(pttTalkgroups) == 0 {
+			return calls, err
+		}
+		pttCalls, err := d.GetRecentCallsForTalkgroups(userID, pttTalkgroups, limit)
+		if err != nil {
+			return calls, err
+		}
+		return mergeRecentCallsByDateTime(calls, pttCalls, limit), nil
+	}
+	talkgroups := append(append([]int(nil), rs.Talkgroups...), pttTalkgroups...)
+	if len(talkgroups) == 0 {
+		return nil, nil
+	}
+	return d.GetRecentCallsForTalkgroups(userID, talkgroups, limit)
+}
+
+func mergeRecentCallsByDateTime(primary, extra []Call, limit int) []Call {
+	seen := make(map[int64]struct{}, limit)
+	merged := make([]Call, 0, limit)
+	appendCall := func(call Call) {
+		if len(merged) >= limit {
+			return
+		}
+		if _, ok := seen[call.ID]; ok {
+			return
+		}
+		seen[call.ID] = struct{}{}
+		merged = append(merged, call)
+	}
+	for _, call := range primary {
+		appendCall(call)
+	}
+	for _, call := range extra {
+		appendCall(call)
+	}
+	return merged
 }
 
 // ListCallsSince returns calls with id greater than sinceID ordered ascending by
@@ -298,6 +406,19 @@ func appendTalkgroupsFilter(talkgroups []int, filters *[]string, args *[]any, ar
 		(*argPos)++
 	}
 	*filters = append(*filters, "c.talkgroup IN ("+strings.Join(placeholders, ",")+")")
+}
+
+func appendGroupsFilter(groups []string, filters *[]string, args *[]any, argPos *int) {
+	if len(groups) == 0 {
+		return
+	}
+	placeholders := make([]string, len(groups))
+	for i, group := range groups {
+		placeholders[i] = fmt.Sprintf("$%d", *argPos)
+		*args = append(*args, group)
+		*argPos++
+	}
+	*filters = append(*filters, fmt.Sprintf("c.talkgroup_group IN (%s)", strings.Join(placeholders, ",")))
 }
 
 func appendGroupFilter(group string, filters *[]string, args *[]any, argPos *int) {

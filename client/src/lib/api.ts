@@ -130,6 +130,7 @@ export type CallQuery = {
   order?: 'asc' | 'desc'
   q?: string
   group?: string
+  groups?: string[]
   talkgroups?: number[]
 }
 
@@ -207,16 +208,27 @@ export type TalkgroupInfo = {
   systemLabel: string
 }
 
+export type RadioSetSelectionMode = 'talkgroups' | 'groups'
+
 export type RadioSet = {
   id: string
   userId?: string
   name: string
+  selectionMode?: RadioSetSelectionMode
   talkgroups: number[]
+  talkgroupGroups?: string[]
   sourceIds?: string[]
   shareToken?: string
   pttTalkgroup?: number
   createdAt: number
   updatedAt: number
+}
+
+export type AuthCapabilities = {
+  passwordLoginEnabled: boolean
+  magicLinkEnabled: boolean
+  emailDeliveryConfigured: boolean
+  autoApproveUsers: boolean
 }
 
 export type MagicLinkRequestResponse = {
@@ -245,6 +257,8 @@ export type VersionInfo = {
   stackId: string
   deployTag: string
   transcriptionEnabled?: boolean
+  passwordLoginEnabled?: boolean
+  emailDeliveryConfigured?: boolean
 }
 
 export type UpdateManifest = {
@@ -276,6 +290,7 @@ function buildQuery(params: CallQuery = {}): string {
   if (params.order) query.set('order', params.order)
   if (params.q) query.set('q', params.q)
   if (params.group) query.set('group', params.group)
+  if (params.groups && params.groups.length > 0) query.set('groups', params.groups.join(','))
   if (params.talkgroups && params.talkgroups.length > 0) query.set('talkgroups', params.talkgroups.join(','))
   const s = query.toString()
   return s ? `?${s}` : ''
@@ -285,6 +300,12 @@ export const api = {
   health: () => request<{ status: string; timestamp: string }>('/api/v1/health'),
   version: () => request<VersionInfo>('/api/v1/version'),
   updateCheck: () => request<UpdateCheckResponse>('/api/v1/update-check'),
+  authCapabilities: () => request<AuthCapabilities>('/api/v1/auth/capabilities'),
+  passwordLogin: (email: string, password: string) =>
+    request<AuthSessionResponse>('/api/v1/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
   requestMagicLink: (email: string) =>
     request<MagicLinkRequestResponse>('/api/v1/auth/magic-link', {
       method: 'POST',
@@ -379,12 +400,26 @@ export const api = {
     }),
   distinctTalkgroups: () => request<TalkgroupInfo[]>('/api/v1/talkgroups/distinct'),
   radioSets: () => request<RadioSet[]>('/api/v1/radio-sets'),
-  createRadioSet: (name: string, talkgroups: number[]) =>
-    request<RadioSet>('/api/v1/radio-sets', { method: 'POST', body: JSON.stringify({ name, talkgroups }) }),
-  updateRadioSet: (id: string, name: string, talkgroups: number[]) =>
+  createRadioSet: (
+    name: string,
+    selectionMode: RadioSetSelectionMode,
+    talkgroups: number[],
+    talkgroupGroups: string[],
+  ) =>
+    request<RadioSet>('/api/v1/radio-sets', {
+      method: 'POST',
+      body: JSON.stringify({ name, selectionMode, talkgroups, talkgroupGroups }),
+    }),
+  updateRadioSet: (
+    id: string,
+    name: string,
+    selectionMode: RadioSetSelectionMode,
+    talkgroups: number[],
+    talkgroupGroups: string[],
+  ) =>
     request<RadioSet>(`/api/v1/radio-sets/${encodeURIComponent(id)}`, {
       method: 'PUT',
-      body: JSON.stringify({ name, talkgroups }),
+      body: JSON.stringify({ name, selectionMode, talkgroups, talkgroupGroups }),
     }),
   deleteRadioSet: (id: string) =>
     request<{ status: string }>(`/api/v1/radio-sets/${encodeURIComponent(id)}`, { method: 'DELETE' }),

@@ -10,7 +10,14 @@ import (
 
 // DB wraps the SQL connection.
 type DB struct {
-	db *sql.DB
+	db               *sql.DB
+	autoApproveUsers bool
+}
+
+// SetAutoApproveUsers controls whether new email sign-ups are created as active
+// instead of pending approval (useful for closed/off-grid cells).
+func (d *DB) SetAutoApproveUsers(enabled bool) {
+	d.autoApproveUsers = enabled
 }
 
 // Open opens a PostgreSQL database connection and runs migrations.

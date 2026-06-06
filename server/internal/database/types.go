@@ -167,17 +167,25 @@ type TalkgroupInfo struct {
 	SystemLabel    string `json:"systemLabel"`
 }
 
-// RadioSet is a named, user-owned collection of talkgroup IDs used to filter the call log.
+// RadioSet is a named, user-owned playset used to filter the call log and public player.
+// selectionMode is "talkgroups" (explicit TG IDs) or "groups" (dynamic talkgroup_group names).
 type RadioSet struct {
-	ID           string   `json:"id"`
-	UserID       string   `json:"userId,omitempty"`
-	Name         string   `json:"name"`
-	Talkgroups   []int    `json:"talkgroups"`
-	SourceIDs    []string `json:"sourceIds,omitempty"`
-	ShareToken   *string  `json:"shareToken,omitempty"`
-	PTTTalkgroup *int     `json:"pttTalkgroup,omitempty"`
-	CreatedAt    int64    `json:"createdAt"`
-	UpdatedAt    int64    `json:"updatedAt"`
+	ID              string   `json:"id"`
+	UserID          string   `json:"userId,omitempty"`
+	Name            string   `json:"name"`
+	SelectionMode   string   `json:"selectionMode"`
+	Talkgroups      []int    `json:"talkgroups"`
+	TalkgroupGroups []string `json:"talkgroupGroups"`
+	SourceIDs       []string `json:"sourceIds,omitempty"`
+	ShareToken      *string  `json:"shareToken,omitempty"`
+	PTTTalkgroup    *int     `json:"pttTalkgroup,omitempty"`
+	CreatedAt       int64    `json:"createdAt"`
+	UpdatedAt       int64    `json:"updatedAt"`
+}
+
+// IsGroupsMode reports whether the set follows talkgroup_group names instead of TG IDs.
+func (rs RadioSet) IsGroupsMode() bool {
+	return normalizeRadioSetSelectionMode(rs.SelectionMode) == "groups"
 }
 
 // ListCallsParams configures filtering and sorting for ListCalls.
@@ -190,7 +198,8 @@ type ListCallsParams struct {
 	Offset      int
 	UserID      string
 	OnlyUnowned bool
-	Talkgroups  []int
+	Talkgroups      []int
+	Groups          []string
 }
 
 // FederatedCall is a call payload shared between trusted hubs.

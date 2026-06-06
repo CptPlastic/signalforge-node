@@ -68,7 +68,9 @@ func (h *handler) handleVersion(w http.ResponseWriter, _ *http.Request) {
 		"stackId":               h.cfg.StackID,
 		"deployTag":             h.cfg.DeployTag,
 		"uploadKeyRequired":     uploadKeyRequired,
-		"transcriptionEnabled":  strings.TrimSpace(h.cfg.TranscriptionWorkerToken) != "",
+		"transcriptionEnabled":   strings.TrimSpace(h.cfg.TranscriptionWorkerToken) != "",
+		"passwordLoginEnabled":   h.cfg.AuthPasswordLoginEnabled,
+		"emailDeliveryConfigured": h.emailDeliveryConfigured(),
 	})
 }
 

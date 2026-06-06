@@ -1,36 +1,47 @@
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
-import { api, type AuthUser, type RadioSet, type TalkgroupInfo } from '../../lib/api'
+import { api, type AuthUser, type RadioSet, type RadioSetSelectionMode, type TalkgroupInfo } from '../../lib/api'
 import { PTTButton } from './PTTButton'
 
 type RadioSetsViewProps = Readonly<{
   authUser: AuthUser | null
   audioDevices: MediaDeviceInfo[]
   audioRef: RefObject<HTMLAudioElement | null>
+  allGroups: string[]
   distinctTalkgroups: TalkgroupInfo[]
   enumerateAudioDevices: () => void
   radioSets: RadioSet[]
   rsCreateTGs: number[]
+  rsCreateMode: RadioSetSelectionMode
+  rsCreateGroups: string[]
   rsEditID: string | null
   rsEditName: string
   rsEditTGs: number[]
+  rsEditMode: RadioSetSelectionMode
+  rsEditGroups: string[]
   rsError: string
   rsLoading: boolean
   rsName: string
   rsPlayingID: string | null
   rsTGSearch: string
+  rsGroupSearch: string
   rsVolume: number
   selectedDeviceId: string
   selectedSetID: string
   setRadioSets: Dispatch<SetStateAction<RadioSet[]>>
   setRsCreateTGs: Dispatch<SetStateAction<number[]>>
+  setRsCreateMode: Dispatch<SetStateAction<RadioSetSelectionMode>>
+  setRsCreateGroups: Dispatch<SetStateAction<string[]>>
   setRsEditID: Dispatch<SetStateAction<string | null>>
   setRsEditName: Dispatch<SetStateAction<string>>
   setRsEditTGs: Dispatch<SetStateAction<number[]>>
+  setRsEditMode: Dispatch<SetStateAction<RadioSetSelectionMode>>
+  setRsEditGroups: Dispatch<SetStateAction<string[]>>
   setRsError: Dispatch<SetStateAction<string>>
   setRsLoading: Dispatch<SetStateAction<boolean>>
   setRsName: Dispatch<SetStateAction<string>>
   setRsPlayingID: Dispatch<SetStateAction<string | null>>
   setRsTGSearch: Dispatch<SetStateAction<string>>
+  setRsGroupSearch: Dispatch<SetStateAction<string>>
   setRsVolume: Dispatch<SetStateAction<number>>
   setSelectedDeviceId: Dispatch<SetStateAction<string>>
   setSelectedSetID: Dispatch<SetStateAction<string>>
@@ -59,35 +70,61 @@ function updateTalkgroupSelection(talkgroup: number, checked: boolean) {
   }
 }
 
+function updateGroupSelection(group: string, checked: boolean) {
+  return (groups: string[]): string[] => {
+    if (checked) return groups.filter((name) => name !== group)
+    return [...groups, group]
+  }
+}
+
+function radioSetMembershipLabel(radioSet: RadioSet): string {
+  if (radioSet.selectionMode === 'groups') {
+    const count = radioSet.talkgroupGroups?.length ?? 0
+    return `${count} ${count === 1 ? 'group' : 'groups'}`
+  }
+  return `${radioSet.talkgroups.length} ${pluralTalkgroups(radioSet.talkgroups.length)}`
+}
+
 export function RadioSetsView({
   authUser,
   audioDevices,
   audioRef,
+  allGroups,
   distinctTalkgroups,
   enumerateAudioDevices,
   radioSets,
   rsCreateTGs,
+  rsCreateMode,
+  rsCreateGroups,
   rsEditID,
   rsEditName,
   rsEditTGs,
+  rsEditMode,
+  rsEditGroups,
   rsError,
   rsLoading,
   rsName,
   rsPlayingID,
   rsTGSearch,
+  rsGroupSearch,
   rsVolume,
   selectedDeviceId,
   selectedSetID,
   setRadioSets,
   setRsCreateTGs,
+  setRsCreateMode,
+  setRsCreateGroups,
   setRsEditID,
   setRsEditName,
   setRsEditTGs,
+  setRsEditMode,
+  setRsEditGroups,
   setRsError,
   setRsLoading,
   setRsName,
   setRsPlayingID,
   setRsTGSearch,
+  setRsGroupSearch,
   setRsVolume,
   setSelectedDeviceId,
   setSelectedSetID,
@@ -107,11 +144,23 @@ export function RadioSetsView({
 
   const selectedTalkgroups = rsEditID ? rsEditTGs : rsCreateTGs
   const setSelectedTalkgroups = rsEditID ? setRsEditTGs : setRsCreateTGs
+  const selectedGroups = rsEditID ? rsEditGroups : rsCreateGroups
+  const setSelectedGroups = rsEditID ? setRsEditGroups : setRsCreateGroups
+  const selectionMode = rsEditID ? rsEditMode : rsCreateMode
+  const setSelectionMode = rsEditID ? setRsEditMode : setRsCreateMode
+
+  const filteredGroups = useMemo(() => {
+    const query = rsGroupSearch.trim().toLowerCase()
+    if (!query) return allGroups
+    return allGroups.filter((group) => group.toLowerCase().includes(query))
+  }, [allGroups, rsGroupSearch])
 
   const resetEditForm = () => {
     setRsEditID(null)
     setRsEditName('')
     setRsEditTGs([])
+    setRsEditGroups([])
+    setRsEditMode('talkgroups')
   }
 
   const submitRadioSet = async () => {
@@ -125,16 +174,18 @@ export function RadioSetsView({
     setRsError('')
     try {
       if (rsEditID) {
-        const updated = await api.updateRadioSet(rsEditID, name, rsEditTGs)
+        const updated = await api.updateRadioSet(rsEditID, name, rsEditMode, rsEditTGs, rsEditGroups)
         setRadioSets((prev) => replaceRadioSet(prev, updated))
         resetEditForm()
         return
       }
 
-      const created = await api.createRadioSet(name, rsCreateTGs)
+      const created = await api.createRadioSet(name, rsCreateMode, rsCreateTGs, rsCreateGroups)
       setRadioSets((prev) => [...prev, created])
       setRsName('')
       setRsCreateTGs([])
+      setRsCreateGroups([])
+      setRsCreateMode('talkgroups')
     } catch {
       setRsError(rsEditID ? 'Could not update radio set' : 'Could not create radio set')
     } finally {
@@ -227,37 +278,96 @@ export function RadioSetsView({
           placeholder="Set name..."
           className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
         />
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <span className="text-[10px] text-console-muted uppercase tracking-wider">Talkgroups</span>
-            <input
-              value={rsTGSearch}
-              onChange={(event) => setRsTGSearch(event.target.value)}
-              placeholder="Filter..."
-              className="bg-console-bg border border-console-border rounded px-2 py-0.5 text-[10px] outline-none focus:border-console-accent w-full sm:w-32"
-            />
-          </div>
-          <div className="max-h-48 overflow-y-auto border border-console-border rounded divide-y divide-console-border/50">
-            {filteredTalkgroups.map((tg) => {
-              const checked = selectedTalkgroups.includes(tg.talkgroup)
-              return (
-                <label key={tg.talkgroup} className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-console-surface text-xs">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => setSelectedTalkgroups(updateTalkgroupSelection(tg.talkgroup, checked))}
-                  />
-                  <span className="text-console-accent tabular-nums">{tg.talkgroup}</span>
-                  {tg.talkgroupLabel && <span>{tg.talkgroupLabel}</span>}
-                  {tg.talkgroupGroup && <span className="text-console-muted">{tg.talkgroupGroup}</span>}
-                </label>
-              )
-            })}
-            {distinctTalkgroups.length === 0 && (
-              <p className="text-[10px] text-console-muted px-2 py-2">No talkgroups seen yet</p>
-            )}
-          </div>
+        <div className="flex gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setSelectionMode('talkgroups')}
+            className={`px-2 py-1 border rounded text-[10px] uppercase tracking-wider ${
+              selectionMode === 'talkgroups'
+                ? 'border-console-accent text-console-accent bg-console-accent/10'
+                : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
+            }`}
+          >
+            Talkgroups
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectionMode('groups')}
+            className={`px-2 py-1 border rounded text-[10px] uppercase tracking-wider ${
+              selectionMode === 'groups'
+                ? 'border-console-accent text-console-accent bg-console-accent/10'
+                : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
+            }`}
+          >
+            Groups
+          </button>
         </div>
+        {selectionMode === 'talkgroups' ? (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-[10px] text-console-muted uppercase tracking-wider">Talkgroups</span>
+              <input
+                value={rsTGSearch}
+                onChange={(event) => setRsTGSearch(event.target.value)}
+                placeholder="Filter..."
+                className="bg-console-bg border border-console-border rounded px-2 py-0.5 text-[10px] outline-none focus:border-console-accent w-full sm:w-32"
+              />
+            </div>
+            <div className="max-h-48 overflow-y-auto border border-console-border rounded divide-y divide-console-border/50">
+              {filteredTalkgroups.map((tg) => {
+                const checked = selectedTalkgroups.includes(tg.talkgroup)
+                return (
+                  <label key={tg.talkgroup} className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-console-surface text-xs">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => setSelectedTalkgroups(updateTalkgroupSelection(tg.talkgroup, checked))}
+                    />
+                    <span className="text-console-accent tabular-nums">{tg.talkgroup}</span>
+                    {tg.talkgroupLabel && <span>{tg.talkgroupLabel}</span>}
+                    {tg.talkgroupGroup && <span className="text-console-muted">{tg.talkgroupGroup}</span>}
+                  </label>
+                )
+              })}
+              {distinctTalkgroups.length === 0 && (
+                <p className="text-[10px] text-console-muted px-2 py-2">No talkgroups seen yet</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-[10px] text-console-muted uppercase tracking-wider">Talkgroup groups</span>
+              <input
+                value={rsGroupSearch}
+                onChange={(event) => setRsGroupSearch(event.target.value)}
+                placeholder="Filter..."
+                className="bg-console-bg border border-console-border rounded px-2 py-0.5 text-[10px] outline-none focus:border-console-accent w-full sm:w-32"
+              />
+            </div>
+            <p className="text-[10px] text-console-muted">
+              Dynamic playset — new talkgroups in these groups are included automatically.
+            </p>
+            <div className="max-h-48 overflow-y-auto border border-console-border rounded divide-y divide-console-border/50">
+              {filteredGroups.map((group) => {
+                const checked = selectedGroups.includes(group)
+                return (
+                  <label key={group} className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-console-surface text-xs">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => setSelectedGroups(updateGroupSelection(group, checked))}
+                    />
+                    <span>{group}</span>
+                  </label>
+                )
+              })}
+              {allGroups.length === 0 && (
+                <p className="text-[10px] text-console-muted px-2 py-2">No groups seen yet</p>
+              )}
+            </div>
+          </div>
+        )}
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={submitRadioSet}
@@ -290,7 +400,7 @@ export function RadioSetsView({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-col gap-0.5 min-w-0">
                     <span className="text-xs font-semibold">{radioSet.name}</span>
-                    <span className="text-[10px] text-console-muted">{radioSet.talkgroups.length} {pluralTalkgroups(radioSet.talkgroups.length)}</span>
+                    <span className="text-[10px] text-console-muted">{radioSetMembershipLabel(radioSet)}</span>
                     {authUser?.role === 'admin' && (
                       <span className="text-[10px] text-console-muted">
                         owner {radioSet.userId || 'unknown'} | sources {(radioSet.sourceIds && radioSet.sourceIds.length > 0) ? radioSet.sourceIds.join(', ') : 'none'}
@@ -373,7 +483,9 @@ export function RadioSetsView({
                       onClick={() => {
                         setRsEditID(radioSet.id)
                         setRsEditName(radioSet.name)
+                        setRsEditMode(radioSet.selectionMode ?? 'talkgroups')
                         setRsEditTGs([...radioSet.talkgroups])
+                        setRsEditGroups([...(radioSet.talkgroupGroups ?? [])])
                       }}
                       className="px-2 py-1 sm:py-0.5 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent"
                       disabled={!canManageRadioSet}

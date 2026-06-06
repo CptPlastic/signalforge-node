@@ -11,7 +11,7 @@ import (
 // set on the hub, so this read is intentionally not user-scoped.
 func (d *DB) GetRadioSetForPTT(id string) (RadioSet, bool, error) {
 	row := d.db.QueryRow(`
-		SELECT id, user_id, name, talkgroups, share_token, ptt_talkgroup, created_at, updated_at
+		SELECT id, user_id, name, selection_mode, talkgroups, talkgroup_groups, share_token, ptt_talkgroup, created_at, updated_at
 		FROM radio_sets WHERE id = $1`, id)
 	rs, err := scanRadioSet(row)
 	if err != nil {

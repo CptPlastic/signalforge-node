@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/projectseven-co-ltd/p7-scanner/server/internal/api"
 	"github.com/projectseven-co-ltd/p7-scanner/server/internal/config"
 	"github.com/projectseven-co-ltd/p7-scanner/server/internal/database"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -43,6 +45,11 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+	db.SetAutoApproveUsers(cfg.AuthAutoApproveUsers)
+	if err := bootstrapAuthAdmin(logger, db, cfg); err != nil {
+		logger.Error("failed to bootstrap auth admin", "error", err)
+		os.Exit(1)
+	}
 	if cfg.TranscriptionWorkerToken != "" {
 		if err := db.EnsureTranscriptionQueueRows(); err != nil {
 			logger.Error("failed to prepare transcription queue", "error", err)
@@ -88,4 +95,21 @@ func main() {
 		logger.Error("graceful shutdown failed", "error", err)
 		_ = srv.Close()
 	}
+}
+
+func bootstrapAuthAdmin(logger *slog.Logger, db *database.DB, cfg config.Config) error {
+	email := strings.TrimSpace(cfg.AuthBootstrapEmail)
+	password := cfg.AuthBootstrapPassword
+	if email == "" || password == "" {
+		return nil
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	if err != nil {
+		return err
+	}
+	if err := db.BootstrapAuthUser(email, string(hash)); err != nil {
+		return err
+	}
+	logger.Info("bootstrap auth admin ensured", "email", email)
+	return nil
 }

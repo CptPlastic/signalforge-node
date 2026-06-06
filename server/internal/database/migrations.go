@@ -242,6 +242,13 @@ func (d *DB) migrate() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_ptt_uploads_user_created ON ptt_uploads(user_id, created_at DESC);
 		CREATE INDEX IF NOT EXISTS idx_calls_origin ON calls(origin);
+
+		-- Off-grid password auth (optional bootstrap admin via env).
+		ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
+		-- Radio sets can follow explicit talkgroup IDs or dynamic talkgroup_group names.
+		ALTER TABLE radio_sets ADD COLUMN IF NOT EXISTS selection_mode TEXT NOT NULL DEFAULT 'talkgroups';
+		ALTER TABLE radio_sets ADD COLUMN IF NOT EXISTS talkgroup_groups JSONB NOT NULL DEFAULT '[]';
 	`)
 	return err
 }

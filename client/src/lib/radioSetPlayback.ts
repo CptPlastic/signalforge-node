@@ -22,7 +22,10 @@ export function maybePlayActiveRadioSetCall({
         const activeSet = sets.find((radioSet) => radioSet.id === activeID)
         const matchesSet =
           activeSet?.talkgroups.includes(call.talkgroup) ||
-          activeSet?.pttTalkgroup === call.talkgroup
+          activeSet?.pttTalkgroup === call.talkgroup ||
+          (activeSet?.selectionMode === 'groups' &&
+            Boolean(call.talkgroupGroup) &&
+            (activeSet.talkgroupGroups ?? []).includes(call.talkgroupGroup))
         if (matchesSet) {
           setPlayingId((currentPlaying) => {
             if (!currentPlaying) {

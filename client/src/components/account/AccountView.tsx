@@ -1,5 +1,5 @@
 import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
-import type { AuthUser, AuditLogEntry, UserRecord } from '../../lib/api'
+import type { AuthCapabilities, AuthUser, AuditLogEntry, UserRecord } from '../../lib/api'
 import { fmtDateTime } from '../../lib/format'
 import {
   updateUserDispatcherEnabledDraft,
@@ -19,6 +19,8 @@ type AccountViewProps = Readonly<{
   authMessage: string
   authError: string
   awaitingMagicLink: boolean
+  authCapabilities: AuthCapabilities | null
+  authPassword: string
   users: UserRecord[]
   setUsers: Dispatch<SetStateAction<UserRecord[]>>
   usersLoading: boolean
@@ -27,8 +29,10 @@ type AccountViewProps = Readonly<{
   auditLoading: boolean
   onAuthEmailChange: (email: string) => void
   onAuthTokenChange: (token: string) => void
+  onAuthPasswordChange: (password: string) => void
   onRequestMagicLink: () => void | Promise<void>
   onVerifyMagicLinkToken: () => void | Promise<void>
+  onPasswordLogin: () => void | Promise<void>
   onLogoutSession: () => void | Promise<void>
   onRefreshUsers: () => void | Promise<void>
   onSaveUser: (user: UserRecord) => void | Promise<void>
@@ -44,13 +48,17 @@ type AuthAccessCardProps = Pick<
   | 'authLoading'
   | 'authEmail'
   | 'authToken'
+  | 'authPassword'
   | 'authMessage'
   | 'authError'
   | 'awaitingMagicLink'
+  | 'authCapabilities'
   | 'onAuthEmailChange'
   | 'onAuthTokenChange'
+  | 'onAuthPasswordChange'
   | 'onRequestMagicLink'
   | 'onVerifyMagicLinkToken'
+  | 'onPasswordLogin'
 >
 
 type UserManagementPanelProps = Pick<
@@ -101,16 +109,60 @@ function AuthAccessCard({
   authLoading,
   authEmail,
   authToken,
+  authPassword,
   authMessage,
   authError,
   awaitingMagicLink,
+  authCapabilities,
   onAuthEmailChange,
   onAuthTokenChange,
+  onAuthPasswordChange,
   onRequestMagicLink,
   onVerifyMagicLinkToken,
+  onPasswordLogin,
 }: AuthAccessCardProps) {
+  const passwordEnabled = authCapabilities?.passwordLoginEnabled ?? false
+  const emailEnabled = authCapabilities?.emailDeliveryConfigured ?? true
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      {passwordEnabled && (
+        <div className="border border-console-border rounded p-4 sm:p-5 flex flex-col gap-3">
+          <div className="flex flex-col gap-2 text-center sm:text-left">
+            <p className="console-label text-xs">PASSWORD SIGN IN</p>
+            <h2 className="text-sm sm:text-base text-console-text">Sign in with email and password.</h2>
+            <p className="text-[11px] text-console-muted">For off-grid hubs without email delivery.</p>
+          </div>
+          <input
+            value={authEmail}
+            onChange={(event) => onAuthEmailChange(event.target.value)}
+            placeholder="your.email@example.com"
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
+            disabled={authLoading}
+          />
+          <input
+            value={authPassword}
+            onChange={(event) => onAuthPasswordChange(event.target.value)}
+            placeholder="Password"
+            type="password"
+            autoComplete="current-password"
+            className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
+            disabled={authLoading}
+          />
+          <button
+            onClick={onPasswordLogin}
+            className="w-full sm:w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+            disabled={authLoading || !authEmail.trim() || !authPassword}
+          >
+            {authLoading ? 'WORKING...' : 'SIGN IN'}
+          </button>
+        </div>
+      )}
+
+      {emailEnabled && (
       <div className="border border-console-border rounded p-4 sm:p-5 flex flex-col gap-4">
         <div className="flex flex-col gap-2 text-center sm:text-left">
           <p className="console-label text-xs">ACCOUNT ACCESS</p>
@@ -172,6 +224,13 @@ function AuthAccessCard({
         {authMessage && <div className="rounded border border-console-accent/40 bg-console-accent/10 px-3 py-2 text-[11px] text-console-accent">{authMessage}</div>}
         {authError && <div className="rounded border border-console-error/40 bg-console-error/10 px-3 py-2 text-[11px] text-console-error">{authError}</div>}
       </div>
+      )}
+
+      {!passwordEnabled && !emailEnabled && (
+        <div className="border border-console-error/40 rounded p-4 text-[11px] text-console-error">
+          No sign-in methods are configured on this hub. Set password login or Mailjet credentials.
+        </div>
+      )}
     </div>
   )
 }
@@ -396,6 +455,8 @@ export function AccountView({
   authMessage,
   authError,
   awaitingMagicLink,
+  authCapabilities,
+  authPassword,
   users,
   setUsers,
   usersLoading,
@@ -404,8 +465,10 @@ export function AccountView({
   auditLoading,
   onAuthEmailChange,
   onAuthTokenChange,
+  onAuthPasswordChange,
   onRequestMagicLink,
   onVerifyMagicLinkToken,
+  onPasswordLogin,
   onLogoutSession,
   onRefreshUsers,
   onSaveUser,
@@ -428,10 +491,14 @@ export function AccountView({
             authMessage={authMessage}
             authError={authError}
             awaitingMagicLink={awaitingMagicLink}
+            authCapabilities={authCapabilities}
+            authPassword={authPassword}
             onAuthEmailChange={onAuthEmailChange}
             onAuthTokenChange={onAuthTokenChange}
+            onAuthPasswordChange={onAuthPasswordChange}
             onRequestMagicLink={onRequestMagicLink}
             onVerifyMagicLinkToken={onVerifyMagicLinkToken}
+            onPasswordLogin={onPasswordLogin}
           />
         )}
 
