@@ -23,7 +23,8 @@ Environment overrides:
   SIGNALFORGE_PUBLIC_URL, SIGNALFORGE_HUB_NAME, SIGNALFORGE_HUB_REGION,
   SIGNALFORGE_HUB_CONTACT, SIGNALFORGE_IMAGE_TAG, POSTGRES_PASSWORD,
   MAILJET_API_KEY, MAILJET_SECRET_KEY, MAIL_FROM_EMAIL, MAIL_FROM_NAME,
-  CLIENT_PORT, SERVER_PORT
+  CLIENT_PORT, SERVER_PORT, AUTH_BOOTSTRAP_EMAIL, AUTH_BOOTSTRAP_PASSWORD,
+  AUTH_PASSWORD_LOGIN_ENABLED, AUTH_AUTO_APPROVE_USERS
 USAGE
 }
 
@@ -131,6 +132,18 @@ mail_from_name=$(ask "Mail-from name" "${MAIL_FROM_NAME:-$hub_name}")
 mailjet_api_key=$(ask "Mailjet API key (optional for now)" "${MAILJET_API_KEY:-}")
 mailjet_secret_key=$(ask "Mailjet secret key (optional for now)" "${MAILJET_SECRET_KEY:-}")
 
+auth_bootstrap_email=$(ask "Off-grid admin email (optional)" "${AUTH_BOOTSTRAP_EMAIL:-}")
+auth_bootstrap_password=""
+auth_password_login_enabled=${AUTH_PASSWORD_LOGIN_ENABLED:-false}
+auth_auto_approve_users=${AUTH_AUTO_APPROVE_USERS:-false}
+if [ -n "$auth_bootstrap_email" ]; then
+  auth_bootstrap_password=$(ask "Off-grid admin password" "${AUTH_BOOTSTRAP_PASSWORD:-}")
+  if [ -n "$auth_bootstrap_password" ]; then
+    auth_password_login_enabled=true
+    auth_auto_approve_users=$(ask "Auto-approve new users? (true/false)" "${AUTH_AUTO_APPROVE_USERS:-true}")
+  fi
+fi
+
 postgres_password=${POSTGRES_PASSWORD:-$(generate_password)}
 
 mkdir -p "$(dirname -- "$output_file")"
@@ -169,6 +182,12 @@ MAILJET_API_KEY=$mailjet_api_key
 MAILJET_SECRET_KEY=$mailjet_secret_key
 MAIL_FROM_EMAIL=$mail_from_email
 MAIL_FROM_NAME=$mail_from_name
+
+# Off-grid / closed-cell auth (optional)
+AUTH_BOOTSTRAP_EMAIL=$auth_bootstrap_email
+AUTH_BOOTSTRAP_PASSWORD=$auth_bootstrap_password
+AUTH_PASSWORD_LOGIN_ENABLED=$auth_password_login_enabled
+AUTH_AUTO_APPROVE_USERS=$auth_auto_approve_users
 
 # Mock sender target
 SCANNER_URL=$public_url

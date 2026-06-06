@@ -1,4 +1,4 @@
-.PHONY: dev-server dev-client build-server build-client build-cli build lint-server lint-client lint test-server test-cli test clean init-env install-up install-down install-logs sync-signalforge-node
+.PHONY: dev-server dev-client build-server build-client build-cli build lint-server lint-client lint test-server test-cli test clean init-env install-up install-down install-logs plesk-up plesk-down sync-signalforge-node
 
 SIGNALFORGE_NODE_DIR ?= ../signalforge-node
 COMPOSE ?= docker compose
@@ -54,6 +54,12 @@ install-down:
 
 install-logs:
 	$(COMPOSE) --env-file .env.production -f docker-compose.prod.yml logs -f --tail=100
+
+plesk-up:
+	$(COMPOSE) --env-file .env.production -f docker-compose.plesk.yml up -d
+
+plesk-down:
+	$(COMPOSE) --env-file .env.production -f docker-compose.plesk.yml down
 
 sync-signalforge-node:
 	./tools/sync-signalforge-node.sh . $(SIGNALFORGE_NODE_DIR)

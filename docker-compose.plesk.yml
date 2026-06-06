@@ -6,27 +6,26 @@
 #     the client only.
 #   - CLIENT_PORT should match the port you set in the Plesk Docker proxy rule.
 #
-# Usage:
-#   cp .env.production.example .env   # fill in your values (AUTH_*, POSTGRES_*, etc.)
-#   docker compose --env-file .env -f docker-compose.plesk.yml up -d
+# Usage (pick one — same variable names either way):
+#   cp .env.production.example .env.production
+#   docker compose --env-file .env.production -f docker-compose.plesk.yml up -d
 #
-# The api service loads .env directly (env_file). Put AUTH_PASSWORD_LOGIN_ENABLED,
-# AUTH_BOOTSTRAP_EMAIL, and AUTH_BOOTSTRAP_PASSWORD in .env — no separate api-only copy step.
-# Auth vars (AUTH_*) live only in .env — they are not duplicated in environment: so empty
-# compose substitution cannot override your .env values.
+# Or paste the same keys into your Plesk/Portainer stack environment (no separate api step).
 #
-# Minimal vars for first deploy in Portainer/Plesk:
+# Minimal vars for first deploy:
 #   - POSTGRES_PASSWORD
 #   - CLIENT_PORT (optional; defaults to 3000)
+# Off-grid auth (optional): AUTH_BOOTSTRAP_EMAIL, AUTH_BOOTSTRAP_PASSWORD,
+#   AUTH_PASSWORD_LOGIN_ENABLED, AUTH_AUTO_APPROVE_USERS
 #
 # Images are resolved from IMAGE_REGISTRY, IMAGE_NAMESPACE, and IMAGE_TAG.
 # Official runtime images are published under ghcr.io/signalforge-org.
 #
-# Transcription worker starts by default. Set TRANSCRIPTION_WORKER_TOKEN in .env
+# Transcription worker starts by default. Set TRANSCRIPTION_WORKER_TOKEN
 # (same value on api + transcriber) or leave blank to disable queueing entirely.
 #
 # With mock radio sidecar (test/staging only):
-#   docker compose --env-file .env -f docker-compose.plesk.yml --profile mock up -d
+#   docker compose --env-file .env.production -f docker-compose.plesk.yml --profile mock up -d
 
 services:
   postgres:
@@ -51,6 +50,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
+      - path: .env.production
+        required: false
       - path: .env
         required: false
     environment:
@@ -79,6 +80,10 @@ services:
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
       TRANSCRIPTION_WORKER_TOKEN: ${TRANSCRIPTION_WORKER_TOKEN:-}
       TRANSCRIPTION_MIN_DURATION_SECONDS: ${TRANSCRIPTION_MIN_DURATION_SECONDS:-0.75}
+      AUTH_BOOTSTRAP_EMAIL: ${AUTH_BOOTSTRAP_EMAIL}
+      AUTH_BOOTSTRAP_PASSWORD: ${AUTH_BOOTSTRAP_PASSWORD}
+      AUTH_PASSWORD_LOGIN_ENABLED: ${AUTH_PASSWORD_LOGIN_ENABLED}
+      AUTH_AUTO_APPROVE_USERS: ${AUTH_AUTO_APPROVE_USERS}
     depends_on:
       postgres:
         condition: service_healthy

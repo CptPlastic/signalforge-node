@@ -26,7 +26,7 @@ docker compose --profile transcription up -d --build
 For production/Plesk compose files, use the same profile:
 
 ```sh
-docker compose --env-file .env -f docker-compose.plesk.yml --profile transcription up -d --build
+docker compose --env-file .env.production -f docker-compose.plesk.yml --profile transcription up -d --build
 ```
 
 ## How It Works
