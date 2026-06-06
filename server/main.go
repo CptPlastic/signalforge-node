@@ -41,6 +41,7 @@ func main() {
 	logger.Info("auth configuration",
 		"passwordLoginEnabled", cfg.AuthPasswordLoginEnabled,
 		"bootstrapEmailConfigured", cfg.AuthBootstrapEmail != "",
+		"bootstrapPasswordConfigured", strings.TrimSpace(cfg.AuthBootstrapPassword) != "",
 		"autoApproveUsers", cfg.AuthAutoApproveUsers,
 	)
 
