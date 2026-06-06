@@ -61,13 +61,14 @@ func (h *handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
 
 func (h *handler) handleVersion(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"version":           BuildVersion,
-		"commit":            BuildCommit,
-		"buildDate":         BuildDate,
-		"environment":       h.cfg.AppEnv,
-		"stackId":           h.cfg.StackID,
-		"deployTag":         h.cfg.DeployTag,
-		"uploadKeyRequired": uploadKeyRequired,
+		"version":               BuildVersion,
+		"commit":                BuildCommit,
+		"buildDate":             BuildDate,
+		"environment":           h.cfg.AppEnv,
+		"stackId":               h.cfg.StackID,
+		"deployTag":             h.cfg.DeployTag,
+		"uploadKeyRequired":     uploadKeyRequired,
+		"transcriptionEnabled":  strings.TrimSpace(h.cfg.TranscriptionWorkerToken) != "",
 	})
 }
 

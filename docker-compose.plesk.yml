@@ -17,6 +17,9 @@
 # Images are resolved from IMAGE_REGISTRY, IMAGE_NAMESPACE, and IMAGE_TAG.
 # Official runtime images are published under ghcr.io/signalforge-org.
 #
+# Transcription worker starts by default. Set TRANSCRIPTION_WORKER_TOKEN in .env
+# (same value on api + transcriber) or leave blank to disable queueing entirely.
+#
 # With mock radio sidecar (test/staging only):
 #   docker compose --env-file .env -f docker-compose.plesk.yml --profile mock up -d
 
@@ -109,7 +112,6 @@ services:
   transcriber:
     image: ${TRANSCRIBER_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-hub-transcriber:${IMAGE_TAG:-latest}}
     restart: unless-stopped
-    profiles: ["transcription"]
     environment:
       SIGNALFORGE_API_URL: http://api:8080
       TRANSCRIPTION_WORKER_TOKEN: ${TRANSCRIPTION_WORKER_TOKEN:-}

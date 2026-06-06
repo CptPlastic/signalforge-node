@@ -244,6 +244,7 @@ export type VersionInfo = {
   environment: string
   stackId: string
   deployTag: string
+  transcriptionEnabled?: boolean
 }
 
 export type UpdateManifest = {

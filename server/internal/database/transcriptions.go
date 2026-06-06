@@ -6,6 +6,34 @@ import (
 	"time"
 )
 
+// UpsertCallTranscriptStatus creates or updates the transcript row for a call.
+func (d *DB) UpsertCallTranscriptStatus(callID int64, status, message string) error {
+	now := time.Now().Unix()
+	_, err := d.db.Exec(`
+		INSERT INTO call_transcripts (call_id, status, error, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $4)
+		ON CONFLICT (call_id) DO UPDATE SET
+			status = excluded.status,
+			error = excluded.error,
+			claimed_by = '',
+			claimed_until = 0,
+			updated_at = excluded.updated_at`, callID, status, message, now)
+	return err
+}
+
+// CancelPendingTranscriptionJobs marks queued work as skipped when transcription is off.
+func (d *DB) CancelPendingTranscriptionJobs(reason string) error {
+	_, err := d.db.Exec(`
+		UPDATE call_transcripts
+		SET status = 'skipped',
+		    error = $1,
+		    claimed_by = '',
+		    claimed_until = 0,
+		    updated_at = $2
+		WHERE status IN ('pending', 'processing')`, reason, time.Now().Unix())
+	return err
+}
+
 // EnsureTranscriptionQueueRows backfills missing queue rows for existing calls.
 func (d *DB) EnsureTranscriptionQueueRows() error {
 	now := time.Now().Unix()

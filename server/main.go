@@ -58,6 +58,9 @@ func main() {
 				os.Exit(1)
 			}
 		}
+	} else if err := db.CancelPendingTranscriptionJobs("transcription disabled"); err != nil {
+		logger.Error("failed to clear disabled transcription queue", "error", err)
+		os.Exit(1)
 	}
 
 	handler := api.NewRouter(logger, cfg, db)

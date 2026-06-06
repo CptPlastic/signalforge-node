@@ -32,6 +32,7 @@ func (h *handler) broadcastCall(call *database.Call, sourceID string) {
 		if !h.canReadCall(user, visibleCall, sourceByID, sharedSourceIDs) {
 			redactCall(&visibleCall)
 		}
+		h.sanitizeCallTranscription(&visibleCall)
 		return wsCallEvent{Type: "call", Call: &visibleCall, SourceID: sourceID}
 	})
 }
@@ -93,7 +94,7 @@ func (h *handler) replayCallsSince(hb *hub, client *hubClient, since int64) int 
 		h.logger.Error("ws replay list source shares failed", "error", err)
 		sharedSourceIDs = map[string]bool{}
 	}
-	clearTranscripts := h.cfg.TranscriptionWorkerToken == ""
+	clearTranscripts := !h.transcriptionEnabled()
 
 	sent := 0
 	for i := range calls {
@@ -171,7 +172,7 @@ func (h *handler) handleListCalls(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redactCallsForUser(h, user, calls, sourceByID, sharedSourceIDs)
-	if h.cfg.TranscriptionWorkerToken == "" {
+	if !h.transcriptionEnabled() {
 		clearTranscriptStatus(calls)
 	}
 	writeJSON(w, http.StatusOK, calls)
@@ -233,27 +234,46 @@ func redactCallsForUser(h *handler, user authUser, calls []database.Call, source
 
 func clearTranscriptStatus(calls []database.Call) {
 	for i := range calls {
-		calls[i].TranscriptText = ""
-		calls[i].TranscriptStatus = ""
-		calls[i].TranscriptProvider = ""
+		sanitizeCallTranscriptionFields(&calls[i])
 	}
 }
 
-func (h *handler) prepareInsertedCallTranscriptStatus(call *database.Call) {
-	if h.cfg.TranscriptionWorkerToken == "" {
-		call.TranscriptText = ""
+func sanitizeCallTranscriptionFields(call *database.Call) {
+	call.TranscriptText = ""
+	call.TranscriptStatus = ""
+	call.TranscriptProvider = ""
+}
+
+func (h *handler) transcriptionEnabled() bool {
+	return strings.TrimSpace(h.cfg.TranscriptionWorkerToken) != ""
+}
+
+func (h *handler) sanitizeCallTranscription(call *database.Call) {
+	if h.transcriptionEnabled() {
+		return
+	}
+	sanitizeCallTranscriptionFields(call)
+}
+
+func (h *handler) finalizeCallTranscription(call *database.Call) {
+	call.TranscriptText = ""
+	call.TranscriptProvider = ""
+	if !h.transcriptionEnabled() {
 		call.TranscriptStatus = ""
-		call.TranscriptProvider = ""
 		return
 	}
 	allowed, err := h.db.ShouldTranscribeTalkgroup(call.Talkgroup)
 	if err != nil {
 		h.logger.Error("check talkgroup transcription policy failed", "talkgroup", call.Talkgroup, "error", err)
+		if upsertErr := h.db.UpsertCallTranscriptStatus(call.ID, "pending", ""); upsertErr != nil {
+			h.logger.Error("queue transcription job failed", "call_id", call.ID, "error", upsertErr)
+		}
 		call.TranscriptStatus = "pending"
 		return
 	}
 	if !allowed {
-		if err := h.db.SkipTranscriptionJob(call.ID, "talkgroup not enabled for transcription"); err != nil {
+		const message = "talkgroup not enabled for transcription"
+		if err := h.db.UpsertCallTranscriptStatus(call.ID, "skipped", message); err != nil {
 			h.logger.Error("skip unselected talkgroup transcription job failed", "call_id", call.ID, "talkgroup", call.Talkgroup, "error", err)
 			call.TranscriptStatus = "pending"
 			return
@@ -263,13 +283,16 @@ func (h *handler) prepareInsertedCallTranscriptStatus(call *database.Call) {
 	}
 	if h.cfg.TranscriptionMinDuration > 0 && call.Duration > 0 && call.Duration < h.cfg.TranscriptionMinDuration {
 		message := fmt.Sprintf("audio duration %.1fs below %.1fs minimum", call.Duration, h.cfg.TranscriptionMinDuration)
-		if err := h.db.SkipTranscriptionJob(call.ID, message); err != nil {
+		if err := h.db.UpsertCallTranscriptStatus(call.ID, "skipped", message); err != nil {
 			h.logger.Error("skip short transcription job failed", "call_id", call.ID, "duration", call.Duration, "error", err)
 			call.TranscriptStatus = "pending"
 			return
 		}
 		call.TranscriptStatus = "skipped"
 		return
+	}
+	if err := h.db.UpsertCallTranscriptStatus(call.ID, "pending", ""); err != nil {
+		h.logger.Error("queue transcription job failed", "call_id", call.ID, "error", err)
 	}
 	call.TranscriptStatus = "pending"
 }

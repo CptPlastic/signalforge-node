@@ -151,7 +151,7 @@ func (h *handler) handlePTTUpload(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("ptt: record upload failed", "error", err)
 	}
 
-	h.prepareInsertedCallTranscriptStatus(call)
+	h.finalizeCallTranscription(call)
 	h.streamHub.push(call, audio)
 	h.broadcastCall(call, "")
 
@@ -354,7 +354,7 @@ func (h *handler) deliverPTTToSet(
 		h.logger.Error("ptt broadcast: record upload failed", "error", err)
 	}
 
-	h.prepareInsertedCallTranscriptStatus(call)
+	h.finalizeCallTranscription(call)
 	h.streamHub.push(call, audio)
 	h.broadcastCall(call, "")
 

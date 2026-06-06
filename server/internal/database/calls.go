@@ -34,15 +34,10 @@ func (d *DB) InsertCall(c *Call, audio []byte) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if _, err := tx.Exec(`
-		INSERT INTO call_transcripts (call_id, status, created_at, updated_at)
-		VALUES ($1, 'pending', $2, $2)
-		ON CONFLICT (call_id) DO NOTHING`, id, time.Now().Unix()); err != nil {
-		return 0, err
-	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
+	c.ID = id
 	return id, nil
 }
 

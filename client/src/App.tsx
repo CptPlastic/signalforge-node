@@ -399,6 +399,7 @@ function App() {
   const rsVolumeRef = useRef(rsVolume)
 
   const {
+    versionInfo,
     updateInfo,
     refreshUpdateCheck,
     headerVersionLabel,
@@ -411,6 +412,7 @@ function App() {
     updateStatusLabel,
     updateStatusClass,
   } = useUpdateCheck()
+  const transcriptionEnabled = versionInfo?.transcriptionEnabled !== false
   const isAdmin = authUser?.role === 'admin'
 
   const refreshSources = () =>
@@ -1344,8 +1346,11 @@ function App() {
     sortOrder,
   }), [calls, serverResults, hideMuted, search, groupFilter, settingsMap, showFavoritesOnly, sortBy, sortOrder])
   const callLogCountLabel = formatCallLogCount(serverLoading, serverResults, filteredCalls.length, calls.length)
-  const transcriptStatusSummary = useMemo(() => summarizeTranscriptStatus(filteredCalls), [filteredCalls])
-  const transcriptStatusLabel = transcriptSummaryLabel(transcriptStatusSummary)
+  const transcriptStatusSummary = useMemo(
+    () => (transcriptionEnabled ? summarizeTranscriptStatus(filteredCalls) : { total: 0, done: 0, pending: 0, processing: 0, skipped: 0, failed: 0 }),
+    [filteredCalls, transcriptionEnabled],
+  )
+  const transcriptStatusLabel = transcriptionEnabled ? transcriptSummaryLabel(transcriptStatusSummary) : ''
 
   useEffect(() => {
     setCallPage(0)

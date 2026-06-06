@@ -181,7 +181,7 @@ func (h *handler) handleCallUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	call.ID = id
-	h.prepareInsertedCallTranscriptStatus(call)
+	h.finalizeCallTranscription(call)
 	_ = h.db.IncrementSourceMetrics(metricsSourceID, true)
 
 	h.logger.Info("call received",
