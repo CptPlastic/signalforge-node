@@ -7,6 +7,10 @@
 | Client | React 18, Vite, TypeScript, Tailwind | Console-style real-time UI |
 | Server | Go 1.22, chi, PostgreSQL | API, scanner orchestration, transport |
 
+## Display modes
+
+Hub console supports **DARK / NITE / NVG / LIGHT** operator palettes (SchedKit-style tactical cycle). See [DISPLAY-MODES.md](https://signalforge.org/DISPLAY-MODES.md). CSS vars on `html[data-sf-display-mode]` drive Tailwind `console.*` colors.
+
 ## Design tokens
 
 - `bg`: `#0a0a0a`

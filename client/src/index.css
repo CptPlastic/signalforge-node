@@ -1,10 +1,60 @@
 @import "tailwindcss";
 @config "../tailwind.config.ts";
 
+/* Display mode tokens — https://signalforge.org/DISPLAY-MODES.md */
+:root,
+[data-sf-display-mode="dark"] {
+  --sf-bg: #0a0a0a;
+  --sf-surface: #111111;
+  --sf-border: #1f1f1f;
+  --sf-text: #c9c9c9;
+  --sf-muted: #555555;
+  --sf-accent: #ffaa00;
+  --sf-accent-bright: #ffc700;
+  --sf-error: #ff4444;
+  --sf-accent-glow: 255, 170, 0;
+}
+
+[data-sf-display-mode="nite"] {
+  --sf-bg: #080000;
+  --sf-surface: #120404;
+  --sf-border: #2a1010;
+  --sf-text: #8a3030;
+  --sf-muted: #4a2020;
+  --sf-accent: #aa2020;
+  --sf-accent-bright: #cc3333;
+  --sf-error: #ff4444;
+  --sf-accent-glow: 170, 32, 32;
+}
+
+[data-sf-display-mode="nvg"] {
+  --sf-bg: #06080a;
+  --sf-surface: #0a1014;
+  --sf-border: #141c22;
+  --sf-text: #5a6a72;
+  --sf-muted: #3a4548;
+  --sf-accent: #4a6878;
+  --sf-accent-bright: #5a7888;
+  --sf-error: #8a4a4a;
+  --sf-accent-glow: 74, 104, 120;
+}
+
+[data-sf-display-mode="light"] {
+  --sf-bg: #ece8dc;
+  --sf-surface: #f8f6f0;
+  --sf-border: #c8c0b0;
+  --sf-text: #1a1814;
+  --sf-muted: #6a6458;
+  --sf-accent: #a07800;
+  --sf-accent-bright: #c89600;
+  --sf-error: #c02828;
+  --sf-accent-glow: 160, 120, 0;
+}
+
 :root {
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #c9c9c9;
-  background: #0a0a0a;
+  color: var(--sf-text);
+  background: var(--sf-bg);
 }
 
 * {
@@ -12,8 +62,8 @@
 }
 
 ::selection {
-  background: #ffaa00;
-  color: #0a0a0a;
+  background: var(--sf-accent);
+  color: var(--sf-bg);
 }
 
 ::-webkit-scrollbar {
@@ -22,12 +72,12 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #111111;
+  background: var(--sf-surface);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1f1f1f;
-  border: 1px solid #ffaa00;
+  background: var(--sf-border);
+  border: 1px solid var(--sf-accent);
 }
 
 @layer components {
@@ -66,13 +116,13 @@
 @keyframes accountTabAttention {
   0%,
   100% {
-    box-shadow: 0 0 0 rgba(255, 170, 0, 0);
-    background-color: rgba(255, 170, 0, 0.05);
+    box-shadow: 0 0 0 rgba(var(--sf-accent-glow), 0);
+    background-color: rgba(var(--sf-accent-glow), 0.05);
   }
 
   50% {
-    box-shadow: 0 0 10px rgba(255, 170, 0, 0.18);
-    background-color: rgba(255, 170, 0, 0.12);
+    box-shadow: 0 0 10px rgba(var(--sf-accent-glow), 0.18);
+    background-color: rgba(var(--sf-accent-glow), 0.12);
   }
 }
 

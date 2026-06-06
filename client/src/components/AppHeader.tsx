@@ -1,5 +1,6 @@
 import type { AuthUser, HubIdentity } from '../lib/api'
 import type { OverallStatus } from '../types/app'
+import { DisplayModeSwitcher } from './DisplayModeSwitcher'
 import { SignalForgeLogo } from './SignalForgeLogo'
 
 type AppHeaderProps = Readonly<{
@@ -88,9 +89,10 @@ export function AppHeader({
     : 'border-console-error text-console-error hover:bg-console-error'
 
   return (
-    <header className="console-panel flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <header className="console-panel flex flex-col gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3 min-w-0">
-        <SignalForgeLogo className="h-10 w-10 flex-shrink-0 text-white drop-shadow-[0_0_10px_rgba(255,170,0,0.18)]" />
+        <SignalForgeLogo className="h-10 w-10 flex-shrink-0 text-console-text drop-shadow-[0_0_10px_rgba(var(--sf-accent-glow),0.18)]" />
         <div className="min-w-0">
           <div className="text-lg font-bold tracking-widest truncate">SIGNALFORGE // HUB</div>
           <div className="flex items-center gap-2 min-w-0">
@@ -138,6 +140,8 @@ export function AppHeader({
           <span className="text-[10px] truncate">{authUser ? authUser.email : 'GUEST'}</span>
         </span>
       </div>
+      </div>
+      <DisplayModeSwitcher compact />
     </header>
   )
 }

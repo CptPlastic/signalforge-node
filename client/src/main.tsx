@@ -2,7 +2,10 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
+import { initDisplayMode } from './lib/displayModes'
 import { registerPWA } from './lib/pwa'
+
+initDisplayMode()
 
 const rootElement = document.getElementById('root')
 
