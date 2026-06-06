@@ -6,17 +6,18 @@
 #     the client only.
 #   - CLIENT_PORT should match the port you set in the Plesk Docker proxy rule.
 #
-# Usage (pick one — same variable names either way):
-#   cp .env.production.example .env.production
-#   docker compose --env-file .env.production -f docker-compose.plesk.yml up -d
+# Usage — put AUTH_* and other secrets in a file beside this compose on your webspace:
+#   cp .env.production.example .env.production   # edit values, then redeploy stack
 #
-# Or paste the same keys into your Plesk/Portainer stack environment (no separate api step).
+# Plesk reads .env / .env.production from the same directory for compose substitution.
+# The api service loads those files via env_file. Do NOT rely on empty ${AUTH_*} lines
+# in environment: — they wipe file values. Auth vars are env_file only.
 #
 # Minimal vars for first deploy:
 #   - POSTGRES_PASSWORD
 #   - CLIENT_PORT (optional; defaults to 3000)
-# Off-grid auth (optional): AUTH_BOOTSTRAP_EMAIL, AUTH_BOOTSTRAP_PASSWORD,
-#   AUTH_PASSWORD_LOGIN_ENABLED, AUTH_AUTO_APPROVE_USERS
+# Off-grid auth: put AUTH_BOOTSTRAP_EMAIL, AUTH_BOOTSTRAP_PASSWORD,
+#   AUTH_PASSWORD_LOGIN_ENABLED, AUTH_AUTO_APPROVE_USERS in .env.production on the server.
 #
 # Images are resolved from IMAGE_REGISTRY, IMAGE_NAMESPACE, and IMAGE_TAG.
 # Official runtime images are published under ghcr.io/signalforge-org.
@@ -80,10 +81,6 @@ services:
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
       TRANSCRIPTION_WORKER_TOKEN: ${TRANSCRIPTION_WORKER_TOKEN:-}
       TRANSCRIPTION_MIN_DURATION_SECONDS: ${TRANSCRIPTION_MIN_DURATION_SECONDS:-0.75}
-      AUTH_BOOTSTRAP_EMAIL: ${AUTH_BOOTSTRAP_EMAIL}
-      AUTH_BOOTSTRAP_PASSWORD: ${AUTH_BOOTSTRAP_PASSWORD}
-      AUTH_PASSWORD_LOGIN_ENABLED: ${AUTH_PASSWORD_LOGIN_ENABLED}
-      AUTH_AUTO_APPROVE_USERS: ${AUTH_AUTO_APPROVE_USERS}
     depends_on:
       postgres:
         condition: service_healthy

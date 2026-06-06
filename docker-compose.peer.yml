@@ -64,10 +64,6 @@ services:
       HUB_TRUST_EXPIRES_AT: ${HUB_TRUST_EXPIRES_AT:-0}
       HUB_DIRECTORY_URL: ${HUB_DIRECTORY_URL:-https://signalforge.org/directory/hubs.json}
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
-      AUTH_BOOTSTRAP_EMAIL: ${AUTH_BOOTSTRAP_EMAIL}
-      AUTH_BOOTSTRAP_PASSWORD: ${AUTH_BOOTSTRAP_PASSWORD}
-      AUTH_PASSWORD_LOGIN_ENABLED: ${AUTH_PASSWORD_LOGIN_ENABLED}
-      AUTH_AUTO_APPROVE_USERS: ${AUTH_AUTO_APPROVE_USERS}
     depends_on:
       postgres:
         condition: service_healthy

@@ -229,8 +229,9 @@ function AuthAccessCard({
       {authCapabilities && !passwordEnabled && (
         <p className="text-[10px] text-console-muted text-center sm:text-left">
           Password sign-in is off on this hub (<code className="text-console-text">passwordLoginEnabled: false</code>).
-          Set <code className="text-console-text">AUTH_BOOTSTRAP_EMAIL</code>, <code className="text-console-text">AUTH_BOOTSTRAP_PASSWORD</code>, and{' '}
-          <code className="text-console-text">AUTH_PASSWORD_LOGIN_ENABLED=true</code> in your stack environment or <code className="text-console-text">.env.production</code>, then redeploy the stack.
+          Create <code className="text-console-text">.env.production</code> beside your compose file on the server with{' '}
+          <code className="text-console-text">AUTH_BOOTSTRAP_EMAIL</code>, <code className="text-console-text">AUTH_BOOTSTRAP_PASSWORD</code>, and{' '}
+          <code className="text-console-text">AUTH_PASSWORD_LOGIN_ENABLED=true</code>, then <strong>Update stack → force-recreate</strong> (restart alone is not enough).
         </p>
       )}
 

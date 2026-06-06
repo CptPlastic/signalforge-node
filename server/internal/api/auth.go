@@ -146,10 +146,12 @@ func (h *handler) withUserContext(next http.Handler) http.Handler {
 
 func (h *handler) handleAuthCapabilities(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"passwordLoginEnabled":    h.cfg.AuthPasswordLoginEnabled,
-		"magicLinkEnabled":        true,
-		"emailDeliveryConfigured": h.emailDeliveryConfigured(),
-		"autoApproveUsers":        h.cfg.AuthAutoApproveUsers,
+		"passwordLoginEnabled":        h.cfg.AuthPasswordLoginEnabled,
+		"magicLinkEnabled":            true,
+		"emailDeliveryConfigured":     h.emailDeliveryConfigured(),
+		"autoApproveUsers":            h.cfg.AuthAutoApproveUsers,
+		"bootstrapEmailConfigured":    strings.TrimSpace(h.cfg.AuthBootstrapEmail) != "",
+		"bootstrapPasswordConfigured": strings.TrimSpace(h.cfg.AuthBootstrapPassword) != "",
 	})
 }
 
