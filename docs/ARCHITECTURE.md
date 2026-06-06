@@ -9,7 +9,7 @@
 
 ## Display modes
 
-Hub console supports **DARK / NITE / NVG / LIGHT** operator palettes (SchedKit-style tactical cycle). See [DISPLAY-MODES.md](https://signalforge.org/DISPLAY-MODES.md). CSS vars on `html[data-sf-display-mode]` drive Tailwind `console.*` colors.
+Hub console and the **public radio-set player** (`/public/player/{token}`) support **DARK / NITE / NVG / LIGHT** operator palettes (SchedKit-style tactical cycle). See [DISPLAY-MODES.md](https://signalforge.org/DISPLAY-MODES.md). Both surfaces persist `localStorage.sf-display-mode` and apply CSS vars on `html[data-sf-display-mode]` (Tailwind `console.*` in the console; inline tokens in the embeddable player).
 
 ## Design tokens
 
