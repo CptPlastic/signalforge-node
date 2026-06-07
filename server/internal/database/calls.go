@@ -80,6 +80,63 @@ func (d *DB) ListFederatedCalls(sinceID int64, limit int) ([]FederatedCall, erro
 	return calls, rows.Err()
 }
 
+// ListRecentFederatedCalls returns the newest shared-source calls, optionally older than beforeID.
+// beforeID <= 0 means no upper bound (start from the newest exportable call).
+func (d *DB) ListRecentFederatedCalls(beforeID int64, limit int) ([]FederatedCall, error) {
+	if limit <= 0 || limit > 250 {
+		limit = 100
+	}
+	query := `
+		SELECT c.id, COALESCE(c.user_id, ''), COALESCE(c.source_id, ''), c.datetime, c.system, c.system_label,
+		       c.talkgroup, c.talkgroup_label, c.talkgroup_group, c.talkgroup_tag, c.frequency, c.duration,
+		       c.audio_name, c.audio_type, c.created_at, c.audio
+		FROM calls c
+		JOIN ingestion_sources s ON s.id = c.source_id
+		WHERE s.is_shared = TRUE
+		  AND s.enabled = TRUE
+		  AND s.deleted_at = 0
+		  AND s.id NOT LIKE 'remote\_%' ESCAPE '\'`
+	args := []any{limit}
+	if beforeID > 0 {
+		query += `
+		  AND c.id < $1`
+		args = []any{beforeID, limit}
+		query += `
+		ORDER BY c.id DESC
+		LIMIT $2`
+	} else {
+		query += `
+		ORDER BY c.id DESC
+		LIMIT $1`
+	}
+	rows, err := d.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	calls := make([]FederatedCall, 0)
+	for rows.Next() {
+		var item FederatedCall
+		if err := rows.Scan(
+			&item.Call.ID, &item.Call.UserID, &item.Call.SourceID, &item.Call.DateTime, &item.Call.System, &item.Call.SystemLabel,
+			&item.Call.Talkgroup, &item.Call.TalkgroupLabel, &item.Call.TalkgroupGroup, &item.Call.TalkgroupTag,
+			&item.Call.Frequency, &item.Call.Duration, &item.Call.AudioName, &item.Call.AudioType, &item.Call.CreatedAt, &item.Audio,
+		); err != nil {
+			return nil, err
+		}
+		item.Source = item.Call.SourceID
+		calls = append(calls, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for left, right := 0, len(calls)-1; left < right; left, right = left+1, right-1 {
+		calls[left], calls[right] = calls[right], calls[left]
+	}
+	return calls, nil
+}
+
 // CountFederatedCalls returns the number of calls currently eligible for federation export.
 func (d *DB) CountFederatedCalls() (int64, error) {
 	var count int64

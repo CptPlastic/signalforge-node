@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/projectseven-co-ltd/p7-scanner/server/internal/database"
@@ -100,6 +101,25 @@ func TestFederationImportBatchLimit(t *testing.T) {
 	}
 	if got := federationImportBatchLimit(0); got != 0 {
 		t.Fatalf("federationImportBatchLimit(0) = %d, want 0", got)
+	}
+}
+
+func TestQueryBool(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want bool
+	}{
+		{raw: "1", want: true},
+		{raw: "true", want: true},
+		{raw: "yes", want: true},
+		{raw: "0", want: false},
+		{raw: "", want: false},
+	}
+	for _, tt := range tests {
+		req, _ := http.NewRequest(http.MethodGet, "/?recent="+tt.raw, nil)
+		if got := queryBool(req, "recent"); got != tt.want {
+			t.Fatalf("queryBool(recent=%q) = %v, want %v", tt.raw, got, tt.want)
+		}
 	}
 }
 

@@ -83,7 +83,8 @@ These routes are read by peer hubs. Remote hubs send `X-SignalHub-Peer-ID` so th
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/federation/sources` | List exportable shared local sources. |
-| `GET` | `/api/v1/federation/calls?since=0&limit=100` | Pull exportable call metadata/audio for shared local sources. |
+| `GET` | `/api/v1/federation/calls?since=0&limit=100` | Pull exportable calls newer than `since` (live incremental sync). |
+| `GET` | `/api/v1/federation/calls?recent=1&limit=100` | Pull the newest exportable calls (historical backfill). Optional `before=<callId>` pages older than that ID. |
 
 Imported remote calls are readable locally but are not exported again.
 

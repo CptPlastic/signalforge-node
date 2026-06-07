@@ -34,14 +34,16 @@ The root/super hub should issue signed hub certificates or invite credentials. F
 
 ## Federation import caps
 
-Pulling hubs stop importing federated calls after a per-peer cap so a new peer does not backfill an entire remote history (for example hundreds of thousands of calls).
+New peers import only a **recent subset** of each remote hub's shared history so a fresh stack does not backfill hundreds of thousands of old calls. After that one-time backfill, **new live calls keep syncing** on every poll with no cap.
 
-| Local directory status | Max imported calls per peer |
+| Local directory status | Max recent calls imported per peer (backfill only) |
 | --- | --- |
 | `unlisted`, `unverified`, `suspended` | 500 |
 | `listed`, `verified` | 1000 |
 
-Run **CHECK DIRECTORY** on the pulling hub so `directoryValidationStatus` reflects the feed before expecting the listed cap. Federation status in the hub admin UI shows `importCap`, per-peer `importedCallCount`, and warnings when a cap is reached.
+Backfill uses `GET /api/v1/federation/calls?recent=1` (newest exportable calls first). Ongoing sync uses `?since=<lastRemoteCallId>` and is unlimited.
+
+Run **CHECK DIRECTORY** on the pulling hub so `directoryValidationStatus` reflects the feed before expecting the listed cap. Federation status shows `importCap`, per-peer `importedCallCount`, and a note when historical backfill is complete.
 
 ## MVP Test Path
 
