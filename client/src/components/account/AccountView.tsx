@@ -40,6 +40,7 @@ type AccountViewProps = Readonly<{
   onSetUserPassword: (user: UserRecord, password: string) => void | Promise<void>
   onRemoveUser: (user: UserRecord) => void | Promise<void>
   onRefreshAuditLogs: () => void | Promise<void>
+  onOpenHub?: () => void
 }>
 
 type SessionPanelProps = Pick<AccountViewProps, 'authUser' | 'authLoading' | 'onLogoutSession'>
@@ -85,6 +86,36 @@ function formatAuditIdentity(email: string | undefined, id: string | undefined):
   if (normalizedEmail) return normalizedEmail
   if (normalizedID) return normalizedID
   return 'system'
+}
+
+function AdminOperatorPanel({ onOpenHub }: { onOpenHub?: () => void }) {
+  return (
+    <div className="border border-console-border rounded p-3 flex flex-col gap-2">
+      <p className="console-label text-xs">ADMIN OPERATOR TASKS</p>
+      <p className="text-[11px] text-console-muted">
+        Manage users below, then use the HUB tab to register this cell in the public directory or connect federation peers.
+      </p>
+      <div className="flex gap-2 flex-wrap">
+        {onOpenHub && (
+          <button
+            type="button"
+            onClick={onOpenHub}
+            className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10"
+          >
+            OPEN HUB ADMIN
+          </button>
+        )}
+        <a
+          href="https://signalforge.org/register-hub.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-2 py-1 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent"
+        >
+          DIRECTORY REGISTRATION ↗
+        </a>
+      </div>
+    </div>
+  )
 }
 
 function SessionPanel({ authUser, authLoading, onLogoutSession }: SessionPanelProps) {
@@ -566,6 +597,7 @@ export function AccountView({
   onSetUserPassword,
   onRemoveUser,
   onRefreshAuditLogs,
+  onOpenHub,
 }: AccountViewProps) {
   const showAdminPanels = authUser?.role === 'admin'
 
@@ -595,6 +627,8 @@ export function AccountView({
 
         {authUser && authMessage && <div className="text-[11px] text-console-accent">{authMessage}</div>}
         {authUser && authError && <div className="text-[11px] text-console-error">{authError}</div>}
+
+        {showAdminPanels && <AdminOperatorPanel onOpenHub={onOpenHub} />}
 
         {showAdminPanels && (
           <UserManagementPanel

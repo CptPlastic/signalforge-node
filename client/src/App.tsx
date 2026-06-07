@@ -22,6 +22,7 @@ import { AppHeader } from './components/AppHeader'
 import { AppNav } from './components/AppNav'
 import { AuthenticatedView } from './components/ActiveView'
 import { AccountView } from './components/account/AccountView'
+import { HubRegisterPanel } from './components/hub/HubRegisterPanel'
 import { CallRow } from './components/calls/CallRow'
 import { DispatcherView } from './components/radio-sets/DispatcherView'
 import { RadioSetPTTView } from './components/radio-sets/RadioSetPTTView'
@@ -32,6 +33,7 @@ import { useUpdateCheck } from './hooks/useUpdateCheck'
 import { buildFilteredCalls, formatCallLogCount, formatSavedCallCount } from './lib/callFilters'
 import { playChirp } from './lib/chirp'
 import { fmtDateTime, fmtTime, getErrorMessage } from './lib/format'
+import { directoryStatusClass, trustTextClass } from './lib/hubStatus'
 import { maybePlayActiveRadioSetCall } from './lib/radioSetPlayback'
 import {
   getSourceRuntimeStatus,
@@ -98,32 +100,6 @@ function verifyAuthEntry(email: string, entry: string) {
     return api.verifyMagicCode(email, entry)
   }
   return api.verifyMagicLink(entry)
-}
-
-function trustTextClass(trustLevel = 'community'): string {
-  switch (trustLevel) {
-    case 'official':
-    case 'verified':
-      return 'text-console-accent'
-    case 'trusted':
-      return 'text-console-amber'
-    case 'suspended':
-      return 'text-console-error'
-    default:
-      return 'text-console-muted'
-  }
-}
-
-function directoryStatusClass(status = 'unverified'): string {
-  switch (status) {
-    case 'verified':
-    case 'listed':
-      return 'text-console-accent'
-    case 'suspended':
-      return 'text-console-error'
-    default:
-      return 'text-console-muted'
-  }
 }
 
 function redactKey(key: string): string {
@@ -1551,22 +1527,6 @@ function App() {
     }
   }
 
-  function copyDirectoryListingRequest() {
-    if (!hubIdentity) return
-    const request = {
-      type: 'signalforge-directory-listing-request',
-      hubId: hubIdentity.hubId,
-      publicUrl: hubIdentity.publicUrl,
-      name: hubIdentity.name,
-      region: hubIdentity.region,
-      publicKey: hubIdentity.publicKey,
-      software: 'SignalForge Hub',
-      version: currentDeploymentTag,
-    }
-    copyToClipboard(JSON.stringify(request, null, 2))
-    setHubMessage('Directory listing request copied')
-  }
-
   async function createHubInvite() {
     if (authUser?.role !== 'admin') return
     setHubInviteActionID('new')
@@ -2725,20 +2685,24 @@ function App() {
                   GENERATE KEY
                 </button>
               )}
-              {isAdmin && hubIdentity && (
-                <button
-                  onClick={copyDirectoryListingRequest}
-                  className="w-fit px-2 py-1 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent"
-                >
-                  COPY LISTING REQUEST
-                </button>
-              )}
               <div className="text-console-muted">Updated: <span className="text-console-text">{hubIdentity?.updatedAt ? fmtDateTime(hubIdentity.updatedAt) : '—'}</span></div>
               {!isAdmin && (
                 <p className="text-[11px] text-console-muted mt-2">Admin access is required to change hub identity.</p>
               )}
             </div>
           </div>
+
+          {isAdmin && (
+            <HubRegisterPanel
+              hubIdentity={hubIdentity}
+              hubDraft={hubDraft}
+              hubVersion={currentDeploymentTag}
+              hubLoading={hubLoading}
+              onGenerateKey={generateHubKeyPair}
+              onRefreshDirectory={refreshHubDirectory}
+              onNotify={setHubMessage}
+            />
+          )}
 
           {isAdmin && (
             <div className="border border-console-border rounded p-3 flex flex-col gap-3">
@@ -2991,6 +2955,7 @@ function App() {
         onSetUserPassword={setUserPassword}
         onRemoveUser={removeUser}
         onRefreshAuditLogs={refreshAuditLogs}
+        onOpenHub={() => setActiveView('hub')}
       />
 
       <footer className="text-xs text-console-muted border-t border-console-border pt-3 flex flex-col gap-1">
