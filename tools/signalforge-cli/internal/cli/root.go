@@ -281,8 +281,12 @@ func newRecorderCommand(opts *options) *cobra.Command {
 				if interval <= 0 {
 					interval = 5 * time.Minute
 				}
+				requested := interval
 				interval = recorder.NormalizeCanaryInterval(interval)
-				printLine(out, "info", "canary", interval.String())
+				if interval != requested {
+					printLine(out, "warn", "canary", fmt.Sprintf("interval %s too short; using %s (for 2m use --canary-interval 2m or set profile intervalSec to 120)", requested, interval))
+				}
+				printLine(out, "info", "canary", fmt.Sprintf("every %s (audible pip)", interval))
 				go runCanaryLoop(ctx, cmd, client, watchSettings, interval)
 			}
 			if watchSettings.Input == "" {
@@ -444,14 +448,15 @@ func printInputStatus(cmd *cobra.Command, status recorder.InputStatus) {
 
 func uploadCanaryClip(cmd *cobra.Command, client *api.Client, settings recorder.Settings) error {
 	now := time.Now()
+	audio, duration := recorder.CanaryWAV()
 	fields := api.UploadFields{
 		Metadata:  settings.CanaryMetadata(),
 		AudioName: recorder.CanaryAudioName(now),
 		AudioType: "audio/wav",
 		StartedAt: now,
-		Duration:  time.Second,
+		Duration:  duration,
 	}
-	if err := client.UploadBytes(recorder.SilentWAV(16000, 1), fields); err != nil {
+	if err := client.UploadBytes(audio, fields); err != nil {
 		return err
 	}
 	printLine(cmd.OutOrStdout(), "ok", "canary", fields.AudioName)
@@ -459,14 +464,20 @@ func uploadCanaryClip(cmd *cobra.Command, client *api.Client, settings recorder.
 }
 
 func runCanaryLoop(ctx context.Context, cmd *cobra.Command, client *api.Client, settings recorder.Settings, interval time.Duration) {
+	upload := func() {
+		if err := uploadCanaryClip(cmd, client, settings); err != nil {
+			printLine(cmd.OutOrStdout(), "error", "canary", err.Error())
+		}
+	}
+	upload()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(interval):
-			if err := uploadCanaryClip(cmd, client, settings); err != nil {
-				printLine(cmd.OutOrStdout(), "error", "canary", err.Error())
-			}
+		case <-ticker.C:
+			upload()
 		}
 	}
 }

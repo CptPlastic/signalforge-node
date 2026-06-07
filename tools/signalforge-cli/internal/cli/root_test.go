@@ -230,11 +230,11 @@ func TestRunCanaryLoopRespectsInterval(t *testing.T) {
 	go runCanaryLoop(ctx, cmd, client, recorder.DefaultSettings(), 250*time.Millisecond)
 	<-ctx.Done()
 
-	if uploads > 3 {
-		t.Fatalf("expected at most 3 canary uploads in 950ms, got %d", uploads)
+	if uploads > 4 {
+		t.Fatalf("expected at most 4 canary uploads in 950ms (immediate + ticker), got %d", uploads)
 	}
-	if uploads == 0 {
-		t.Fatal("expected at least one canary upload")
+	if uploads < 2 {
+		t.Fatalf("expected immediate canary plus at least one scheduled upload, got %d", uploads)
 	}
 }
 

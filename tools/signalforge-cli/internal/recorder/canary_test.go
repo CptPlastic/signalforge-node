@@ -14,6 +14,25 @@ func TestNormalizeCanaryIntervalEnforcesMinimum(t *testing.T) {
 	}
 }
 
+func TestCanaryWAVIsAudible(t *testing.T) {
+	audio, duration := CanaryWAV()
+	if duration <= 0 {
+		t.Fatalf("expected positive duration, got %s", duration)
+	}
+	if len(audio) <= 44 {
+		t.Fatal("expected wav payload")
+	}
+	nonZero := 0
+	for i := 44; i < len(audio); i += 2 {
+		if audio[i] != 0 || audio[i+1] != 0 {
+			nonZero++
+		}
+	}
+	if nonZero < 100 {
+		t.Fatalf("expected audible samples, got %d non-zero", nonZero)
+	}
+}
+
 func TestIsCanaryHeartbeatFile(t *testing.T) {
 	if !IsCanaryHeartbeatFile("canary-1710000000.wav") {
 		t.Fatal("expected canary heartbeat filename")
