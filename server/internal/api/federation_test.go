@@ -70,6 +70,39 @@ func TestFederatedSourcesAreReadableButNotSharedForRelay(t *testing.T) {
 	}
 }
 
+func TestFederationImportCapForDirectoryStatus(t *testing.T) {
+	tests := []struct {
+		status string
+		want   int
+	}{
+		{status: "unlisted", want: 500},
+		{status: "unverified", want: 500},
+		{status: "listed", want: 1000},
+		{status: "verified", want: 1000},
+		{status: "suspended", want: 500},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.status, func(t *testing.T) {
+			if got := federationImportCapForDirectoryStatus(tt.status); got != tt.want {
+				t.Fatalf("federationImportCapForDirectoryStatus(%q) = %d, want %d", tt.status, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFederationImportBatchLimit(t *testing.T) {
+	if got := federationImportBatchLimit(250); got != 100 {
+		t.Fatalf("federationImportBatchLimit(250) = %d, want 100", got)
+	}
+	if got := federationImportBatchLimit(30); got != 30 {
+		t.Fatalf("federationImportBatchLimit(30) = %d, want 30", got)
+	}
+	if got := federationImportBatchLimit(0); got != 0 {
+		t.Fatalf("federationImportBatchLimit(0) = %d, want 0", got)
+	}
+}
+
 func TestLocalUnsharedSourceStillRequiresOwnershipOrShare(t *testing.T) {
 	h := &handler{}
 	allowed := h.canReadCall(

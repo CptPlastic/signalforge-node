@@ -32,6 +32,17 @@ The root/super hub should issue signed hub certificates or invite credentials. F
 6. Prevent remote-of-remote resharing by default.
 7. Allow optional SignalForge directory validation for known-good hubs.
 
+## Federation import caps
+
+Pulling hubs stop importing federated calls after a per-peer cap so a new peer does not backfill an entire remote history (for example hundreds of thousands of calls).
+
+| Local directory status | Max imported calls per peer |
+| --- | --- |
+| `unlisted`, `unverified`, `suspended` | 500 |
+| `listed`, `verified` | 1000 |
+
+Run **CHECK DIRECTORY** on the pulling hub so `directoryValidationStatus` reflects the feed before expecting the listed cap. Federation status in the hub admin UI shows `importCap`, per-peer `importedCallCount`, and warnings when a cap is reached.
+
 ## MVP Test Path
 
 The first SignalHub implementation should be testable with normal Docker Compose. Most operators should be able to run a hub without knowing Go, Node, or the internal build chain.

@@ -104,6 +104,13 @@ func (d *DB) CountImportedFederatedCalls() (int64, error) {
 	return count, err
 }
 
+// CountImportedFederatedCallsFromPeer returns how many calls were imported from one peer hub.
+func (d *DB) CountImportedFederatedCallsFromPeer(peerHubID string) (int64, error) {
+	var count int64
+	err := d.db.QueryRow(`SELECT COUNT(*) FROM federation_call_imports WHERE peer_hub_id = $1`, peerHubID).Scan(&count)
+	return count, err
+}
+
 // MaxImportedRemoteCallID returns the highest remote call ID imported from a peer.
 func (d *DB) MaxImportedRemoteCallID(peerHubID string) (int64, error) {
 	var maxID sql.NullInt64

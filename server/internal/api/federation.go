@@ -28,6 +28,7 @@ type federationStatusResponse struct {
 	ExportableCallCount int64                      `json:"exportableCallCount"`
 	ImportedSourceCount int64                      `json:"importedSourceCount"`
 	ImportedCallCount   int64                      `json:"importedCallCount"`
+	FederationImportCap int                        `json:"federationImportCap"`
 	PullPeerCount       int                        `json:"pullPeerCount"`
 	PeerStatuses        []federationPeerStatus     `json:"peerStatuses"`
 	Warnings            []string                   `json:"warnings"`
@@ -41,6 +42,9 @@ type federationPeerStatus struct {
 	CanPull             bool   `json:"canPull"`
 	RemoteSharedSources int    `json:"remoteSharedSources"`
 	RemoteSampleCalls   int    `json:"remoteSampleCalls"`
+	ImportedCallCount   int64  `json:"importedCallCount"`
+	ImportCap           int    `json:"importCap"`
+	ImportCapReached    bool   `json:"importCapReached"`
 	Error               string `json:"error,omitempty"`
 }
 
@@ -89,13 +93,14 @@ func (h *handler) handleFederationStatus(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	importCap := federationImportCapForDirectoryStatus(identity.DirectoryValidationStatus)
 	pullPeerCount := 0
 	peerStatuses := make([]federationPeerStatus, 0, len(peers))
 	for _, peer := range peers {
 		if canPullFederatedPeer(peer) {
 			pullPeerCount++
 		}
-		peerStatuses = append(peerStatuses, h.checkFederationPeerStatus(identity.HubID, peer))
+		peerStatuses = append(peerStatuses, h.checkFederationPeerStatus(identity.HubID, peer, importCap))
 	}
 	warnings := make([]string, 0)
 	if !identity.FederationEnabled {
@@ -121,6 +126,16 @@ func (h *handler) handleFederationStatus(w http.ResponseWriter, r *http.Request)
 		} else if peerStatus.RemoteSampleCalls == 0 {
 			warnings = append(warnings, fmt.Sprintf("peer %s has shared sources but no exportable calls yet", peerStatus.Name))
 		}
+		if peerStatus.ImportCapReached {
+			warnings = append(warnings, fmt.Sprintf(
+				"peer %s import cap reached (%d/%d calls — listed hubs may pull %d, unlisted %d)",
+				peerStatus.Name,
+				peerStatus.ImportedCallCount,
+				peerStatus.ImportCap,
+				federationImportCapListed,
+				federationImportCapUnlisted,
+			))
+		}
 	}
 
 	writeJSON(w, http.StatusOK, federationStatusResponse{
@@ -130,19 +145,25 @@ func (h *handler) handleFederationStatus(w http.ResponseWriter, r *http.Request)
 		ExportableCallCount: exportableCallCount,
 		ImportedSourceCount: importedSourceCount,
 		ImportedCallCount:   importedCallCount,
+		FederationImportCap: importCap,
 		PullPeerCount:       pullPeerCount,
 		PeerStatuses:        peerStatuses,
 		Warnings:            warnings,
 	})
 }
 
-func (h *handler) checkFederationPeerStatus(localHubID string, peer database.HubPeer) federationPeerStatus {
+func (h *handler) checkFederationPeerStatus(localHubID string, peer database.HubPeer, importCap int) federationPeerStatus {
 	status := federationPeerStatus{
 		PeerID:    peer.ID,
 		HubID:     peer.HubID,
 		Name:      peer.Name,
 		PublicURL: peer.PublicURL,
 		CanPull:   canPullFederatedPeer(peer),
+		ImportCap: importCap,
+	}
+	if imported, err := h.db.CountImportedFederatedCallsFromPeer(peer.HubID); err == nil {
+		status.ImportedCallCount = imported
+		status.ImportCapReached = imported >= int64(importCap)
 	}
 	if status.Name == "" {
 		status.Name = peer.HubID
@@ -330,7 +351,7 @@ func (h *handler) syncFederatedPeers() {
 		if !canPullFederatedPeer(peer) {
 			continue
 		}
-		if err := h.syncFederatedPeer(identity.HubID, peer); err != nil {
+		if err := h.syncFederatedPeer(identity, peer); err != nil {
 			h.logger.Error("sync federated peer failed", "peer_hub_id", peer.HubID, "peer_url", peer.PublicURL, "error", err)
 		}
 	}
@@ -340,7 +361,21 @@ func canPullFederatedPeer(peer database.HubPeer) bool {
 	return peer.Status == "connected" && strings.TrimSpace(peer.PublicURL) != ""
 }
 
-func (h *handler) syncFederatedPeer(localHubID string, peer database.HubPeer) error {
+func (h *handler) syncFederatedPeer(identity *database.HubIdentity, peer database.HubPeer) error {
+	importCap := federationImportCapForDirectoryStatus(identity.DirectoryValidationStatus)
+	importedCount, err := h.db.CountImportedFederatedCallsFromPeer(peer.HubID)
+	if err != nil {
+		return fmt.Errorf("count imported calls from peer: %w", err)
+	}
+	if importedCount >= int64(importCap) {
+		return nil
+	}
+	remaining := int(int64(importCap) - importedCount)
+	batchLimit := federationImportBatchLimit(remaining)
+	if batchLimit == 0 {
+		return nil
+	}
+
 	sinceID, err := h.db.MaxImportedRemoteCallID(peer.HubID)
 	if err != nil {
 		return fmt.Errorf("load last imported call id: %w", err)
@@ -350,13 +385,13 @@ func (h *handler) syncFederatedPeer(localHubID string, peer database.HubPeer) er
 	if err != nil {
 		return err
 	}
-	endpoint := fmt.Sprintf("%s/api/v1/federation/calls?since=%d&limit=100", remoteURL, sinceID)
+	endpoint := fmt.Sprintf("%s/api/v1/federation/calls?since=%d&limit=%d", remoteURL, sinceID, batchLimit)
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("X-SignalHub-Peer-ID", localHubID)
+	req.Header.Set("X-SignalHub-Peer-ID", identity.HubID)
 
 	client := newRemoteHubHTTPClient(20 * time.Second)
 	resp, err := client.Do(req)
@@ -376,18 +411,26 @@ func (h *handler) syncFederatedPeer(localHubID string, peer database.HubPeer) er
 	if strings.TrimSpace(payload.Hub.HubID) != "" && payload.Hub.HubID != peer.HubID {
 		return fmt.Errorf("remote hub id mismatch: expected %s got %s", peer.HubID, payload.Hub.HubID)
 	}
-	return h.importFederatedCalls(peer, payload)
+	return h.importFederatedCalls(peer, payload, importCap, importedCount)
 }
 
-func (h *handler) importFederatedCalls(peer database.HubPeer, payload federationCallsResponse) error {
+func (h *handler) importFederatedCalls(peer database.HubPeer, payload federationCallsResponse, importCap int, alreadyImported int64) error {
 	sourceLabels, err := h.upsertFederatedSources(peer, payload.Sources)
 	if err != nil {
 		return err
 	}
 
+	importedThisBatch := int64(0)
 	for _, item := range payload.Calls {
-		if err := h.importFederatedCall(peer, sourceLabels, item); err != nil {
+		if alreadyImported+importedThisBatch >= int64(importCap) {
+			break
+		}
+		inserted, err := h.importFederatedCall(peer, sourceLabels, item)
+		if err != nil {
 			return err
+		}
+		if inserted {
+			importedThisBatch++
 		}
 	}
 	return nil
@@ -415,22 +458,22 @@ func (h *handler) upsertFederatedSources(peer database.HubPeer, sources []databa
 	return sourceLabels, nil
 }
 
-func (h *handler) importFederatedCall(peer database.HubPeer, sourceLabels map[string]string, item database.FederatedCall) error {
+func (h *handler) importFederatedCall(peer database.HubPeer, sourceLabels map[string]string, item database.FederatedCall) (bool, error) {
 	remoteCallID := item.Call.ID
 	if remoteCallID <= 0 {
-		return nil
+		return false, nil
 	}
 	remoteSourceID := federatedCallSourceID(item)
 	localSourceID := federatedSourceID(peer.HubID, remoteSourceID)
 	if _, ok := sourceLabels[remoteSourceID]; !ok {
 		if err := h.upsertFallbackFederatedSource(peer, remoteSourceID, localSourceID); err != nil {
-			return err
+			return false, err
 		}
 	}
 
 	audio, err := base64.StdEncoding.DecodeString(item.AudioBase)
 	if err != nil {
-		return fmt.Errorf("decode remote call %d audio: %w", remoteCallID, err)
+		return false, fmt.Errorf("decode remote call %d audio: %w", remoteCallID, err)
 	}
 	call := item.Call
 	call.ID = 0
@@ -438,20 +481,20 @@ func (h *handler) importFederatedCall(peer database.HubPeer, sourceLabels map[st
 	call.SourceID = localSourceID
 	localCallID, err := h.db.InsertCall(&call, audio)
 	if err != nil {
-		return fmt.Errorf("insert remote call %d: %w", remoteCallID, err)
+		return false, fmt.Errorf("insert remote call %d: %w", remoteCallID, err)
 	}
 	call.ID = localCallID
 	h.finalizeCallTranscription(&call)
 	inserted, err := h.db.RecordFederatedCallImport(peer.HubID, remoteCallID, localCallID)
 	if err != nil {
-		return fmt.Errorf("record remote call %d import: %w", remoteCallID, err)
+		return false, fmt.Errorf("record remote call %d import: %w", remoteCallID, err)
 	}
 	if inserted {
 		_ = h.db.IncrementSourceMetrics(localSourceID, true)
 		h.broadcastCall(&call, localSourceID)
 		h.streamHub.push(&call, audio)
 	}
-	return nil
+	return inserted, nil
 }
 
 func (h *handler) upsertFallbackFederatedSource(peer database.HubPeer, remoteSourceID, localSourceID string) error {
