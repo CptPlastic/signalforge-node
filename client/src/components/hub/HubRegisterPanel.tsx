@@ -119,7 +119,8 @@ export function HubRegisterPanel({
         <p className="console-label text-xs">REGISTER IN DIRECTORY</p>
         <p className="text-[11px] text-console-muted mt-1">
           List this hub in the public SignalForge directory so mobile apps and other operators can discover it.
-          Save hub identity first, then complete the checklist below.
+          Save hub identity first, complete the checklist, then use <strong>OPEN REGISTRATION FORM</strong> and
+          click <strong>Submit to Directory</strong> for one-click review.
         </p>
       </div>
 
