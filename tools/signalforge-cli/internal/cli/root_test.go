@@ -286,7 +286,7 @@ func TestWatchReprocessUploadsEachFileOnce(t *testing.T) {
 	cmd.SetErr(&out)
 
 	for i := 0; i < 5; i++ {
-		if _, err := uploadFolderBatch(cmd, apiClientForTest(t, server.URL), settings, uploaded, false); err != nil {
+		if _, err := uploadFolderBatch(cmd, apiClientForTest(t, server.URL), settings, uploaded, false, false); err != nil {
 			t.Fatalf("batch %d failed: %v", i, err)
 		}
 	}

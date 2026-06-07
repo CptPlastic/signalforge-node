@@ -21,8 +21,8 @@ type Status struct {
 }
 
 func WatchArgs(prof profile.Profile) ([]string, error) {
-	if !prof.Folder.Enabled && !prof.Canary.Enabled {
-		return nil, fmt.Errorf("enable folder watch or canary in your profile before installing the service")
+	if !prof.Folder.Enabled && !prof.Canary.Enabled && !prof.Beacon.Enabled {
+		return nil, fmt.Errorf("enable folder watch, canary, or beacon in your profile before installing the service")
 	}
 	args := []string{"rec", "watch"}
 	if prof.Folder.Enabled && strings.TrimSpace(prof.Folder.Directory) != "" {
@@ -30,6 +30,12 @@ func WatchArgs(prof profile.Profile) ([]string, error) {
 	}
 	if prof.Canary.Enabled {
 		args = append(args, "--canary")
+	}
+	if prof.Beacon.Enabled {
+		args = append(args, "--beacon")
+		if path := strings.TrimSpace(prof.Beacon.FilePath); path != "" {
+			args = append(args, "--beacon-file", path)
+		}
 	}
 	if prof.Folder.ReprocessProcessed {
 		args = append(args, "--reprocess")

@@ -25,6 +25,24 @@ func TestWatchArgsFolderAndCanary(t *testing.T) {
 	}
 }
 
+func TestWatchArgsBeaconOnly(t *testing.T) {
+	prof := profile.Default()
+	prof.Folder.Enabled = false
+	prof.Beacon.Enabled = true
+	prof.Beacon.FilePath = "/tmp/beacon.wav"
+
+	args, err := WatchArgs(prof)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"rec watch", "--beacon", "--beacon-file /tmp/beacon.wav"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected %q in %q", want, joined)
+		}
+	}
+}
+
 func TestWatchArgsRequiresMode(t *testing.T) {
 	prof := profile.Default()
 	prof.Folder.Enabled = false

@@ -238,6 +238,9 @@ func newRecorderCommand(opts *options) *cobra.Command {
 	watchOnce := false
 	watchCanary := false
 	watchCanaryInterval := time.Duration(0)
+	watchBeacon := false
+	watchBeaconFile := ""
+	watchBeaconInterval := time.Duration(0)
 	watchCmd := &cobra.Command{
 		Use:     "watch",
 		Aliases: []string{"w"},
@@ -248,17 +251,32 @@ func newRecorderCommand(opts *options) *cobra.Command {
 				return err
 			}
 			canaryEnabled := watchSettings.Canary.Enabled || watchCanary
-			if watchSettings.Input == "" && !canaryEnabled {
-				return fmt.Errorf("set --input to a folder or enable canary mode (sf onboard)")
+			beaconEnabled := watchSettings.Beacon.Enabled || watchBeacon
+			if watchBeaconFile != "" {
+				watchSettings.Beacon.FilePath = watchBeaconFile
+				beaconEnabled = true
+			}
+			if watchSettings.Input == "" && !canaryEnabled && !beaconEnabled {
+				return fmt.Errorf("set --input to a folder, enable --canary, or enable --beacon (sf onboard)")
+			}
+			if beaconEnabled {
+				if _, err := recorder.ValidateBeaconFile(watchSettings.Beacon.FilePath); err != nil {
+					return err
+				}
 			}
 			if watchOnce {
 				if watchSettings.Input != "" {
-					if _, err := uploadFolderBatch(cmd, client, watchSettings, nil, canaryEnabled); err != nil {
+					if _, err := uploadFolderBatch(cmd, client, watchSettings, nil, canaryEnabled, beaconEnabled); err != nil {
 						return err
 					}
 				}
-				if watchCanary {
-					return uploadCanaryClip(cmd, client, watchSettings)
+				if watchCanary || canaryEnabled {
+					if err := uploadCanaryClip(cmd, client, watchSettings); err != nil {
+						return err
+					}
+				}
+				if beaconEnabled {
+					return uploadBeaconClip(cmd, client, watchSettings)
 				}
 				return nil
 			}
@@ -295,6 +313,22 @@ func newRecorderCommand(opts *options) *cobra.Command {
 				printLine(out, "info", "canary", fmt.Sprintf("every %s (audible pip)", interval))
 				go runCanaryLoop(ctx, cmd, client, watchSettings, interval)
 			}
+			if beaconEnabled {
+				interval := watchSettings.Beacon.Interval
+				if watchBeaconInterval > 0 {
+					interval = watchBeaconInterval
+				}
+				if interval <= 0 {
+					interval = 30 * time.Minute
+				}
+				requested := interval
+				interval = recorder.NormalizeBeaconInterval(interval)
+				if interval != requested {
+					printLine(out, "warn", "beacon", fmt.Sprintf("interval %s too short; using %s", requested, interval))
+				}
+				printLine(out, "info", "beacon", fmt.Sprintf("every %s (%s)", interval, watchSettings.Beacon.FilePath))
+				go runBeaconLoop(ctx, cmd, client, watchSettings, interval)
+			}
 			if watchSettings.Input == "" {
 				<-ctx.Done()
 				printLine(out, "warn", "watch", "stopped")
@@ -302,7 +336,7 @@ func newRecorderCommand(opts *options) *cobra.Command {
 			}
 			uploaded := make(map[string]struct{})
 			for {
-				if _, err := uploadFolderBatch(cmd, client, watchSettings, uploaded, canaryEnabled); err != nil {
+				if _, err := uploadFolderBatch(cmd, client, watchSettings, uploaded, canaryEnabled, beaconEnabled); err != nil {
 					return err
 				}
 				select {
@@ -318,6 +352,9 @@ func newRecorderCommand(opts *options) *cobra.Command {
 	watchCmd.Flags().BoolVarP(&watchOnce, "once", "o", false, "process the current ready batch and exit")
 	watchCmd.Flags().BoolVar(&watchCanary, "canary", false, "upload canary heartbeat clips on an interval")
 	watchCmd.Flags().DurationVar(&watchCanaryInterval, "canary-interval", 0, "canary upload interval (overrides profile; e.g. 2m)")
+	watchCmd.Flags().BoolVar(&watchBeacon, "beacon", false, "upload a beacon audio file on an interval")
+	watchCmd.Flags().StringVar(&watchBeaconFile, "beacon-file", "", "beacon audio file path (overrides profile)")
+	watchCmd.Flags().DurationVar(&watchBeaconInterval, "beacon-interval", 0, "beacon upload interval (overrides profile; e.g. 30m)")
 	cmd.AddCommand(watchCmd)
 
 	cmd.AddCommand(&cobra.Command{
@@ -483,6 +520,45 @@ func uploadCanaryClip(cmd *cobra.Command, client *api.Client, settings recorder.
 	return nil
 }
 
+func uploadBeaconClip(cmd *cobra.Command, client *api.Client, settings recorder.Settings) error {
+	path := settings.BeaconSourcePath()
+	status, err := recorder.ValidateBeaconFile(path)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	fields := api.UploadFields{
+		Metadata:  settings.BeaconMetadata(),
+		AudioName: recorder.BeaconUploadName(path, now),
+		AudioType: status.AudioType,
+		StartedAt: status.ModifiedAt,
+	}
+	if err := client.UploadFile(path, fields); err != nil {
+		return err
+	}
+	printLine(cmd.OutOrStdout(), "ok", "beacon", fields.AudioName)
+	return nil
+}
+
+func runBeaconLoop(ctx context.Context, cmd *cobra.Command, client *api.Client, settings recorder.Settings, interval time.Duration) {
+	upload := func() {
+		if err := uploadBeaconClip(cmd, client, settings); err != nil {
+			printLine(cmd.OutOrStdout(), "error", "beacon", err.Error())
+		}
+	}
+	upload()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			upload()
+		}
+	}
+}
+
 func runCanaryLoop(ctx context.Context, cmd *cobra.Command, client *api.Client, settings recorder.Settings, interval time.Duration) {
 	upload := func() {
 		if err := uploadCanaryClip(cmd, client, settings); err != nil {
@@ -502,10 +578,12 @@ func runCanaryLoop(ctx context.Context, cmd *cobra.Command, client *api.Client, 
 	}
 }
 
-func uploadFolderBatch(cmd *cobra.Command, client *api.Client, settings recorder.Settings, uploaded map[string]struct{}, skipCanaryFiles bool) (int, error) {
-	files, err := recorder.ReadyFilesWithFilter(settings, time.Now(), recorder.ReadyFileFilter{
-		SkipCanaryHeartbeatFiles: skipCanaryFiles,
-	})
+func uploadFolderBatch(cmd *cobra.Command, client *api.Client, settings recorder.Settings, uploaded map[string]struct{}, skipCanaryFiles, skipBeaconFile bool) (int, error) {
+	filter := recorder.ReadyFileFilter{SkipCanaryHeartbeatFiles: skipCanaryFiles}
+	if skipBeaconFile {
+		filter.SkipPath = settings.BeaconFileMatches
+	}
+	files, err := recorder.ReadyFilesWithFilter(settings, time.Now(), filter)
 	if err != nil {
 		return 0, err
 	}

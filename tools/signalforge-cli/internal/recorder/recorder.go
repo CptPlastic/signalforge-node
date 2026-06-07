@@ -29,6 +29,7 @@ type Settings struct {
 	AutoUpload bool
 	Metadata   Metadata
 	Canary     CanarySettings
+	Beacon     BeaconSettings
 }
 
 type InputStatus struct {
@@ -152,6 +153,7 @@ func (s Settings) ProcessedDirPath() string {
 
 type ReadyFileFilter struct {
 	SkipCanaryHeartbeatFiles bool
+	SkipPath                 func(string) bool
 }
 
 func ReadyFiles(settings Settings, now time.Time) ([]FileCandidate, error) {
@@ -186,6 +188,10 @@ func ReadyFilesWithFilter(settings Settings, now time.Time, filter ReadyFileFilt
 		if filter.SkipCanaryHeartbeatFiles && IsCanaryHeartbeatFile(entry.Name()) {
 			continue
 		}
+		path := filepath.Join(scanDir, entry.Name())
+		if filter.SkipPath != nil && filter.SkipPath(path) {
+			continue
+		}
 		audioType := AudioTypeForPath(entry.Name())
 		if audioType == "" {
 			continue
@@ -197,7 +203,6 @@ func ReadyFilesWithFilter(settings Settings, now time.Time, filter ReadyFileFilt
 		if now.Sub(entryInfo.ModTime()) < stable {
 			continue
 		}
-		path := filepath.Join(scanDir, entry.Name())
 		candidates = append(candidates, FileCandidate{Path: path, Name: entry.Name(), AudioType: audioType, SizeBytes: entryInfo.Size(), ModifiedAt: entryInfo.ModTime()})
 	}
 	return candidates, nil

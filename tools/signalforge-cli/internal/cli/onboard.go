@@ -27,6 +27,9 @@ func newOnboardCommand(opts *options) *cobra.Command {
 		processedDir    string
 		enableCanary    bool
 		canaryInterval  time.Duration
+		enableBeacon    bool
+		beaconFile      string
+		beaconInterval  time.Duration
 		enableFolder    bool
 		reprocess       bool
 	)
@@ -69,6 +72,9 @@ func newOnboardCommand(opts *options) *cobra.Command {
 				}
 				if existing.Canary.Enabled {
 					prof.Canary = existing.Canary
+				}
+				if existing.Beacon.Enabled || strings.TrimSpace(existing.Beacon.FilePath) != "" {
+					prof.Beacon = existing.Beacon
 				}
 				prof.Metadata = existing.Metadata
 			}
@@ -125,6 +131,15 @@ func newOnboardCommand(opts *options) *cobra.Command {
 				}
 				if canaryInterval > 0 {
 					prof.Canary.IntervalSec = int(canaryInterval.Seconds())
+				}
+				if enableBeacon {
+					prof.Beacon.Enabled = true
+				}
+				if beaconFile != "" {
+					prof.Beacon.FilePath = expandPath(beaconFile)
+				}
+				if beaconInterval > 0 {
+					prof.Beacon.IntervalSec = int(beaconInterval.Seconds())
 				}
 			}
 
@@ -237,6 +252,61 @@ func newOnboardCommand(opts *options) *cobra.Command {
 				}
 			}
 
+			enableBeaconClip, err := prompt.askYesNo("Enable scheduled beacon clip (replay an audio file on interval)", prof.Beacon.Enabled)
+			if err != nil {
+				return err
+			}
+			prof.Beacon.Enabled = enableBeaconClip
+			if prof.Beacon.Enabled {
+				defaultPath := prof.Beacon.FilePath
+				if defaultPath == "" && prof.Folder.Directory != "" {
+					defaultPath = filepath.Join(prof.Folder.Directory, "beacon.wav")
+				}
+				beaconPath, err := prompt.askRequired("Beacon audio file (.wav, .mp3, .m4a, .flac)", defaultPath)
+				if err != nil {
+					return err
+				}
+				beaconPath = expandPath(beaconPath)
+				if _, err := recorder.ValidateBeaconFile(beaconPath); err != nil {
+					return err
+				}
+				prof.Beacon.FilePath = beaconPath
+
+				intervalDefault := strconv.Itoa(prof.Beacon.IntervalSec)
+				if intervalDefault == "0" {
+					intervalDefault = "1800"
+				}
+				intervalText, err := prompt.ask("Beacon interval (e.g. 30m, 1800s)", intervalDefault+"s")
+				if err != nil {
+					return err
+				}
+				interval, err := time.ParseDuration(intervalText)
+				if err != nil || interval < 30*time.Second {
+					return fmt.Errorf("beacon interval must be at least 30s (got %q)", intervalText)
+				}
+				prof.Beacon.IntervalSec = int(interval / time.Second)
+
+				customBeaconMeta, err := prompt.askYesNo("Use separate talkgroup label for beacon clips", false)
+				if err != nil {
+					return err
+				}
+				if customBeaconMeta {
+					tgText, err := prompt.ask("Beacon talkgroup ID (0 = use metadata default)", "0")
+					if err != nil {
+						return err
+					}
+					if tg, err := strconv.Atoi(strings.TrimSpace(tgText)); err == nil && tg > 0 {
+						prof.Beacon.Talkgroup = tg
+					}
+					label, err := prompt.ask("Beacon talkgroup label", "BEACON")
+					if err != nil {
+						return err
+					}
+					prof.Beacon.TalkgroupLabel = strings.TrimSpace(label)
+				}
+				printLine(out, "ok", "beacon", fmt.Sprintf("every %ds (%s)", prof.Beacon.IntervalSec, prof.Beacon.FilePath))
+			}
+
 			customMeta, err := prompt.askYesNo("Customize radio metadata (system/talkgroup/frequency)", false)
 			if err != nil {
 				return err
@@ -290,6 +360,9 @@ func newOnboardCommand(opts *options) *cobra.Command {
 	cmd.Flags().BoolVar(&enableFolder, "folder", false, "Enable folder watch in non-interactive mode")
 	cmd.Flags().BoolVar(&enableCanary, "canary", false, "Enable canary heartbeat in non-interactive mode")
 	cmd.Flags().DurationVar(&canaryInterval, "canary-interval", 5*time.Minute, "Canary upload interval")
+	cmd.Flags().BoolVar(&enableBeacon, "beacon", false, "Enable scheduled beacon clip in non-interactive mode")
+	cmd.Flags().StringVar(&beaconFile, "beacon-file", "", "Beacon audio file path")
+	cmd.Flags().DurationVar(&beaconInterval, "beacon-interval", 30*time.Minute, "Beacon upload interval")
 	cmd.Flags().BoolVar(&reprocess, "reprocess", false, "Upload files without moving them to processed")
 	return cmd
 }
@@ -373,6 +446,11 @@ func printProfileStatus(out io.Writer) error {
 	printLine(out, "info", "hub", prof.HubURL)
 	printLine(out, "info", "folder watch", fmt.Sprintf("%v (%s)", prof.Folder.Enabled, prof.Folder.Directory))
 	printLine(out, "info", "canary", fmt.Sprintf("%v every %ds", prof.Canary.Enabled, prof.Canary.IntervalSec))
+	if prof.Beacon.Enabled {
+		printLine(out, "info", "beacon", fmt.Sprintf("every %ds (%s)", prof.Beacon.IntervalSec, prof.Beacon.FilePath))
+	} else {
+		printLine(out, "info", "beacon", "disabled")
+	}
 	return nil
 }
 
@@ -386,8 +464,11 @@ func printOnboardNextSteps(out io.Writer, prof profile.Profile, serviceInstalled
 		fmt.Fprintf(out, "  %s\n", fmt.Sprintf("sf rec w -i %q", prof.Folder.Directory))
 		fmt.Fprintf(out, "  %s\n", "sf service install")
 	}
-	if !serviceInstalled && prof.Canary.Enabled && !prof.Folder.Enabled {
+	if !serviceInstalled && prof.Canary.Enabled && !prof.Folder.Enabled && !prof.Beacon.Enabled {
 		fmt.Fprintf(out, "  %s\n", "sf rec w --canary")
+	}
+	if !serviceInstalled && prof.Beacon.Enabled && strings.TrimSpace(prof.Beacon.FilePath) != "" {
+		fmt.Fprintf(out, "  %s\n", fmt.Sprintf("sf rec w --beacon --beacon-file %q", prof.Beacon.FilePath))
 	}
 	fmt.Fprintf(out, "  %s\n", "sf onboard --show")
 }
