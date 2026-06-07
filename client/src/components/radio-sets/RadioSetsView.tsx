@@ -77,6 +77,38 @@ function updateGroupSelection(group: string, checked: boolean) {
   }
 }
 
+function copyToClipboard(text: string) {
+  void navigator.clipboard?.writeText(text)
+}
+
+function FieldUnitConfigRow({
+  label,
+  hint,
+  value,
+}: Readonly<{ label: string; hint: string; value: string }>) {
+  return (
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+      <div className="flex flex-col min-w-0 sm:w-28 flex-shrink-0">
+        <span className="text-[10px] text-console-muted">{label}</span>
+        <span className="text-[9px] text-console-muted/80 uppercase tracking-wider">{hint}</span>
+      </div>
+      <input
+        readOnly
+        value={value}
+        onClick={(event) => (event.target as HTMLInputElement).select()}
+        className="flex-1 bg-console-bg border border-console-border/50 rounded px-1.5 py-0.5 text-[10px] text-console-accent font-mono outline-none min-w-0"
+      />
+      <button
+        type="button"
+        onClick={() => copyToClipboard(value)}
+        className="px-1.5 py-1 sm:py-0.5 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent flex-shrink-0"
+      >
+        COPY
+      </button>
+    </div>
+  )
+}
+
 function radioSetMembershipLabel(radioSet: RadioSet): string {
   if (radioSet.selectionMode === 'groups') {
     const count = radioSet.talkgroupGroups?.length ?? 0
@@ -500,6 +532,23 @@ export function RadioSetsView({
                       DEL
                     </button>
                   </div>
+                </div>
+
+                <div className="border border-console-border/50 rounded p-2 flex flex-col gap-2 bg-console-bg/40">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[10px] text-console-muted uppercase tracking-wider">Field unit</span>
+                    <span className="text-[9px] text-console-muted">
+                      Handheld firmware — copy into hub_config.h (Radio Sets screen, no digging in devtools)
+                    </span>
+                  </div>
+                  <FieldUnitConfigRow label="Set ID" hint="HUB_RADIO_SET_ID" value={radioSet.id} />
+                  {radioSet.shareToken ? (
+                    <FieldUnitConfigRow label="Listen token" hint="HUB_SHARE_TOKEN" value={radioSet.shareToken} />
+                  ) : (
+                    <p className="text-[10px] text-console-muted">
+                      No listen token yet — click <span className="text-console-text">SHARE</span> above, then copy it here.
+                    </p>
+                  )}
                 </div>
 
                 {radioSet.shareToken && (
