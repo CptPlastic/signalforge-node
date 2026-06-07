@@ -39,7 +39,7 @@ const (
 
 func NewRootCommand() *cobra.Command {
 	cfg := config.FromEnv()
-	opts := &options{hubURL: cfg.HubURL, sourceKey: cfg.SourceKey, timeout: cfg.Timeout, recorder: recorder.DefaultSettings()}
+	opts := &options{hubURL: cfg.HubURL, sourceKey: cfg.SourceKey, timeout: cfg.Timeout, recorder: config.LoadRecorderSettings()}
 	showVersion := false
 
 	cmd := &cobra.Command{
@@ -64,7 +64,15 @@ func NewRootCommand() *cobra.Command {
 	cmd.PersistentFlags().BoolVarP(&showVersion, "version", "v", false, "show build metadata and exit; --v also works")
 	cmd.PersistentFlags().BoolVar(&showVersion, "v", false, "show build metadata and exit")
 	_ = cmd.PersistentFlags().MarkHidden("v")
-	cmd.AddCommand(newHubCommand(opts), newRecorderCommand(opts), newTUICommand(opts), newUpdateCommand(), newVersionCommand())
+	cmd.AddCommand(
+		newHubCommand(opts),
+		newRecorderCommand(opts),
+		newOnboardCommand(opts),
+		newServiceCommand(opts),
+		newTUICommand(opts),
+		newUpdateCommand(),
+		newVersionCommand(),
+	)
 	configureCompletionAliases(cmd)
 	configureHelp(cmd)
 	return cmd
@@ -227,6 +235,7 @@ func newRecorderCommand(opts *options) *cobra.Command {
 
 	watchSettings := opts.recorder
 	watchOnce := false
+	watchCanary := false
 	watchCmd := &cobra.Command{
 		Use:     "watch",
 		Aliases: []string{"w"},
@@ -236,9 +245,20 @@ func newRecorderCommand(opts *options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			canaryEnabled := watchSettings.Canary.Enabled || watchCanary
+			if watchSettings.Input == "" && !canaryEnabled {
+				return fmt.Errorf("set --input to a folder or enable canary mode (sf onboard)")
+			}
 			if watchOnce {
-				_, err := uploadFolderBatch(cmd, client, watchSettings)
-				return err
+				if watchSettings.Input != "" {
+					if _, err := uploadFolderBatch(cmd, client, watchSettings); err != nil {
+						return err
+					}
+				}
+				if watchCanary {
+					return uploadCanaryClip(cmd, client, watchSettings)
+				}
+				return nil
 			}
 			ctx, stop := signal.NotifyContext(context.Background(), signals()...)
 			defer stop()
@@ -248,8 +268,23 @@ func newRecorderCommand(opts *options) *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			printBanner(out, "Recorder Watch")
-			printLine(out, "info", "watching", watchSettings.Input)
-			printLine(out, "info", "processed", recorder.ProcessedPath(watchSettings, ".keep"))
+			if watchSettings.Input != "" {
+				printLine(out, "info", "watching", watchSettings.Input)
+				printLine(out, "info", "processed", recorder.ProcessedPath(watchSettings, ".keep"))
+			}
+			if canaryEnabled {
+				interval := watchSettings.Canary.Interval
+				if interval <= 0 {
+					interval = 5 * time.Minute
+				}
+				printLine(out, "info", "canary", interval.String())
+				go runCanaryLoop(ctx, cmd, client, watchSettings, interval)
+			}
+			if watchSettings.Input == "" {
+				<-ctx.Done()
+				printLine(out, "warn", "watch", "stopped")
+				return nil
+			}
 			for {
 				if _, err := uploadFolderBatch(cmd, client, watchSettings); err != nil {
 					return err
@@ -265,6 +300,7 @@ func newRecorderCommand(opts *options) *cobra.Command {
 	}
 	bindRecorderFlags(watchCmd, &watchSettings)
 	watchCmd.Flags().BoolVarP(&watchOnce, "once", "o", false, "process the current ready batch and exit")
+	watchCmd.Flags().BoolVar(&watchCanary, "canary", false, "upload canary heartbeat clips on an interval")
 	cmd.AddCommand(watchCmd)
 
 	tuiSettings := opts.recorder
@@ -399,6 +435,37 @@ func printInputStatus(cmd *cobra.Command, status recorder.InputStatus) {
 	}
 }
 
+func uploadCanaryClip(cmd *cobra.Command, client *api.Client, settings recorder.Settings) error {
+	now := time.Now()
+	fields := api.UploadFields{
+		Metadata:  settings.CanaryMetadata(),
+		AudioName: recorder.CanaryAudioName(now),
+		AudioType: "audio/wav",
+		StartedAt: now,
+		Duration:  time.Second,
+	}
+	if err := client.UploadBytes(recorder.SilentWAV(16000, 1), fields); err != nil {
+		return err
+	}
+	printLine(cmd.OutOrStdout(), "ok", "canary", fields.AudioName)
+	return nil
+}
+
+func runCanaryLoop(ctx context.Context, cmd *cobra.Command, client *api.Client, settings recorder.Settings, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := uploadCanaryClip(cmd, client, settings); err != nil {
+				printLine(cmd.OutOrStdout(), "error", "canary", err.Error())
+			}
+		}
+	}
+}
+
 func uploadFolderBatch(cmd *cobra.Command, client *api.Client, settings recorder.Settings) (int, error) {
 	files, err := recorder.ReadyFiles(settings, time.Now())
 	if err != nil {
@@ -466,12 +533,15 @@ func printRootHelp(out io.Writer) {
 	printLine(out, "info", "hub", "https://p7hub.projectseven.us")
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s\n", color(ansiCyan, "Quick Start"))
-	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf rec chk -k sk_live_..."))
+	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf onboard"))
+	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf rec chk"))
 	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf rec i -i ./calls"))
 	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf rec w -i ./calls -k sk_live_..."))
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s\n", color(ansiCyan, "Commands"))
 	commandRow(out, "HUB", "hub/h", "check hub health and version")
+	commandRow(out, "ONB", "onboard/setup/init", "interactive hub + folder + canary setup")
+	commandRow(out, "SVC", "service/svc", "install or manage background watch service")
 	commandRow(out, "REC", "recorder/rec/r", "inspect, upload, watch, and open recorder console")
 	commandRow(out, "TUI", "tui/console/dash", "open the full-screen recorder dashboard")
 	commandRow(out, "UPD", "update/upd/up", "check the public package release feed")

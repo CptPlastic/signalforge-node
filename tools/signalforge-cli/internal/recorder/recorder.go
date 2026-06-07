@@ -28,6 +28,7 @@ type Settings struct {
 	Reprocess  bool
 	AutoUpload bool
 	Metadata   Metadata
+	Canary     CanarySettings
 }
 
 type InputStatus struct {

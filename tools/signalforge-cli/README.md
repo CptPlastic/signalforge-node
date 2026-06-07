@@ -45,6 +45,40 @@ Release archives are also attached to the public `signalforge-cli-v*` releases a
 
 Homebrew, Scoop, and release archives provide both `signalforge` and the short `sf` alias.
 
+## Onboard
+
+Interactive setup for hub URL, source key, monitor folder, processed output, timers, and canary heartbeat:
+
+```bash
+sf onboard
+```
+
+This saves a profile under your user config directory (`~/.config/signalforge/` on Linux, `~/Library/Application Support/signalforge/` on macOS) plus a `config.toml` compatible with `p7-recorder-go`.
+
+After onboarding, `sf rec w` and `sf tui` pick up saved folder paths automatically. Use `sf onboard --show` to review the saved profile.
+
+Non-interactive example:
+
+```bash
+sf onboard --yes --hub-url https://p7hub.projectseven.us -k sk_live_... \
+  --folder --input ./ingest --canary --canary-interval 5m --install-service
+```
+
+### Background service
+
+After onboarding, install a user-level service so folder watch keeps running across reboots:
+
+```bash
+sf onboard --install-service   # during setup
+sf service install             # later, from saved profile
+sf service status
+sf service uninstall
+```
+
+- **Linux**: systemd user unit (`~/.config/systemd/user/signalforge-watch.service`)
+- **macOS**: launchd agent (`~/Library/LaunchAgents/org.signalforge.watch.plist`)
+- Logs: config dir `logs/watch.log`
+
 ## Configure
 
 You can pass flags each time:

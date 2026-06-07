@@ -14,6 +14,7 @@ import (
 
 func TestRecorderWatchOnceUploadsAndMovesStableFile(t *testing.T) {
 	t.Setenv("SIGNALFORGE_NO_UPDATE_CHECK", "1")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	uploads := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,6 +78,7 @@ func TestRecorderWatchOnceUploadsAndMovesStableFile(t *testing.T) {
 		"-i", input,
 		"-s", "1ms",
 		"-o",
+		"--poll", "1s",
 	})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("command failed: %v\n%s", err, out.String())

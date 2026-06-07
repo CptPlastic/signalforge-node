@@ -142,8 +142,25 @@ func (c *Client) UploadFile(path string, fields UploadFields) error {
 	if fields.AudioType == "" {
 		fields.AudioType = recorder.AudioTypeForPath(path)
 	}
+	return c.uploadReader(file, fields)
+}
+
+func (c *Client) UploadBytes(audio []byte, fields UploadFields) error {
+	if c.sourceKey == "" {
+		return errors.New("source key is required; pass --source-key or set SIGNALFORGE_SOURCE_KEY")
+	}
+	return c.uploadReader(bytes.NewReader(audio), fields)
+}
+
+func (c *Client) uploadReader(audio io.Reader, fields UploadFields) error {
 	if fields.StartedAt.IsZero() {
 		fields.StartedAt = time.Now()
+	}
+	if fields.AudioType == "" {
+		fields.AudioType = "audio/wav"
+	}
+	if fields.Duration <= 0 {
+		fields.Duration = time.Second
 	}
 
 	body := &bytes.Buffer{}
@@ -171,7 +188,7 @@ func (c *Client) UploadFile(path string, fields UploadFields) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(part, file); err != nil {
+	if _, err := io.Copy(part, audio); err != nil {
 		return err
 	}
 	if err := writer.Close(); err != nil {
