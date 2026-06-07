@@ -259,11 +259,10 @@ func TestWatchReprocessUploadsEachFileOnce(t *testing.T) {
 
 	dir := t.TempDir()
 	input := filepath.Join(dir, "ingest")
-	processed := filepath.Join(input, "processed")
-	if err := os.MkdirAll(processed, 0o755); err != nil {
+	if err := os.MkdirAll(input, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	audioPath := filepath.Join(processed, "demo.wav")
+	audioPath := filepath.Join(input, "demo.wav")
 	if err := os.WriteFile(audioPath, fakeWAV(), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -293,6 +292,9 @@ func TestWatchReprocessUploadsEachFileOnce(t *testing.T) {
 	}
 	if uploads != 1 {
 		t.Fatalf("expected exactly 1 upload with reprocess, got %d", uploads)
+	}
+	if _, err := os.Stat(audioPath); err != nil {
+		t.Fatalf("reprocess should leave source file in ingest folder: %v", err)
 	}
 }
 

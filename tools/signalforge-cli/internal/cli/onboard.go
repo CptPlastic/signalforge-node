@@ -195,7 +195,7 @@ func newOnboardCommand(opts *options) *cobra.Command {
 				}
 				prof.Folder.StableMs = int(stable / time.Millisecond)
 
-				reprocessProcessed, err := prompt.askYesNo("Reprocess files in processed folder (canary/demo replays)", prof.Folder.ReprocessProcessed)
+				reprocessProcessed, err := prompt.askYesNo("Re-upload files without moving them to processed (leave in ingest folder)", prof.Folder.ReprocessProcessed)
 				if err != nil {
 					return err
 				}
@@ -290,7 +290,7 @@ func newOnboardCommand(opts *options) *cobra.Command {
 	cmd.Flags().BoolVar(&enableFolder, "folder", false, "Enable folder watch in non-interactive mode")
 	cmd.Flags().BoolVar(&enableCanary, "canary", false, "Enable canary heartbeat in non-interactive mode")
 	cmd.Flags().DurationVar(&canaryInterval, "canary-interval", 5*time.Minute, "Canary upload interval")
-	cmd.Flags().BoolVar(&reprocess, "reprocess", false, "Re-upload files from processed folder")
+	cmd.Flags().BoolVar(&reprocess, "reprocess", false, "Upload files without moving them to processed")
 	return cmd
 }
 

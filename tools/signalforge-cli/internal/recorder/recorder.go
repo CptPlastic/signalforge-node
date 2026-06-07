@@ -150,13 +150,6 @@ func (s Settings) ProcessedDirPath() string {
 	return processed
 }
 
-func (s Settings) WatchScanDir() string {
-	if s.Reprocess {
-		return s.ProcessedDirPath()
-	}
-	return strings.TrimSpace(s.Input)
-}
-
 type ReadyFileFilter struct {
 	SkipCanaryHeartbeatFiles bool
 }
@@ -166,7 +159,7 @@ func ReadyFiles(settings Settings, now time.Time) ([]FileCandidate, error) {
 }
 
 func ReadyFilesWithFilter(settings Settings, now time.Time, filter ReadyFileFilter) ([]FileCandidate, error) {
-	scanDir := settings.WatchScanDir()
+	scanDir := strings.TrimSpace(settings.Input)
 	if scanDir == "" {
 		return nil, errors.New("input folder is required")
 	}
