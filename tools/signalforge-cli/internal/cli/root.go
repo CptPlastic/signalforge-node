@@ -15,6 +15,7 @@ import (
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/buildinfo"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/config"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/recorder"
+	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/service"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/tui"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/updater"
 	"github.com/spf13/cobra"
@@ -261,6 +262,11 @@ func newRecorderCommand(opts *options) *cobra.Command {
 				}
 				return nil
 			}
+			if err := service.AcquireWatchLock(cmd.CommandPath()); err != nil {
+				return err
+			}
+			defer func() { _ = service.ReleaseWatchLock() }()
+
 			ctx, stop := signal.NotifyContext(context.Background(), signals()...)
 			defer stop()
 			poll := watchSettings.Poll
@@ -313,6 +319,20 @@ func newRecorderCommand(opts *options) *cobra.Command {
 	watchCmd.Flags().BoolVar(&watchCanary, "canary", false, "upload canary heartbeat clips on an interval")
 	watchCmd.Flags().DurationVar(&watchCanaryInterval, "canary-interval", 0, "canary upload interval (overrides profile; e.g. 2m)")
 	cmd.AddCommand(watchCmd)
+
+	cmd.AddCommand(&cobra.Command{
+		Use:     "stop",
+		Aliases: []string{"kill"},
+		Short:   "Stop all running sf rec watch processes",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			stopped, err := service.StopWatchProcesses()
+			if err != nil {
+				return err
+			}
+			printStopResult(cmd, stopped)
+			return nil
+		},
+	})
 
 	tuiSettings := opts.recorder
 	tuiCmd := &cobra.Command{

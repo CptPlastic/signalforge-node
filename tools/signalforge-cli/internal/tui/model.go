@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/api"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/recorder"
+	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/service"
 )
 
 var (
@@ -31,10 +32,11 @@ var (
 )
 
 type checkResult struct {
-	lines  []string
-	input  recorder.InputStatus
-	err    error
-	upload string
+	lines       []string
+	watchLines  []string
+	input       recorder.InputStatus
+	err         error
+	upload      string
 }
 
 type Options struct {
@@ -43,13 +45,14 @@ type Options struct {
 }
 
 type model struct {
-	client   *api.Client
-	recorder recorder.Settings
-	lines    []string
-	input    recorder.InputStatus
-	err      error
-	busy     bool
-	upload   string
+	client     *api.Client
+	recorder   recorder.Settings
+	lines      []string
+	watchLines []string
+	input      recorder.InputStatus
+	err        error
+	busy       bool
+	upload     string
 }
 
 func Run(options Options) error {
@@ -80,6 +83,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case checkResult:
 		m.busy = false
 		m.lines = msg.lines
+		m.watchLines = msg.watchLines
 		m.input = msg.input
 		m.err = msg.err
 		m.upload = msg.upload
@@ -119,6 +123,14 @@ func (m model) View() string {
 	body.WriteString(row("system", fmt.Sprintf("%d %s", m.recorder.Metadata.System, m.recorder.Metadata.SystemLabel), "") + "\n")
 	body.WriteString(row("talkgroup", fmt.Sprintf("%d %s", m.recorder.Metadata.Talkgroup, m.recorder.Metadata.TalkgroupLabel), "") + "\n")
 	body.WriteString(row("group", m.recorder.Metadata.TalkgroupGroup, "") + "\n")
+	body.WriteString(sectionStyle.Render("WATCH") + "\n")
+	if len(m.watchLines) == 0 {
+		body.WriteString(row("state", "unknown", "warn") + "\n")
+	} else {
+		for _, line := range m.watchLines {
+			body.WriteString(line + "\n")
+		}
+	}
 	if m.upload != "" {
 		body.WriteString("\n" + okStyle.Render("[OK] "+m.upload) + "\n")
 	}
@@ -149,7 +161,37 @@ func (m model) checkHub() tea.Msg {
 	if inputErr != nil {
 		input.Message = inputErr.Error()
 	}
-	return checkResult{lines: lines, input: input}
+	return checkResult{lines: lines, watchLines: watchStatusLines(), input: input}
+}
+
+func watchStatusLines() []string {
+	status, err := service.CurrentStatus()
+	if err != nil {
+		return []string{row("error", err.Error(), "error")}
+	}
+	lines := []string{}
+	launchd := "not installed"
+	tone := "ok"
+	if status.Installed {
+		launchd = "installed"
+		if status.Running {
+			launchd = "running"
+		}
+	}
+	if len(status.WatchProcesses) > 0 {
+		tone = "warn"
+	}
+	lines = append(lines, row("launchd", launchd, tone))
+	if len(status.WatchProcesses) == 0 {
+		lines = append(lines, row("processes", "none", "ok"))
+		return lines
+	}
+	lines = append(lines, row("processes", fmt.Sprintf("%d running", len(status.WatchProcesses)), "warn"))
+	for _, process := range status.WatchProcesses {
+		lines = append(lines, row(fmt.Sprintf("pid %d", process.PID), process.Command, "warn"))
+	}
+	lines = append(lines, row("stop", "sf rec stop", ""))
+	return lines
 }
 
 func (m model) uploadInput() tea.Msg {

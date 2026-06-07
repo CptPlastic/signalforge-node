@@ -12,10 +12,12 @@ import (
 const Name = "signalforge-watch"
 
 type Status struct {
-	Installed bool
-	Running   bool
-	Detail    string
-	UnitPath  string
+	Installed      bool
+	Running        bool
+	Detail         string
+	UnitPath       string
+	WatchProcesses []WatchProcess
+	Lock           *WatchLock
 }
 
 func WatchArgs(prof profile.Profile) ([]string, error) {
@@ -90,7 +92,28 @@ func Uninstall() (Status, error) {
 }
 
 func CurrentStatus() (Status, error) {
-	return statusPlatform()
+	status, err := statusPlatform()
+	if err != nil {
+		return Status{}, err
+	}
+	processes, err := FindWatchProcesses()
+	if err != nil {
+		return status, err
+	}
+	status.WatchProcesses = processes
+	lock, err := ReadWatchLock()
+	if err != nil {
+		return status, err
+	}
+	if lock != nil && !processAlive(lock.PID) {
+		_ = removeWatchLock()
+		lock = nil
+	}
+	status.Lock = lock
+	if len(processes) > 0 && !status.Running {
+		status.Detail = fmt.Sprintf("%d orphan watch process(es); launchd service not loaded", len(processes))
+	}
+	return status, nil
 }
 
 func ParseEnvFile(path string) (map[string]string, error) {
