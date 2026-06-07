@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/profile"
@@ -94,11 +93,4 @@ func removeWatchLock() error {
 		return nil
 	}
 	return err
-}
-
-func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	return syscall.Kill(pid, 0) == nil
 }
