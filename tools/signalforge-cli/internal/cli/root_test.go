@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/api"
+	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/recorder"
 )
 
 func TestRecorderWatchOnceUploadsAndMovesStableFile(t *testing.T) {
@@ -184,6 +188,121 @@ func TestCommandAliases(t *testing.T) {
 	if !strings.Contains(out.String(), "sf rec chk") || !strings.Contains(out.String(), "signalforge also works") {
 		t.Fatalf("expected sf alias in root help, got:\n%s", out.String())
 	}
+}
+
+func TestRunCanaryLoopRespectsInterval(t *testing.T) {
+	t.Setenv("SIGNALFORGE_NO_UPDATE_CHECK", "1")
+
+	uploads := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/call-upload" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = r.ParseMultipartForm(1 << 20)
+		if r.FormValue("key") != "test-key" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if r.FormValue("test") == "1" {
+			w.WriteHeader(http.StatusExpectationFailed)
+			_, _ = w.Write([]byte("incomplete call data"))
+			return
+		}
+		uploads++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client, err := api.NewClient(server.URL, "test-key", 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 950*time.Millisecond)
+	defer cancel()
+
+	go runCanaryLoop(ctx, cmd, client, recorder.DefaultSettings(), 250*time.Millisecond)
+	<-ctx.Done()
+
+	if uploads > 3 {
+		t.Fatalf("expected at most 3 canary uploads in 950ms, got %d", uploads)
+	}
+	if uploads == 0 {
+		t.Fatal("expected at least one canary upload")
+	}
+}
+
+func TestWatchReprocessUploadsEachFileOnce(t *testing.T) {
+	t.Setenv("SIGNALFORGE_NO_UPDATE_CHECK", "1")
+
+	uploads := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/call-upload" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = r.ParseMultipartForm(1 << 20)
+		if r.FormValue("key") != "test-key" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		uploads++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	input := filepath.Join(dir, "ingest")
+	processed := filepath.Join(input, "processed")
+	if err := os.MkdirAll(processed, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	audioPath := filepath.Join(processed, "demo.wav")
+	if err := os.WriteFile(audioPath, fakeWAV(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-10 * time.Second)
+	if err := os.Chtimes(audioPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	uploaded := make(map[string]struct{})
+	settings := recorder.Settings{
+		Input:     input,
+		Processed: "processed",
+		Stable:    time.Millisecond,
+		Reprocess: true,
+		Metadata:  recorder.DefaultSettings().Metadata,
+	}
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	for i := 0; i < 5; i++ {
+		if _, err := uploadFolderBatch(cmd, apiClientForTest(t, server.URL), settings, uploaded, false); err != nil {
+			t.Fatalf("batch %d failed: %v", i, err)
+		}
+	}
+	if uploads != 1 {
+		t.Fatalf("expected exactly 1 upload with reprocess, got %d", uploads)
+	}
+}
+
+func apiClientForTest(t *testing.T, hubURL string) *api.Client {
+	t.Helper()
+	client, err := api.NewClient(hubURL, "test-key", 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client
 }
 
 func fakeWAV() []byte {

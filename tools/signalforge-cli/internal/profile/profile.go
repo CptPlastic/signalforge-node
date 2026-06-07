@@ -149,9 +149,13 @@ func (p Profile) ToRecorderSettings() recorder.Settings {
 	}
 	settings.Reprocess = p.Folder.ReprocessProcessed
 	settings.Metadata = p.Metadata
+	canaryInterval := time.Duration(p.Canary.IntervalSec) * time.Second
+	if p.Canary.IntervalSec <= 0 {
+		canaryInterval = 5 * time.Minute
+	}
 	settings.Canary = recorder.CanarySettings{
 		Enabled:        p.Canary.Enabled,
-		Interval:       time.Duration(p.Canary.IntervalSec) * time.Second,
+		Interval:       recorder.NormalizeCanaryInterval(canaryInterval),
 		Talkgroup:      p.Canary.Talkgroup,
 		TalkgroupLabel: p.Canary.TalkgroupLabel,
 	}

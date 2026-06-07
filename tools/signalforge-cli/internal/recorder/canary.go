@@ -3,9 +3,12 @@ package recorder
 import (
 	"encoding/binary"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 )
+
+const MinCanaryInterval = 30 * time.Second
 
 type CanarySettings struct {
 	Enabled        bool
@@ -52,6 +55,18 @@ func SilentWAV(sampleRate, channels int) []byte {
 	return buf
 }
 
+func NormalizeCanaryInterval(interval time.Duration) time.Duration {
+	if interval < MinCanaryInterval {
+		return MinCanaryInterval
+	}
+	return interval
+}
+
+func IsCanaryHeartbeatFile(name string) bool {
+	stem := strings.ToLower(strings.TrimSuffix(filepath.Base(name), filepath.Ext(name)))
+	return strings.HasPrefix(stem, "canary-")
+}
+
 func CanaryAudioName(now time.Time) string {
-	return fmt.Sprintf("canary-%d.wav", now.Unix())
+	return fmt.Sprintf("canary-%d.wav", now.UnixNano())
 }

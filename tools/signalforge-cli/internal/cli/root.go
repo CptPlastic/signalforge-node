@@ -236,6 +236,7 @@ func newRecorderCommand(opts *options) *cobra.Command {
 	watchSettings := opts.recorder
 	watchOnce := false
 	watchCanary := false
+	watchCanaryInterval := time.Duration(0)
 	watchCmd := &cobra.Command{
 		Use:     "watch",
 		Aliases: []string{"w"},
@@ -251,7 +252,7 @@ func newRecorderCommand(opts *options) *cobra.Command {
 			}
 			if watchOnce {
 				if watchSettings.Input != "" {
-					if _, err := uploadFolderBatch(cmd, client, watchSettings); err != nil {
+					if _, err := uploadFolderBatch(cmd, client, watchSettings, nil, canaryEnabled); err != nil {
 						return err
 					}
 				}
@@ -274,9 +275,13 @@ func newRecorderCommand(opts *options) *cobra.Command {
 			}
 			if canaryEnabled {
 				interval := watchSettings.Canary.Interval
+				if watchCanaryInterval > 0 {
+					interval = watchCanaryInterval
+				}
 				if interval <= 0 {
 					interval = 5 * time.Minute
 				}
+				interval = recorder.NormalizeCanaryInterval(interval)
 				printLine(out, "info", "canary", interval.String())
 				go runCanaryLoop(ctx, cmd, client, watchSettings, interval)
 			}
@@ -285,8 +290,9 @@ func newRecorderCommand(opts *options) *cobra.Command {
 				printLine(out, "warn", "watch", "stopped")
 				return nil
 			}
+			uploaded := make(map[string]struct{})
 			for {
-				if _, err := uploadFolderBatch(cmd, client, watchSettings); err != nil {
+				if _, err := uploadFolderBatch(cmd, client, watchSettings, uploaded, canaryEnabled); err != nil {
 					return err
 				}
 				select {
@@ -301,6 +307,7 @@ func newRecorderCommand(opts *options) *cobra.Command {
 	bindRecorderFlags(watchCmd, &watchSettings)
 	watchCmd.Flags().BoolVarP(&watchOnce, "once", "o", false, "process the current ready batch and exit")
 	watchCmd.Flags().BoolVar(&watchCanary, "canary", false, "upload canary heartbeat clips on an interval")
+	watchCmd.Flags().DurationVar(&watchCanaryInterval, "canary-interval", 0, "canary upload interval (overrides profile; e.g. 2m)")
 	cmd.AddCommand(watchCmd)
 
 	tuiSettings := opts.recorder
@@ -452,13 +459,11 @@ func uploadCanaryClip(cmd *cobra.Command, client *api.Client, settings recorder.
 }
 
 func runCanaryLoop(ctx context.Context, cmd *cobra.Command, client *api.Client, settings recorder.Settings, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-time.After(interval):
 			if err := uploadCanaryClip(cmd, client, settings); err != nil {
 				printLine(cmd.OutOrStdout(), "error", "canary", err.Error())
 			}
@@ -466,15 +471,27 @@ func runCanaryLoop(ctx context.Context, cmd *cobra.Command, client *api.Client, 
 	}
 }
 
-func uploadFolderBatch(cmd *cobra.Command, client *api.Client, settings recorder.Settings) (int, error) {
-	files, err := recorder.ReadyFiles(settings, time.Now())
+func uploadFolderBatch(cmd *cobra.Command, client *api.Client, settings recorder.Settings, uploaded map[string]struct{}, skipCanaryFiles bool) (int, error) {
+	files, err := recorder.ReadyFilesWithFilter(settings, time.Now(), recorder.ReadyFileFilter{
+		SkipCanaryHeartbeatFiles: skipCanaryFiles,
+	})
 	if err != nil {
 		return 0, err
 	}
 	if len(files) == 0 {
 		return 0, nil
 	}
+	uploadedCount := 0
 	for _, file := range files {
+		fingerprint := recorder.FileFingerprint(file)
+		if settings.Reprocess {
+			if uploaded != nil {
+				if _, seen := uploaded[fingerprint]; seen {
+					continue
+				}
+				uploaded[fingerprint] = struct{}{}
+			}
+		}
 		fields := api.UploadFields{
 			Metadata:  settings.Metadata,
 			AudioName: file.Name,
@@ -482,8 +499,9 @@ func uploadFolderBatch(cmd *cobra.Command, client *api.Client, settings recorder
 			StartedAt: file.ModifiedAt,
 		}
 		if err := client.UploadFile(file.Path, fields); err != nil {
-			return 0, err
+			return uploadedCount, err
 		}
+		uploadedCount++
 		if settings.Reprocess {
 			printLine(cmd.OutOrStdout(), "ok", "uploaded", file.Path)
 			continue
@@ -494,7 +512,7 @@ func uploadFolderBatch(cmd *cobra.Command, client *api.Client, settings recorder
 		}
 		printLine(cmd.OutOrStdout(), "ok", "uploaded", fmt.Sprintf("%s -> %s", file.Path, destination))
 	}
-	return len(files), nil
+	return uploadedCount, nil
 }
 
 func printBanner(out io.Writer, title string) {

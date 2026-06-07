@@ -139,12 +139,38 @@ func ValidateFileInput(path string) (InputStatus, error) {
 	return status, nil
 }
 
+func (s Settings) ProcessedDirPath() string {
+	processed := strings.TrimSpace(s.Processed)
+	if processed == "" {
+		processed = "processed"
+	}
+	if !filepath.IsAbs(processed) {
+		processed = filepath.Join(strings.TrimSpace(s.Input), processed)
+	}
+	return processed
+}
+
+func (s Settings) WatchScanDir() string {
+	if s.Reprocess {
+		return s.ProcessedDirPath()
+	}
+	return strings.TrimSpace(s.Input)
+}
+
+type ReadyFileFilter struct {
+	SkipCanaryHeartbeatFiles bool
+}
+
 func ReadyFiles(settings Settings, now time.Time) ([]FileCandidate, error) {
-	input := strings.TrimSpace(settings.Input)
-	if input == "" {
+	return ReadyFilesWithFilter(settings, now, ReadyFileFilter{})
+}
+
+func ReadyFilesWithFilter(settings Settings, now time.Time, filter ReadyFileFilter) ([]FileCandidate, error) {
+	scanDir := settings.WatchScanDir()
+	if scanDir == "" {
 		return nil, errors.New("input folder is required")
 	}
-	info, err := os.Stat(input)
+	info, err := os.Stat(scanDir)
 	if err != nil {
 		return nil, err
 	}
@@ -155,13 +181,16 @@ func ReadyFiles(settings Settings, now time.Time) ([]FileCandidate, error) {
 	if stable <= 0 {
 		stable = 2500 * time.Millisecond
 	}
-	entries, err := os.ReadDir(input)
+	entries, err := os.ReadDir(scanDir)
 	if err != nil {
 		return nil, err
 	}
 	candidates := make([]FileCandidate, 0)
 	for _, entry := range entries {
 		if entry.IsDir() {
+			continue
+		}
+		if filter.SkipCanaryHeartbeatFiles && IsCanaryHeartbeatFile(entry.Name()) {
 			continue
 		}
 		audioType := AudioTypeForPath(entry.Name())
@@ -175,10 +204,14 @@ func ReadyFiles(settings Settings, now time.Time) ([]FileCandidate, error) {
 		if now.Sub(entryInfo.ModTime()) < stable {
 			continue
 		}
-		path := filepath.Join(input, entry.Name())
+		path := filepath.Join(scanDir, entry.Name())
 		candidates = append(candidates, FileCandidate{Path: path, Name: entry.Name(), AudioType: audioType, SizeBytes: entryInfo.Size(), ModifiedAt: entryInfo.ModTime()})
 	}
 	return candidates, nil
+}
+
+func FileFingerprint(file FileCandidate) string {
+	return file.Path + ":" + fmt.Sprintf("%d:%d", file.SizeBytes, file.ModifiedAt.UnixNano())
 }
 
 func ProcessedPath(settings Settings, sourcePath string) string {
