@@ -9,9 +9,12 @@ import (
 )
 
 const (
-	updateUserError  = "update user"
-	deleteUserError  = "delete user"
-	userNotFoundText = "user not found"
+	updateUserError       = "update user"
+	deleteUserError       = "delete user"
+	setUserPasswordError  = "set user password"
+	userNotFoundText      = "user not found"
+	minUserPasswordLength = 8
+	maxUserPasswordLength = 72
 )
 
 type updateUserRequest struct {
@@ -19,6 +22,10 @@ type updateUserRequest struct {
 	Status            string `json:"status"`
 	TxEnabled         *bool  `json:"txEnabled,omitempty"`
 	DispatcherEnabled *bool  `json:"dispatcherEnabled,omitempty"`
+}
+
+type setUserPasswordRequest struct {
+	Password string `json:"password"`
 }
 
 func normalizeUserRole(role string) string {
@@ -68,6 +75,17 @@ func (h *handler) ensureMoreThanOneActiveAdmin(w http.ResponseWriter, operation,
 		return false
 	}
 	return true
+}
+
+func validateUserPassword(password string) string {
+	password = strings.TrimSpace(password)
+	if len(password) < minUserPasswordLength {
+		return "password must be at least 8 characters"
+	}
+	if len(password) > maxUserPasswordLength {
+		return "password must be at most 72 characters"
+	}
+	return ""
 }
 
 func (h *handler) handleListUsers(w http.ResponseWriter, r *http.Request) {
@@ -160,6 +178,63 @@ func (h *handler) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		auditMeta["dispatcherEnabled"] = *req.DispatcherEnabled
 	}
 	_ = h.db.AppendAuditLog(admin.ID, "admin.user_updated", "user", userID, auditMeta)
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *handler) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
+	if !h.cfg.AuthPasswordLoginEnabled {
+		http.Error(w, "password login disabled", http.StatusForbidden)
+		return
+	}
+	admin, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	userID := r.PathValue("id")
+	if strings.TrimSpace(userID) == "" {
+		http.Error(w, "missing user id", http.StatusBadRequest)
+		return
+	}
+
+	var req setUserPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if message := validateUserPassword(req.Password); message != "" {
+		http.Error(w, message, http.StatusBadRequest)
+		return
+	}
+
+	users, err := h.db.ListUsers()
+	if err != nil {
+		h.logger.Error("list users for password set failed", "error", err)
+		http.Error(w, setUserPasswordError, http.StatusInternalServerError)
+		return
+	}
+	target, found := findUserByID(users, userID)
+	if !found {
+		http.Error(w, userNotFoundText, http.StatusNotFound)
+		return
+	}
+
+	updated, err := h.db.SetUserPassword(userID, req.Password)
+	if err != nil {
+		h.logger.Error("set user password failed", "user_id", userID, "error", err)
+		http.Error(w, setUserPasswordError, http.StatusInternalServerError)
+		return
+	}
+	if !updated {
+		http.Error(w, userNotFoundText, http.StatusNotFound)
+		return
+	}
+
+	_ = h.db.AppendAuditLog(admin.ID, "admin.user_password_set", "user", userID, map[string]any{
+		"actorEmail":  admin.Email,
+		"targetEmail": target.Email,
+	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

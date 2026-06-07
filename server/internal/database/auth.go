@@ -302,6 +302,7 @@ func (d *DB) ListUsers() ([]User, error) {
 		SELECT id, email, role, status,
 		       COALESCE(tx_enabled, FALSE),
 		       COALESCE(dispatcher_enabled, FALSE),
+		       (password_hash IS NOT NULL AND BTRIM(password_hash) <> ''),
 		       created_at, updated_at
 		FROM users
 		ORDER BY created_at ASC
@@ -314,7 +315,11 @@ func (d *DB) ListUsers() ([]User, error) {
 	users := make([]User, 0)
 	for rows.Next() {
 		var user User
-		if err := rows.Scan(&user.ID, &user.Email, &user.Role, &user.Status, &user.TxEnabled, &user.DispatcherEnabled, &user.CreatedAt, &user.UpdatedAt); err != nil {
+		if err := rows.Scan(
+			&user.ID, &user.Email, &user.Role, &user.Status,
+			&user.TxEnabled, &user.DispatcherEnabled, &user.PasswordConfigured,
+			&user.CreatedAt, &user.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
 		users = append(users, user)
@@ -417,6 +422,57 @@ func (d *DB) DeleteUser(userID string) (bool, error) {
 		return false, nil
 	}
 
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// SetUserPassword hashes and stores a password for the user.
+func (d *DB) SetUserPassword(userID, password string) (bool, error) {
+	hash, err := hashPassword(password)
+	if err != nil {
+		return false, err
+	}
+	return d.SetUserPasswordHash(userID, hash)
+}
+
+// SetUserPasswordHash stores a bcrypt hash for the user and revokes existing sessions.
+func (d *DB) SetUserPasswordHash(userID, passwordHash string) (bool, error) {
+	passwordHash = strings.TrimSpace(passwordHash)
+	if userID == "" || passwordHash == "" {
+		return false, nil
+	}
+	tx, err := d.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	result, err := tx.Exec(`
+		UPDATE users
+		SET password_hash = $2, updated_at = $3
+		WHERE id = $1
+	`, userID, passwordHash, time.Now().Unix())
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if rows == 0 {
+		return false, nil
+	}
+	if _, err := tx.Exec(`
+		UPDATE auth_sessions
+		SET revoked_at = $2
+		WHERE user_id = $1 AND revoked_at = 0
+	`, userID, time.Now().Unix()); err != nil {
+		return false, err
+	}
 	if err := tx.Commit(); err != nil {
 		return false, err
 	}

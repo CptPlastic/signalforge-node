@@ -37,6 +37,7 @@ type AccountViewProps = Readonly<{
   onRefreshUsers: () => void | Promise<void>
   onSaveUser: (user: UserRecord) => void | Promise<void>
   onApproveUser: (user: UserRecord) => void | Promise<void>
+  onSetUserPassword: (user: UserRecord, password: string) => void | Promise<void>
   onRemoveUser: (user: UserRecord) => void | Promise<void>
   onRefreshAuditLogs: () => void | Promise<void>
 }>
@@ -63,6 +64,7 @@ type AuthAccessCardProps = Pick<
 
 type UserManagementPanelProps = Pick<
   AccountViewProps,
+  | 'authCapabilities'
   | 'users'
   | 'setUsers'
   | 'usersLoading'
@@ -70,6 +72,7 @@ type UserManagementPanelProps = Pick<
   | 'onRefreshUsers'
   | 'onSaveUser'
   | 'onApproveUser'
+  | 'onSetUserPassword'
   | 'onRemoveUser'
 >
 
@@ -245,6 +248,7 @@ function AuthAccessCard({
 }
 
 function UserManagementPanel({
+  authCapabilities,
   users,
   setUsers,
   usersLoading,
@@ -252,8 +256,39 @@ function UserManagementPanel({
   onRefreshUsers,
   onSaveUser,
   onApproveUser,
+  onSetUserPassword,
   onRemoveUser,
 }: UserManagementPanelProps) {
+  const passwordLoginEnabled = authCapabilities?.passwordLoginEnabled ?? false
+  const [passwordUserID, setPasswordUserID] = useState<string | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+
+  function openPasswordForm(userID: string) {
+    setPasswordUserID(userID)
+    setNewPassword('')
+    setConfirmPassword('')
+  }
+
+  function closePasswordForm() {
+    setPasswordUserID(null)
+    setNewPassword('')
+    setConfirmPassword('')
+  }
+
+  async function submitPassword(user: UserRecord) {
+    if (newPassword.length < 8) {
+      globalThis.window.alert('Password must be at least 8 characters.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      globalThis.window.alert('Passwords do not match.')
+      return
+    }
+    await onSetUserPassword(user, newPassword)
+    closePasswordForm()
+  }
+
   return (
     <div className="border border-console-border rounded p-3 overflow-auto">
       <div className="flex items-center justify-between mb-2">
@@ -275,6 +310,7 @@ function UserManagementPanel({
             <th className="py-1.5 px-2 text-left font-normal">Status</th>
             <th className="py-1.5 px-2 text-left font-normal">TX</th>
             <th className="py-1.5 px-2 text-left font-normal">Dispatch</th>
+            {passwordLoginEnabled && <th className="py-1.5 px-2 text-left font-normal">Password</th>}
             <th className="py-1.5 px-2 text-left font-normal">Created</th>
             <th className="py-1.5 px-2 text-left font-normal">Updated</th>
             <th className="py-1.5 px-2 text-left font-normal">Actions</th>
@@ -331,10 +367,18 @@ function UserManagementPanel({
                   <span className="uppercase tracking-wider">{user.dispatcherEnabled ? 'On' : 'Off'}</span>
                 </label>
               </td>
+              {passwordLoginEnabled && (
+                <td className="py-2 px-2">
+                  <span className={`text-[10px] uppercase tracking-wider ${user.passwordConfigured ? 'text-console-accent' : 'text-console-muted'}`}>
+                    {user.passwordConfigured ? 'Set' : 'None'}
+                  </span>
+                </td>
+              )}
               <td className="py-2 px-2 text-console-muted">{fmtDateTime(user.createdAt)}</td>
               <td className="py-2 px-2 text-console-muted">{fmtDateTime(user.updatedAt)}</td>
               <td className="py-2 px-2">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {user.status === 'pending' && (
                     <button
                       onClick={() => onApproveUser(user)}
@@ -351,6 +395,15 @@ function UserManagementPanel({
                   >
                     SAVE
                   </button>
+                  {passwordLoginEnabled && (
+                    <button
+                      onClick={() => (passwordUserID === user.id ? closePasswordForm() : openPasswordForm(user.id))}
+                      className="px-2 py-1 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent"
+                      disabled={userActionID === user.id}
+                    >
+                      {passwordUserID === user.id ? 'CANCEL PW' : user.passwordConfigured ? 'RESET PW' : 'SET PW'}
+                    </button>
+                  )}
                   <button
                     onClick={() => onRemoveUser(user)}
                     className="px-2 py-1 border border-console-error text-console-error rounded text-[10px] hover:bg-console-error hover:bg-opacity-10"
@@ -359,12 +412,40 @@ function UserManagementPanel({
                     DELETE
                   </button>
                 </div>
+                {passwordLoginEnabled && passwordUserID === user.id && (
+                  <div className="flex flex-col gap-2 rounded border border-console-border/70 bg-console-bg/40 p-2 max-w-xs">
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      placeholder="New password (min 8 chars)"
+                      autoComplete="new-password"
+                      className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
+                    />
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      placeholder="Confirm password"
+                      autoComplete="new-password"
+                      className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
+                    />
+                    <button
+                      onClick={() => void submitPassword(user)}
+                      className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10"
+                      disabled={userActionID === user.id}
+                    >
+                      {userActionID === user.id ? 'SAVING...' : 'SAVE PASSWORD'}
+                    </button>
+                  </div>
+                )}
+                </div>
               </td>
             </tr>
           ))}
           {users.length === 0 && (
             <tr>
-              <td className="py-3 px-2 text-console-muted" colSpan={9}>No users</td>
+              <td className="py-3 px-2 text-console-muted" colSpan={passwordLoginEnabled ? 10 : 9}>No users</td>
             </tr>
           )}
         </tbody>
@@ -482,6 +563,7 @@ export function AccountView({
   onRefreshUsers,
   onSaveUser,
   onApproveUser,
+  onSetUserPassword,
   onRemoveUser,
   onRefreshAuditLogs,
 }: AccountViewProps) {
@@ -516,6 +598,7 @@ export function AccountView({
 
         {showAdminPanels && (
           <UserManagementPanel
+            authCapabilities={authCapabilities}
             users={users}
             setUsers={setUsers}
             usersLoading={usersLoading}
@@ -523,6 +606,7 @@ export function AccountView({
             onRefreshUsers={onRefreshUsers}
             onSaveUser={onSaveUser}
             onApproveUser={onApproveUser}
+            onSetUserPassword={onSetUserPassword}
             onRemoveUser={onRemoveUser}
           />
         )}

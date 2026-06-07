@@ -119,14 +119,15 @@ type IngestionSource struct {
 
 // User represents an account that can own sources and sessions.
 type User struct {
-	ID                string `json:"id"`
-	Email             string `json:"email"`
-	Role              string `json:"role"`
-	Status            string `json:"status"`
-	TxEnabled         bool   `json:"txEnabled"`
-	DispatcherEnabled bool   `json:"dispatcherEnabled"`
-	CreatedAt         int64  `json:"createdAt"`
-	UpdatedAt         int64  `json:"updatedAt"`
+	ID                  string `json:"id"`
+	Email               string `json:"email"`
+	Role                string `json:"role"`
+	Status              string `json:"status"`
+	TxEnabled           bool   `json:"txEnabled"`
+	DispatcherEnabled   bool   `json:"dispatcherEnabled"`
+	PasswordConfigured  bool   `json:"passwordConfigured"`
+	CreatedAt           int64  `json:"createdAt"`
+	UpdatedAt           int64  `json:"updatedAt"`
 }
 
 // AuditLogEntry represents a single audit event.

@@ -1370,6 +1370,21 @@ function App() {
   }
   }
 
+  async function setUserPassword(user: UserRecord, password: string) {
+  setUserActionID(user.id)
+  setAuthError('')
+  setAuthMessage('')
+  try {
+    await api.setUserPassword(user.id, password)
+    await refreshUsers()
+    setAuthMessage(`Password updated for ${user.email}`)
+  } catch (err) {
+    setAuthError(getErrorMessage(err, `Could not set password for ${user.email}`))
+  } finally {
+    setUserActionID(null)
+  }
+  }
+
   async function removeUser(user: UserRecord) {
   const confirmed = globalThis.window.confirm(`Delete user ${user.email}?`)
   if (!confirmed) {
@@ -2973,6 +2988,7 @@ function App() {
         onRefreshUsers={refreshUsers}
         onSaveUser={saveUser}
         onApproveUser={approveUser}
+        onSetUserPassword={setUserPassword}
         onRemoveUser={removeUser}
         onRefreshAuditLogs={refreshAuditLogs}
       />

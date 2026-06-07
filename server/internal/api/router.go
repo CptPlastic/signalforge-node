@@ -64,6 +64,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Get("/api/v1/federation/calls", handle.handleFederationCalls)
 		r.Get("/api/v1/users", handle.handleListUsers)
 		r.Patch("/api/v1/users/{id}", handle.handleUpdateUser)
+		r.Put("/api/v1/users/{id}/password", handle.handleSetUserPassword)
 		r.Delete("/api/v1/users/{id}", handle.handleDeleteUser)
 		r.Get("/api/v1/audit-logs", handle.handleListAuditLogs)
 		r.Get("/api/v1/calls/groups", handle.handleListCallGroups)

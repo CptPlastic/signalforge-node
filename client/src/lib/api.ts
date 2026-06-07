@@ -185,6 +185,7 @@ export type UserRecord = {
   status: 'active' | 'pending' | 'disabled'
   txEnabled: boolean
   dispatcherEnabled: boolean
+  passwordConfigured: boolean
   createdAt: number
   updatedAt: number
 }
@@ -337,6 +338,11 @@ export const api = {
   deleteUser: (id: string) =>
     request<{ status: string }>(`/api/v1/users/${encodeURIComponent(id)}`, {
       method: 'DELETE',
+    }),
+  setUserPassword: (id: string, password: string) =>
+    request<{ status: string }>(`/api/v1/users/${encodeURIComponent(id)}/password`, {
+      method: 'PUT',
+      body: JSON.stringify({ password }),
     }),
   auditLogs: (limit = 100) => request<AuditLogEntry[]>(`/api/v1/audit-logs?limit=${encodeURIComponent(String(limit))}`),
   hubIdentity: () => request<HubIdentity>('/api/v1/hub/identity'),
