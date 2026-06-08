@@ -19,4 +19,19 @@
 
 #define OLED_WIDTH 128
 #define OLED_HEIGHT 64
+// Dual-color 0.96" modules: pixels 0–15 yellow, 16–63 blue. Keep big text below 16.
+#define OLED_YELLOW_BOTTOM 16
+#define OLED_Y_STATUS 0
+#define OLED_Y_BLUE_TITLE 17
+#define OLED_Y_BLUE_LINE1 26
+#define OLED_Y_BLUE_LINE2 36
+#define OLED_Y_BLUE_LINE3 46
+#define OLED_Y_BLUE_LINE4 56
 #define OLED_I2C_ADDR 0x3C
+// Charge-pump mode for most 0.96" modules (VCC on 3.3V or 5V through onboard reg).
+// If detected but very dim/blank, try 1 (VCC wired straight to 3.3V only).
+#define OLED_EXTERNAL_VCC 0
+// If white flash works but text is invisible, try 2 (common on SH1106 1.3" clones).
+#define OLED_X_OFFSET 0
+// Pixel brightness: 0x00–0xFF. Lower = dimmer (better night light discipline).
+#define OLED_CONTRAST 0x5F

@@ -74,6 +74,38 @@ func browserPlayableAudio(audioType, audioName string) bool {
 	return strings.HasPrefix(t, "audio/")
 }
 
+// streamAudioIsMP3 reports whether stored call audio is already MP3.
+func streamAudioIsMP3(audioType string, audio []byte) bool {
+	base := strings.ToLower(strings.TrimSpace(strings.Split(audioType, ";")[0]))
+	switch base {
+	case "audio/mpeg", "audio/mp3":
+		return true
+	}
+	if len(audio) >= 3 && audio[0] == 'I' && audio[1] == 'D' && audio[2] == '3' {
+		return true
+	}
+	return readMP3Bitrate(audio) > 0
+}
+
+// preparePublicStreamAudio transcodes to MP3 when wantMP3 is set and the clip is not already MP3.
+// On transcode failure the original bytes and type are returned with the error.
+func preparePublicStreamAudio(ctx context.Context, audio []byte, audioType string, wantMP3 bool) ([]byte, string, error) {
+	if !wantMP3 || len(audio) == 0 {
+		if audioType == "" {
+			return audio, "audio/mpeg", nil
+		}
+		return audio, audioType, nil
+	}
+	if streamAudioIsMP3(audioType, audio) {
+		return audio, "audio/mpeg", nil
+	}
+	mp3, err := transcodeAudioToMP3(ctx, audio)
+	if err != nil {
+		return audio, audioType, err
+	}
+	return mp3, "audio/mpeg", nil
+}
+
 func transcodeAudioToMP3(ctx context.Context, audio []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -88,8 +120,12 @@ const pttPreferredAudioType = "audio/mp4"
 
 // pttAudioNeedsNormalize reports whether uploaded PTT should be transcoded to M4A/AAC.
 func pttAudioNeedsNormalize(audioType string) bool {
-	t := strings.ToLower(strings.TrimSpace(strings.Split(audioType, ";")[0]))
-	switch t {
+	t := strings.ToLower(strings.TrimSpace(audioType))
+	if strings.Contains(t, "opus") {
+		return true
+	}
+	base := strings.Split(t, ";")[0]
+	switch base {
 	case "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/aac", "audio/mpeg", "audio/mp3":
 		return false
 	default:

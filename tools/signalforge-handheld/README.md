@@ -106,10 +106,18 @@ The `esp32s3` environment enables PSRAM flags for N8R8 modules. Use `esp32` for 
 
 ## Usage
 
-1. Power on → WiFi → login → listen socket.
-2. Incoming calls play on the speaker; OLED shows talkgroup.
-3. **Hold PTT** → record → **release** → upload clip.
+1. Power on → WiFi → listen socket (PTT: `login email password` once over USB serial).
+2. Incoming calls decode and play on the **MAX98357A** speaker; OLED shows talkgroup/metadata.
+3. **Hold PTT** → record on **INMP441** → **release** → upload clip.
 4. Other listeners (and your unit after upload) hear the PTT call on the set.
+
+Without speaker/mic wired, firmware still boots fine — serial `status` shows which paths initialized.
+
+## Audio / RAM notes
+
+- Live playback uses `HANDHELD_ENABLE_AUDIO_PLAYBACK` in `hub_config.h` (default **on**).
+- Handheld connects with `?seed=0&format=mp3` — no history burst on connect; hub transcodes M4A/PTT to MP3 for ESP32 playback (needs hub deploy with ffmpeg).
+- Decode is skipped when free heap drops below `HANDHELD_AUDIO_MIN_HEAP` (default 70 KB).
 
 ## RAM notes
 

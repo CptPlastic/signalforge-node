@@ -40,7 +40,7 @@ void serialCliPrintHelp() {
   Serial.println("  logout");
 }
 
-void serialCliHandleLine(const char *line, HubClient &hub) {
+void serialCliHandleLine(const char *line, HubClient &hub, const FieldDeviceStatus &status) {
   char buf[256];
   strncpy(buf, line, sizeof(buf) - 1);
   buf[sizeof(buf) - 1] = '\0';
@@ -57,7 +57,11 @@ void serialCliHandleLine(const char *line, HubClient &hub) {
   }
 
   if (strcmp(cmd, "status") == 0) {
-    Serial.printf("[status] session=%s\n", hub.ensureSession() ? "ok" : "missing");
+    Serial.printf("[status] wifi=%s listen=%s session=%s\n", status.wifiUp ? "up" : "down",
+                  status.listenUp ? "up" : "down", hub.ensureSession() ? "ok" : "missing");
+    Serial.printf("[status] speaker=%s mic=%s playback=%s heap=%u\n",
+                  status.speakerReady ? "ready" : "off", status.micReady ? "ready" : "off",
+                  status.audioPlaybackEnabled ? "on" : "off", ESP.getFreeHeap());
     return;
   }
 

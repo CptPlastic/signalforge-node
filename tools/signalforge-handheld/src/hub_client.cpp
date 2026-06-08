@@ -9,14 +9,19 @@
 
 #include "hub_config.h"
 
+#ifndef HANDHELD_ENABLE_AUDIO_PLAYBACK
+#define HANDHELD_ENABLE_AUDIO_PLAYBACK 1
+#endif
+#ifndef HANDHELD_AUDIO_MIN_HEAP
+#define HANDHELD_AUDIO_MIN_HEAP 70000
+#endif
+
 namespace {
 constexpr const char *kPrefsNs = "sfhandheld";
 constexpr const char *kPrefsToken = "token";
 
-bool decodeBase64(const char *input, uint8_t **outData, size_t *outLen) {
-  if (!input || !outData || !outLen) return false;
-  const size_t inLen = strlen(input);
-  if (inLen == 0) return false;
+bool decodeBase64Slice(const char *input, size_t inLen, uint8_t **outData, size_t *outLen) {
+  if (!input || inLen == 0 || !outData || !outLen) return false;
   size_t olen = 0;
   if (mbedtls_base64_decode(nullptr, 0, &olen,
                             reinterpret_cast<const unsigned char *>(input), inLen) !=
@@ -33,6 +38,66 @@ bool decodeBase64(const char *input, uint8_t **outData, size_t *outLen) {
   *outData = buf;
   *outLen = olen;
   return true;
+}
+
+bool decodeBase64(const char *input, uint8_t **outData, size_t *outLen) {
+  if (!input) return false;
+  return decodeBase64Slice(input, strlen(input), outData, outLen);
+}
+
+bool findCallAudioInJson(const char *json, size_t jsonLen, const char **b64Out, size_t *b64LenOut) {
+  if (!json || jsonLen < 12 || !b64Out || !b64LenOut) return false;
+
+  const char *markers[] = {"\"audio\":\"", "\"audio\": \""};
+  const char *start = nullptr;
+  for (const char *marker : markers) {
+    const size_t markerLen = strlen(marker);
+    if (jsonLen <= markerLen) continue;
+    const char *hit = strstr(json, marker);
+    if (hit && static_cast<size_t>(hit - json) + markerLen < jsonLen) {
+      start = hit + markerLen;
+      break;
+    }
+  }
+  if (!start) return false;
+
+  const char *end = start;
+  while (end < json + jsonLen && *end != '"') {
+    end++;
+  }
+  if (end == start) return false;
+
+  *b64Out = start;
+  *b64LenOut = static_cast<size_t>(end - start);
+  return true;
+}
+
+bool attachCallAudio(HubCallEvent &event, const char *payload, size_t payloadLen) {
+#if !HANDHELD_ENABLE_AUDIO_PLAYBACK
+  (void)event;
+  (void)payload;
+  (void)payloadLen;
+  return false;
+#else
+  const char *b64 = nullptr;
+  size_t b64Len = 0;
+  if (!findCallAudioInJson(payload, payloadLen, &b64, &b64Len) || b64Len < 16) {
+    return false;
+  }
+
+  const uint32_t heap = ESP.getFreeHeap();
+  if (heap < HANDHELD_AUDIO_MIN_HEAP) {
+    Serial.printf("[audio] skip decode heap=%u need>=%u\n", heap, HANDHELD_AUDIO_MIN_HEAP);
+    return false;
+  }
+
+  if (!decodeBase64Slice(b64, b64Len, &event.audio, &event.audioLen)) {
+    Serial.printf("[audio] decode failed heap=%u\n", ESP.getFreeHeap());
+    return false;
+  }
+  Serial.printf("[audio] decoded %uB heap=%u\n", static_cast<unsigned>(event.audioLen), ESP.getFreeHeap());
+  return true;
+#endif
 }
 }  // namespace
 
@@ -171,10 +236,13 @@ bool HubClient::handleListenMessage(const char *payload, size_t len) {
   filter["cmd"] = true;
   filter["id"] = true;
   filter["talkgroupLabel"] = true;
+  filter["talkgroupGroup"] = true;
   filter["systemLabel"] = true;
   filter["origin"] = true;
   filter["senderEmail"] = true;
   filter["audioType"] = true;
+  filter["duration"] = true;
+  filter["frequency"] = true;
 
   JsonDocument doc;
   const DeserializationError err =
@@ -192,12 +260,21 @@ bool HubClient::handleListenMessage(const char *payload, size_t len) {
   HubCallEvent event;
   event.id = doc["id"] | 0LL;
   event.talkgroupLabel = doc["talkgroupLabel"].as<String>();
+  event.talkgroupGroup = doc["talkgroupGroup"].as<String>();
   event.systemLabel = doc["systemLabel"].as<String>();
   event.origin = doc["origin"].as<String>();
   event.senderEmail = doc["senderEmail"].as<String>();
   event.audioType = doc["audioType"].as<String>();
+  event.durationSec = doc["duration"] | 0.0f;
+  event.frequencyHz = doc["frequency"] | 0;
 
+  attachCallAudio(event, payload, len);
   onCall_(event);
+  if (event.audio) {
+    free(event.audio);
+    event.audio = nullptr;
+    event.audioLen = 0;
+  }
   return true;
 }
 
@@ -208,10 +285,12 @@ void onWebSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
   if (!g_activeHub) return;
   switch (type) {
     case WStype_CONNECTED:
+      g_activeHub->setListenConnected(true);
       Serial.printf("listen ws connected heap=%u max=%u\n", ESP.getFreeHeap(),
                     static_cast<unsigned>(WEBSOCKETS_MAX_DATA_SIZE));
       break;
     case WStype_DISCONNECTED:
+      g_activeHub->setListenConnected(false);
       Serial.printf("listen ws disconnected heap=%u%s%s\n", ESP.getFreeHeap(),
                     payload && length ? " data=" : "",
                     payload && length ? reinterpret_cast<const char *>(payload) : "");
@@ -230,10 +309,11 @@ void onWebSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
 
 bool HubClient::connectListen(const char *shareToken, HubCallHandler onCall) {
   onCall_ = onCall;
+  listenUp_ = false;
   disconnectListen();
 
   auto *ws = new WebSocketsClient();
-  const String path = String("/public/ws/") + shareToken + "?seed=0";
+  const String path = String("/public/ws/") + shareToken + "?seed=0&format=mp3";
   if (useTls_) {
     // Empty fingerprint uses WebSocketsClient's ESP32 TLS path (setInsecure when no CA set).
     // Set HUB_TLS_INSECURE=1 in hub_config.h for self-signed / lab hubs.
@@ -256,6 +336,7 @@ void HubClient::listenLoop() {
 }
 
 void HubClient::disconnectListen() {
+  listenUp_ = false;
   if (!ws_) return;
   auto *ws = static_cast<WebSocketsClient *>(ws_);
   ws->disconnect();

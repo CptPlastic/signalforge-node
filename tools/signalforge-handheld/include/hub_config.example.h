@@ -24,3 +24,9 @@
 #define PTT_SAMPLE_RATE 16000
 #define PTT_MAX_SECONDS 30
 #define PTT_MAX_SECONDS_NO_PSRAM 10
+
+// Decode hub call audio and play on I2S speaker (MAX98357A). Safe to leave on
+// without hardware — decode/queue only runs when heap allows.
+#define HANDHELD_ENABLE_AUDIO_PLAYBACK 1
+// Minimum free heap before decoding a call clip (~22KB decoded + TLS headroom).
+#define HANDHELD_AUDIO_MIN_HEAP 70000

@@ -130,7 +130,7 @@ Authenticated session required for radio-set management. Public player routes ar
 | `POST` | `/api/v1/radio-sets/{id}/share` | Generate a public player share token. |
 | `DELETE` | `/api/v1/radio-sets/{id}/share` | Revoke a public player share token. |
 | `GET` | `/public/player/{token}` | Public embeddable player page. |
-| `GET` | `/public/ws/{token}` | Public WebSocket carrying call metadata and base64 audio atomically. |
+| `GET` | `/public/ws/{token}` | Public WebSocket carrying call metadata and base64 audio atomically. Query: `seed=0` skips recent-call seeding; `format=mp3` transcodes non-MP3 clips to `audio/mpeg` (for embedded players). |
 | `GET` | `/public/last-call/{token}` | Most recent call audio for a public share token. |
 
 ## Sources And Source Keys

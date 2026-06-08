@@ -255,7 +255,25 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 	ch, unsubscribe := h.streamHub.subscribe(rs.UserID, subscribedTalkgroups, subscribedGroups, sourceIDs)
 	defer unsubscribe()
 
+	wantMP3 := strings.EqualFold(r.URL.Query().Get("format"), "mp3")
+	if wantMP3 {
+		h.logger.Info("public stream mp3 format enabled", "radio_set_id", rs.ID)
+	}
+
 	sendCall := func(meta streamCallMeta, audio []byte) error {
+		audioType := meta.AudioType
+		if wantMP3 {
+			var err error
+			audio, audioType, err = preparePublicStreamAudio(ctx, audio, audioType, true)
+			if err != nil {
+				h.logger.Warn("public stream mp3 transcode failed",
+					"radio_set_id", rs.ID,
+					"call_id", meta.ID,
+					"audio_type", meta.AudioType,
+					"error", err,
+				)
+			}
+		}
 		msg := playerWSCallMsg{
 			Cmd:            "call",
 			ID:             meta.ID,
@@ -266,7 +284,7 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 			Duration:       meta.Duration,
 			Frequency:      meta.Frequency,
 			SystemLabel:    meta.SystemLabel,
-			AudioType:      meta.AudioType,
+			AudioType:      audioType,
 			TranscriptText: meta.TranscriptText,
 			Origin:         meta.Origin,
 			SenderUserID:   meta.SenderUserID,

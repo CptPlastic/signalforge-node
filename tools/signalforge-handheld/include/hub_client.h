@@ -6,10 +6,13 @@
 struct HubCallEvent {
   int64_t id = 0;
   String talkgroupLabel;
+  String talkgroupGroup;
   String systemLabel;
   String origin;
   String senderEmail;
   String audioType;
+  float durationSec = 0;
+  int frequencyHz = 0;
   uint8_t *audio = nullptr;
   size_t audioLen = 0;
 };
@@ -27,6 +30,9 @@ class HubClient {
   bool connectListen(const char *shareToken, HubCallHandler onCall);
   void listenLoop();
   void disconnectListen();
+  bool listenConnected() const { return listenUp_; }
+
+  void setListenConnected(bool up) { listenUp_ = up; }
 
   bool uploadPtt(const char *radioSetId,
                  const uint8_t *wavData,
@@ -45,6 +51,7 @@ class HubClient {
   String sessionToken_;
   HubCallHandler onCall_;
   void *ws_ = nullptr;
+  bool listenUp_ = false;
 
   bool httpRequest(const char *method,
                    const char *path,

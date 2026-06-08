@@ -53,6 +53,40 @@ func TestBrowserPlayableAudioRejectsAIFF(t *testing.T) {
 	}
 }
 
+func TestStreamAudioIsMP3(t *testing.T) {
+	if !streamAudioIsMP3("audio/mpeg", []byte{0xFF, 0xFB, 0x90, 0x00}) {
+		t.Fatal("expected audio/mpeg to be mp3")
+	}
+	if !streamAudioIsMP3("audio/mp4", []byte("ID3")) {
+		t.Fatal("expected ID3 tag to be treated as mp3")
+	}
+	if streamAudioIsMP3("audio/mp4", []byte{0x00, 0x00, 0x00, 0x1c, 'f', 't', 'y', 'p'}) {
+		t.Fatal("expected m4a ftyp to not be mp3")
+	}
+}
+
+func TestPreparePublicStreamAudioSkipsWhenNotRequested(t *testing.T) {
+	in := []byte("wav-bytes")
+	out, outType, err := preparePublicStreamAudio(t.Context(), in, "audio/wav", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(out) != string(in) || outType != "audio/wav" {
+		t.Fatalf("expected passthrough, got type=%q len=%d", outType, len(out))
+	}
+}
+
+func TestPreparePublicStreamAudioPassesThroughMP3(t *testing.T) {
+	in := []byte{0xFF, 0xFB, 0x90, 0x00, 0x01, 0x02}
+	out, outType, err := preparePublicStreamAudio(t.Context(), in, "audio/mp4", true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(out) != string(in) || outType != "audio/mpeg" {
+		t.Fatalf("expected mp3 passthrough with audio/mpeg type, got type=%q", outType)
+	}
+}
+
 func TestPTTAudioNeedsNormalize(t *testing.T) {
 	if pttAudioNeedsNormalize("audio/mp4") {
 		t.Fatal("expected mp4 to skip normalize")
@@ -65,6 +99,9 @@ func TestPTTAudioNeedsNormalize(t *testing.T) {
 	}
 	if !pttAudioNeedsNormalize("audio/webm;codecs=opus") {
 		t.Fatal("expected webm opus to require normalize")
+	}
+	if !pttAudioNeedsNormalize("audio/mp4;codecs=opus") {
+		t.Fatal("expected mp4 opus to require normalize")
 	}
 }
 
