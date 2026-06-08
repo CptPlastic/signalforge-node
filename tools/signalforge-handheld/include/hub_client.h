@@ -21,6 +21,7 @@ class HubClient {
   bool begin(const char *host, uint16_t port, bool useTls, bool tlsInsecure);
   bool login(const char *email, const char *password);
   bool ensureSession();
+  void clearSession();
   const String &sessionToken() const { return sessionToken_; }
 
   bool connectListen(const char *shareToken, HubCallHandler onCall);

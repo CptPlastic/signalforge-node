@@ -154,17 +154,33 @@ bool HubClient::ensureSession() {
   return sessionToken_.length() > 0;
 }
 
+void HubClient::clearSession() {
+  sessionToken_ = "";
+  Preferences prefs;
+  if (prefs.begin(kPrefsNs, false)) {
+    prefs.remove(kPrefsToken);
+    prefs.end();
+  }
+}
+
 bool HubClient::handleListenMessage(const char *payload, size_t len) {
-  if (!payload || len == 0) return false;
-  char *json = static_cast<char *>(malloc(len + 1));
-  if (!json) return false;
-  memcpy(json, payload, len);
-  json[len] = '\0';
+  if (!payload || len == 0 || !onCall_) return false;
+
+  // Skip the base64 audio blob — it is most of the ~30KB frame and exhausts ESP32 RAM.
+  JsonDocument filter;
+  filter["cmd"] = true;
+  filter["id"] = true;
+  filter["talkgroupLabel"] = true;
+  filter["systemLabel"] = true;
+  filter["origin"] = true;
+  filter["senderEmail"] = true;
+  filter["audioType"] = true;
 
   JsonDocument doc;
-  const DeserializationError err = deserializeJson(doc, json);
-  free(json);
+  const DeserializationError err =
+      deserializeJson(doc, payload, len, DeserializationOption::Filter(filter));
   if (err) {
+    Serial.printf("[listen] json parse failed: %s heap=%u\n", err.c_str(), ESP.getFreeHeap());
     return false;
   }
 
@@ -181,16 +197,7 @@ bool HubClient::handleListenMessage(const char *payload, size_t len) {
   event.senderEmail = doc["senderEmail"].as<String>();
   event.audioType = doc["audioType"].as<String>();
 
-  const char *audioB64 = doc["audio"];
-  if (!audioB64 || !onCall_) {
-    return false;
-  }
-  if (!decodeBase64(audioB64, &event.audio, &event.audioLen)) {
-    return false;
-  }
-
   onCall_(event);
-  free(event.audio);
   return true;
 }
 
@@ -201,10 +208,16 @@ void onWebSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
   if (!g_activeHub) return;
   switch (type) {
     case WStype_CONNECTED:
-      Serial.println("listen ws connected");
+      Serial.printf("listen ws connected heap=%u max=%u\n", ESP.getFreeHeap(),
+                    static_cast<unsigned>(WEBSOCKETS_MAX_DATA_SIZE));
       break;
     case WStype_DISCONNECTED:
-      Serial.println("listen ws disconnected");
+      Serial.printf("listen ws disconnected heap=%u%s%s\n", ESP.getFreeHeap(),
+                    payload && length ? " data=" : "",
+                    payload && length ? reinterpret_cast<const char *>(payload) : "");
+      break;
+    case WStype_ERROR:
+      Serial.println("listen ws error");
       break;
     case WStype_TEXT:
       g_activeHub->handleListenMessage(reinterpret_cast<const char *>(payload), length);
@@ -220,7 +233,7 @@ bool HubClient::connectListen(const char *shareToken, HubCallHandler onCall) {
   disconnectListen();
 
   auto *ws = new WebSocketsClient();
-  const String path = String("/public/ws/") + shareToken;
+  const String path = String("/public/ws/") + shareToken + "?seed=0";
   if (useTls_) {
     // Empty fingerprint uses WebSocketsClient's ESP32 TLS path (setInsecure when no CA set).
     // Set HUB_TLS_INSECURE=1 in hub_config.h for self-signed / lab hubs.
@@ -231,6 +244,7 @@ bool HubClient::connectListen(const char *shareToken, HubCallHandler onCall) {
   }
   ws->onEvent(onWebSocketEvent);
   ws->setReconnectInterval(5000);
+  ws->enableHeartbeat(25000, 10000, 2);
   ws_ = ws;
   g_activeHub = this;
   return true;

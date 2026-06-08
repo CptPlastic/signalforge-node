@@ -44,9 +44,16 @@ See `include/pins.h`. Summary:
 2. On each radio set card, open the **Field unit** panel and **COPY**:
    - **Listen token** → `HUB_SHARE_TOKEN` (click **SHARE** first if empty)
    - **Set ID** → `HUB_RADIO_SET_ID`
-4. Create a handheld user with **password login** enabled on the hub.
-5. In hub admin, enable **TX** for that user (`tx_enabled`).
-6. Edit `include/hub_config.h` — WiFi, hub host, share token, radio set ID, login.
+4. Create a **dedicated handheld** hub user (not your personal admin) with password login + **TX enabled**.
+5. Edit `include/hub_config.h` (local, gitignored) — WiFi, hub host, Field unit copies only.
+
+**Do not put hub login passwords in `hub_config.h` or git.** Listen uses the public share token only. PTT uses a one-time USB serial login; the hub session token is cached on the device (~24h).
+
+```text
+pio device monitor
+login handheld@yourhub.example your-password
+status
+```
 
 ## Test without wiring audio (logs only)
 
@@ -67,7 +74,7 @@ You should see lines like `call#123 | tg=... | audio=48210B` when traffic hits t
 
 ### Option B — ESP32 on USB, serial monitor only
 
-A board on USB (e.g. `/dev/cu.usbserial-*`) can run firmware **without** OLED/speaker/mic. Edit `hub_config.h` (WiFi + hub creds), then:
+A board on USB (e.g. `/dev/cu.usbserial-*`) can run firmware **without** OLED/speaker/mic. Edit `hub_config.h` (WiFi + Field unit values), then:
 
 ```bash
 pio run -e esp32 -t upload

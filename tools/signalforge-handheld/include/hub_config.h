@@ -1,7 +1,7 @@
 #pragma once
 
-// Edit this file with your WiFi, hub URL, share token, and PTT login.
-// config.example.h is a backup template only.
+// Local only — gitignored. Copy from hub_config.example.h.
+// PTT login is NOT stored here; use USB serial: login email password
 
 // WiFi
 #define WIFI_SSID "LODGE"
@@ -14,11 +14,9 @@
 
 // Hub → Radio Sets → Field unit panel → COPY Listen token / Set ID.
 #define HUB_SHARE_TOKEN "share_660c65e7922137ac53ed0167667e104299a25efa139b6d97d6c33bbf08c6f7cb"
-#define HUB_RADIO_SET_ID "paste_radio_set_uuid_here"
-#define HUB_LOGIN_EMAIL "handheld@local.signalforge"
-#define HUB_LOGIN_PASSWORD "change-me-strong"
+#define HUB_RADIO_SET_ID "rs_ec317b6ae4e4b85fe9b00ff33cba1db2f3b1d5c5eea4ecef30f3d4fd6d3dc01f"
 
-// 1 = accept any TLS cert (recommended for first bench test). 0 = same path today; pin CA later.
+// 1 = accept any TLS cert (recommended for first bench test).
 #define HUB_TLS_INSECURE 1
 
 // Audio

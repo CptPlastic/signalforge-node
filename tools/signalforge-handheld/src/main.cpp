@@ -9,6 +9,7 @@
 #include "hub_client.h"
 #include "pins.h"
 #include "ptt_button.h"
+#include "serial_cli.h"
 
 namespace {
 FieldDisplay gDisplay;
@@ -23,6 +24,7 @@ bool gWsConnected = false;
 uint32_t gLastUiMs = 0;
 uint32_t gRecordStartMs = 0;
 bool gTransmitting = false;
+int64_t gLastCallId = 0;
 
 struct PendingClip {
   uint8_t *data = nullptr;
@@ -68,19 +70,29 @@ void queueClip(uint8_t *data, size_t len, const String &audioType) {
 }
 
 void onHubCall(const HubCallEvent &event) {
+  if (event.id > 0 && event.id <= gLastCallId) {
+    return;
+  }
+  if (event.id > gLastCallId) {
+    gLastCallId = event.id;
+  }
+
   gLastTalkgroup = event.talkgroupLabel.length() ? event.talkgroupLabel : String("TG #") + event.id;
   if (event.origin == "ptt" && event.senderEmail.length()) {
     gStatusLine = "PTT " + event.senderEmail;
   } else {
     gStatusLine = event.systemLabel.length() ? event.systemLabel : "call";
   }
-  Serial.printf("[call] id=%lld tg=%s sys=%s origin=%s audio=%uB\n",
+  Serial.printf("[call] id=%lld tg=%s sys=%s origin=%s type=%s\n",
                 static_cast<long long>(event.id),
                 gLastTalkgroup.c_str(),
                 event.systemLabel.c_str(),
                 event.origin.c_str(),
-                static_cast<unsigned>(event.audioLen));
+                event.audioType.c_str());
 
+  if (!event.audio || event.audioLen == 0) {
+    return;
+  }
   uint8_t *copy = static_cast<uint8_t *>(malloc(event.audioLen));
   if (!copy) return;
   memcpy(copy, event.audio, event.audioLen);
@@ -102,25 +114,21 @@ bool connectWifi() {
     gDisplay.showError("WiFi", "connect failed");
     return false;
   }
-  Serial.printf("[wifi] connected ip=%s rssi=%d\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
+  WiFi.setSleep(false);
+  Serial.printf("[wifi] connected ip=%s rssi=%d sleep=off\n", WiFi.localIP().toString().c_str(),
+                WiFi.RSSI());
   gDisplay.showWifi(WIFI_SSID, WiFi.RSSI());
   return true;
 }
 
-bool ensureLogin() {
+bool ensurePttSession() {
   if (gHub.ensureSession()) {
-    Serial.println("[auth] using cached session");
     return true;
   }
-  Serial.printf("[auth] logging in as %s\n", HUB_LOGIN_EMAIL);
-  if (!gHub.login(HUB_LOGIN_EMAIL, HUB_LOGIN_PASSWORD)) {
-    Serial.println("[auth] login failed — check email/password and TX enabled");
-    gDisplay.showLogin(false, "check creds/TX");
-    return false;
-  }
-  Serial.println("[auth] login ok");
-  gDisplay.showLogin(true, HUB_LOGIN_EMAIL);
-  return true;
+  Serial.println("[auth] PTT needs login — USB serial: login <email> <password>");
+  Serial.println("[auth] use a dedicated handheld hub account with TX enabled");
+  gDisplay.showLogin(false, "serial login");
+  return false;
 }
 
 void startListen() {
@@ -140,6 +148,12 @@ void servicePlayback() {
     gStatusLine = "decode err";
     freePending();
   }
+}
+
+void handleSerialInput() {
+  if (!Serial.available()) return;
+  String line = Serial.readStringUntil('\n');
+  serialCliHandleLine(line.c_str(), gHub);
 }
 
 void handlePtt() {
@@ -176,7 +190,7 @@ void handlePtt() {
     }
 
     gDisplay.showPttUpload("uploading...");
-    if (!ensureLogin()) {
+    if (!ensurePttSession()) {
       free(wav);
       gStatusLine = "login fail";
       return;
@@ -201,6 +215,7 @@ void setup() {
   digitalWrite(PIN_STATUS_LED, LOW);
 
   Serial.println("[boot] SignalForge field unit");
+  serialCliPrintHelp();
   if (!gDisplay.begin()) {
     Serial.println("[oled] not found — serial-only mode is fine");
   } else {
@@ -220,11 +235,16 @@ void setup() {
     return;
   }
   if (!connectWifi()) return;
-  if (!ensureLogin()) return;
   startListen();
+  if (gHub.ensureSession()) {
+    Serial.println("[auth] cached PTT session found");
+  } else {
+    Serial.println("[auth] listen is live — PTT needs one-time serial login");
+  }
 }
 
 void loop() {
+  handleSerialInput();
   gHub.listenLoop();
   gAudioOut.loop();
   handlePtt();

@@ -281,7 +281,15 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Seed with recent calls so the client has audio to play immediately on connect.
-	seedCalls, seedErr := h.seedPublicStreamCalls(rs, subscribedTalkgroups)
+	// Embedded clients (field handheld) pass ?seed=0 to avoid multi-megabyte bursts on connect.
+	skipSeed := r.URL.Query().Get("seed") == "0"
+	var seedCalls []database.Call
+	var seedErr error
+	if skipSeed {
+		h.logger.Info("public stream seed skipped", "radio_set_id", rs.ID)
+	} else {
+		seedCalls, seedErr = h.seedPublicStreamCalls(rs, subscribedTalkgroups)
+	}
 	if seedErr != nil {
 		h.logger.Error("public stream seed query failed", "radio_set_id", rs.ID, "error", seedErr)
 	} else if len(seedCalls) > 0 {

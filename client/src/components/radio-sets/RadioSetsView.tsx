@@ -538,7 +538,7 @@ export function RadioSetsView({
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[10px] text-console-muted uppercase tracking-wider">Field unit</span>
                     <span className="text-[9px] text-console-muted">
-                      Handheld firmware — copy into hub_config.h (Radio Sets screen, no digging in devtools)
+                      Copy into handheld hub_config.h. PTT login stays off the device — USB serial once per handheld account.
                     </span>
                   </div>
                   <FieldUnitConfigRow label="Set ID" hint="HUB_RADIO_SET_ID" value={radioSet.id} />
@@ -549,6 +549,11 @@ export function RadioSetsView({
                       No listen token yet — click <span className="text-console-text">SHARE</span> above, then copy it here.
                     </p>
                   )}
+                  <p className="text-[9px] text-console-muted border-t border-console-border/40 pt-1.5">
+                    PTT: create a dedicated hub user with TX enabled. On the device USB serial run{' '}
+                    <span className="font-mono text-console-text">login email password</span> once (session cached ~24h).
+                    Do not put hub passwords in firmware source.
+                  </p>
                 </div>
 
                 {radioSet.shareToken && (
