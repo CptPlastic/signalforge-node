@@ -233,6 +233,9 @@ bool HubClient::httpGetBinary(const char *path, int *outStatus, uint8_t **outDat
   size_t total = 0;
   const uint32_t start = millis();
   while (millis() - start < 45000) {
+    if (contentLen > 0 && total >= static_cast<size_t>(contentLen)) {
+      break;
+    }
     const int avail = tcp->available();
     if (avail > 0) {
       if (total + static_cast<size_t>(avail) > cap) {
@@ -244,10 +247,6 @@ bool HubClient::httpGetBinary(const char *path, int *outStatus, uint8_t **outDat
       }
       const int n = tcp->read(buf + total, avail);
       if (n > 0) total += static_cast<size_t>(n);
-    } else if (!tcp->connected() && !http.connected()) {
-      break;
-    } else if (contentLen > 0 && total >= static_cast<size_t>(contentLen)) {
-      break;
     } else {
       delay(1);
     }

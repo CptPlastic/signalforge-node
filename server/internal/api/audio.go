@@ -74,14 +74,23 @@ func browserPlayableAudio(audioType, audioName string) bool {
 	return strings.HasPrefix(t, "audio/")
 }
 
-// streamAudioIsMP3 reports whether stored call audio is already MP3.
+func audioIsMP4Container(audio []byte) bool {
+	return len(audio) >= 12 && bytes.Equal(audio[4:8], []byte("ftyp"))
+}
+
+func audioIsWAV(audio []byte) bool {
+	return len(audio) >= 12 && bytes.Equal(audio[0:4], []byte("RIFF")) && bytes.Equal(audio[8:12], []byte("WAVE"))
+}
+
+// streamAudioIsMP3 reports whether bytes are already MP3 (not merely labeled audio/mpeg).
 func streamAudioIsMP3(audioType string, audio []byte) bool {
-	base := strings.ToLower(strings.TrimSpace(strings.Split(audioType, ";")[0]))
-	switch base {
-	case "audio/mpeg", "audio/mp3":
-		return true
+	if audioIsMP4Container(audio) || audioIsWAV(audio) {
+		return false
 	}
 	if len(audio) >= 3 && audio[0] == 'I' && audio[1] == 'D' && audio[2] == '3' {
+		return true
+	}
+	if len(audio) >= 2 && audio[0] == 0xFF && (audio[1]&0xE0) == 0xE0 {
 		return true
 	}
 	return readMP3Bitrate(audio) > 0

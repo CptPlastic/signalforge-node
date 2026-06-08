@@ -55,13 +55,21 @@ func TestBrowserPlayableAudioRejectsAIFF(t *testing.T) {
 
 func TestStreamAudioIsMP3(t *testing.T) {
 	if !streamAudioIsMP3("audio/mpeg", []byte{0xFF, 0xFB, 0x90, 0x00}) {
-		t.Fatal("expected audio/mpeg to be mp3")
+		t.Fatal("expected mp3 sync frame to be mp3")
+	}
+	m4a := []byte{0x00, 0x00, 0x00, 0x1c, 'f', 't', 'y', 'p', 'M', '4', 'A', ' '}
+	if streamAudioIsMP3("audio/mpeg", m4a) {
+		t.Fatal("expected mislabeled m4a not to be mp3")
 	}
 	if !streamAudioIsMP3("audio/mp4", []byte("ID3")) {
 		t.Fatal("expected ID3 tag to be treated as mp3")
 	}
-	if streamAudioIsMP3("audio/mp4", []byte{0x00, 0x00, 0x00, 0x1c, 'f', 't', 'y', 'p'}) {
+	if streamAudioIsMP3("audio/mp4", m4a) {
 		t.Fatal("expected m4a ftyp to not be mp3")
+	}
+	wav := append(append([]byte("RIFF"), make([]byte, 4)...), []byte("WAVE")...)
+	if streamAudioIsMP3("audio/mpeg", wav) {
+		t.Fatal("expected wav not to be mp3")
 	}
 }
 

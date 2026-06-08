@@ -77,25 +77,27 @@ bool looksLikeMp4(const uint8_t *data, size_t len) {
 }
 
 bool isUnsupportedPlaybackType(const String &audioType, const uint8_t *data, size_t len) {
+  if (looksLikeWav(data, len) || looksLikeMp3(data, len)) return false;
+  if (looksLikeMp4(data, len)) return true;
   String type = audioType;
   type.toLowerCase();
   if (type.indexOf("mp4") >= 0 || type.indexOf("m4a") >= 0 || type.indexOf("opus") >= 0 ||
       type.indexOf("aac") >= 0 || type.indexOf("mpeg4") >= 0) {
     return true;
   }
-  if (looksLikeMp4(data, len)) return true;
-  if (looksLikeMp3(data, len) || looksLikeWav(data, len)) return false;
+  if (type.indexOf("wav") >= 0) return false;
+  if (type.indexOf("mpeg") >= 0 || type.indexOf("mp3") >= 0) return false;
   return len > 0;
 }
 
 ClipFormat detectClipFormat(const String &audioType, const uint8_t *data, size_t len) {
-  if (isUnsupportedPlaybackType(audioType, data, len)) return ClipFormat::Unsupported;
+  if (looksLikeWav(data, len)) return ClipFormat::Wav;
+  if (looksLikeMp3(data, len)) return ClipFormat::Mp3;
+  if (looksLikeMp4(data, len)) return ClipFormat::Unsupported;
   String type = audioType;
   type.toLowerCase();
-  if (type.indexOf("mpeg") >= 0 || type.indexOf("mp3") >= 0 || looksLikeMp3(data, len)) {
-    return ClipFormat::Mp3;
-  }
-  if (type.indexOf("wav") >= 0 || looksLikeWav(data, len)) return ClipFormat::Wav;
+  if (type.indexOf("wav") >= 0) return ClipFormat::Wav;
+  if (type.indexOf("mpeg") >= 0 || type.indexOf("mp3") >= 0) return ClipFormat::Mp3;
   return ClipFormat::Unsupported;
 }
 
