@@ -179,6 +179,109 @@ bool HubClient::httpRequest(const char *method,
   return status > 0;
 }
 
+bool HubClient::httpGetBinary(const char *path, int *outStatus, uint8_t **outData, size_t *outLen, String *outType) {
+  if (!path || !outData || !outLen) return false;
+  *outData = nullptr;
+  *outLen = 0;
+
+  WiFiClient *plain = nullptr;
+  WiFiClientSecure tls;
+  WiFiClient *stream = nullptr;
+
+  if (useTls_) {
+    tls.setInsecure();
+    stream = &tls;
+  } else {
+    plain = new WiFiClient();
+    stream = plain;
+  }
+
+  HTTPClient http;
+  const String url = String(useTls_ ? "https://" : "http://") + host_ + path;
+  if (!http.begin(*stream, url)) {
+    delete plain;
+    return false;
+  }
+  http.setTimeout(45000);
+  const int status = http.GET();
+  if (outStatus) *outStatus = status;
+  if (status != 200) {
+    http.end();
+    delete plain;
+    return false;
+  }
+  if (outType) {
+    *outType = http.header("Content-Type");
+  }
+  const int contentLen = http.getSize();
+  WiFiClient *tcp = http.getStreamPtr();
+  if (!tcp) {
+    http.end();
+    delete plain;
+    return false;
+  }
+
+  size_t cap = contentLen > 0 ? static_cast<size_t>(contentLen) : 65536;
+  if (cap > 262144) cap = 262144;
+  uint8_t *buf = static_cast<uint8_t *>(malloc(cap));
+  if (!buf) {
+    http.end();
+    delete plain;
+    return false;
+  }
+
+  size_t total = 0;
+  const uint32_t start = millis();
+  while (millis() - start < 45000) {
+    const int avail = tcp->available();
+    if (avail > 0) {
+      if (total + static_cast<size_t>(avail) > cap) {
+        const size_t newCap = total + static_cast<size_t>(avail) + 4096;
+        uint8_t *grown = static_cast<uint8_t *>(realloc(buf, newCap));
+        if (!grown) break;
+        buf = grown;
+        cap = newCap;
+      }
+      const int n = tcp->read(buf + total, avail);
+      if (n > 0) total += static_cast<size_t>(n);
+    } else if (!tcp->connected() && !http.connected()) {
+      break;
+    } else if (contentLen > 0 && total >= static_cast<size_t>(contentLen)) {
+      break;
+    } else {
+      delay(1);
+    }
+  }
+  http.end();
+  delete plain;
+
+  if (total == 0) {
+    free(buf);
+    return false;
+  }
+  *outData = buf;
+  *outLen = total;
+  return true;
+}
+
+bool HubClient::fetchPublicCallAudio(const char *shareToken,
+                                     int64_t callId,
+                                     uint8_t **outData,
+                                     size_t *outLen,
+                                     String *outType) {
+  if (!shareToken || callId <= 0) return false;
+  const String path = String("/public/calls/") + shareToken + "/" + String(callId) + "/audio?format=mp3";
+  int status = 0;
+  const bool ok = httpGetBinary(path.c_str(), &status, outData, outLen, outType);
+  if (!ok) {
+    Serial.printf("[audio] GET %s status=%d heap=%u\n", path.c_str(), status, ESP.getFreeHeap());
+  } else {
+    Serial.printf("[audio] fetched %uB id=%lld heap=%u\n", static_cast<unsigned>(*outLen),
+                  static_cast<long long>(callId), ESP.getFreeHeap());
+  }
+  return ok;
+}
+
 bool HubClient::login(const char *email, const char *password) {
   JsonDocument doc;
   doc["email"] = email;
@@ -286,20 +389,29 @@ void onWebSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
   switch (type) {
     case WStype_CONNECTED:
       g_activeHub->setListenConnected(true);
-      Serial.printf("listen ws connected heap=%u max=%u\n", ESP.getFreeHeap(),
+      Serial.printf("[listen] connected heap=%u max=%u\n", ESP.getFreeHeap(),
                     static_cast<unsigned>(WEBSOCKETS_MAX_DATA_SIZE));
       break;
     case WStype_DISCONNECTED:
       g_activeHub->setListenConnected(false);
-      Serial.printf("listen ws disconnected heap=%u%s%s\n", ESP.getFreeHeap(),
-                    payload && length ? " data=" : "",
-                    payload && length ? reinterpret_cast<const char *>(payload) : "");
+      if (payload && length >= 2) {
+        const uint16_t code = (static_cast<uint16_t>(payload[0]) << 8) | payload[1];
+        Serial.printf("[listen] disconnected code=%u reason=%.*s heap=%u\n", code,
+                      static_cast<int>(length > 2 ? length - 2 : 0),
+                      length > 2 ? reinterpret_cast<const char *>(payload + 2) : "",
+                      ESP.getFreeHeap());
+      } else if (payload && length > 0) {
+        Serial.printf("[listen] disconnected (%.*s) heap=%u\n", static_cast<int>(length),
+                      reinterpret_cast<const char *>(payload), ESP.getFreeHeap());
+      } else {
+        Serial.printf("[listen] disconnected (tcp/ssl) heap=%u\n", ESP.getFreeHeap());
+      }
       break;
     case WStype_ERROR:
-      Serial.println("listen ws error");
+      Serial.printf("listen ws error heap=%u\n", ESP.getFreeHeap());
       break;
     case WStype_TEXT:
-      g_activeHub->handleListenMessage(reinterpret_cast<const char *>(payload), length);
+      g_activeHub->onListenTextFrame(payload, length);
       break;
     default:
       break;
@@ -307,24 +419,60 @@ void onWebSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
 }
 }  // namespace
 
+void HubClient::onListenTextFrame(const uint8_t *payload, size_t length) {
+  queueListenFrame(payload, length);
+}
+
+void HubClient::queueListenFrame(const uint8_t *payload, size_t length) {
+  if (!payload || length == 0) return;
+  if (pendingListenFrame_) {
+    Serial.printf("[listen] frame replaced pending len=%u\n",
+                  static_cast<unsigned>(pendingListenFrameLen_));
+    free(pendingListenFrame_);
+    pendingListenFrame_ = nullptr;
+    pendingListenFrameLen_ = 0;
+  }
+  char *buf = static_cast<char *>(malloc(length + 1));
+  if (!buf) {
+    Serial.printf("[listen] frame drop malloc fail len=%u heap=%u\n",
+                  static_cast<unsigned>(length), ESP.getFreeHeap());
+    return;
+  }
+  memcpy(buf, payload, length);
+  buf[length] = '\0';
+  pendingListenFrame_ = buf;
+  pendingListenFrameLen_ = length;
+}
+
+void HubClient::drainPendingListenFrame() {
+  if (!pendingListenFrame_) return;
+  char *frame = pendingListenFrame_;
+  const size_t len = pendingListenFrameLen_;
+  pendingListenFrame_ = nullptr;
+  pendingListenFrameLen_ = 0;
+  handleListenMessage(frame, len);
+  free(frame);
+}
+
 bool HubClient::connectListen(const char *shareToken, HubCallHandler onCall) {
   onCall_ = onCall;
+  if (ws_) {
+    return true;
+  }
   listenUp_ = false;
-  disconnectListen();
 
   auto *ws = new WebSocketsClient();
-  const String path = String("/public/ws/") + shareToken + "?seed=0&format=mp3";
+  const String path = String("/public/ws/") + shareToken + "?seed=0&format=mp3&inline=0";
   if (useTls_) {
-    // Empty fingerprint uses WebSocketsClient's ESP32 TLS path (setInsecure when no CA set).
-    // Set HUB_TLS_INSECURE=1 in hub_config.h for self-signed / lab hubs.
     (void)tlsInsecure_;
     ws->beginSSL(host_.c_str(), port_, path.c_str(), "");
   } else {
     ws->begin(host_.c_str(), port_, path.c_str());
   }
   ws->onEvent(onWebSocketEvent);
+  // Keepalive ping only — disconnectTimeoutCount=0 never tears down on missed pong.
+  ws->enableHeartbeat(30000, 20000, 0);
   ws->setReconnectInterval(5000);
-  ws->enableHeartbeat(25000, 10000, 2);
   ws_ = ws;
   g_activeHub = this;
   return true;
@@ -333,10 +481,16 @@ bool HubClient::connectListen(const char *shareToken, HubCallHandler onCall) {
 void HubClient::listenLoop() {
   if (!ws_) return;
   static_cast<WebSocketsClient *>(ws_)->loop();
+  drainPendingListenFrame();
 }
 
 void HubClient::disconnectListen() {
   listenUp_ = false;
+  if (pendingListenFrame_) {
+    free(pendingListenFrame_);
+    pendingListenFrame_ = nullptr;
+    pendingListenFrameLen_ = 0;
+  }
   if (!ws_) return;
   auto *ws = static_cast<WebSocketsClient *>(ws_);
   ws->disconnect();

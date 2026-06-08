@@ -1,10 +1,13 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -193,7 +196,7 @@ type playerWSCallMsg struct {
 	Origin         string  `json:"origin,omitempty"`
 	SenderUserID   string  `json:"senderUserId,omitempty"`
 	SenderEmail    string  `json:"senderEmail,omitempty"`
-	Audio          []byte  `json:"audio"` // base64-encoded in JSON output
+	Audio          []byte  `json:"audio,omitempty"` // base64 in JSON; omitted when inline=0 (embedded clients)
 }
 
 func (h *handler) seedPublicStreamCalls(rs *database.RadioSet, _ []int) ([]database.Call, error) {
@@ -256,8 +259,12 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 	defer unsubscribe()
 
 	wantMP3 := strings.EqualFold(r.URL.Query().Get("format"), "mp3")
+	inlineAudio := r.URL.Query().Get("inline") != "0"
 	if wantMP3 {
 		h.logger.Info("public stream mp3 format enabled", "radio_set_id", rs.ID)
+	}
+	if !inlineAudio {
+		h.logger.Info("public stream inline audio disabled", "radio_set_id", rs.ID)
 	}
 
 	sendCall := func(meta streamCallMeta, audio []byte) error {
@@ -289,7 +296,9 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 			Origin:         meta.Origin,
 			SenderUserID:   meta.SenderUserID,
 			SenderEmail:    meta.SenderEmail,
-			Audio:          audio,
+		}
+		if inlineAudio {
+			msg.Audio = audio
 		}
 		data, err := json.Marshal(msg)
 		if err != nil {
@@ -1012,6 +1021,89 @@ func (h *handler) handlePublicPlayer(w http.ResponseWriter, r *http.Request) {
 	if err := playerTmpl.Execute(w, data); err != nil {
 		h.logger.Error("player template render failed", "error", err)
 	}
+}
+
+// handlePublicCallAudio serves one call's audio for an embedded client that uses inline=0 on the public WS.
+func (h *handler) handlePublicCallAudio(w http.ResponseWriter, r *http.Request) {
+	token := chi.URLParam(r, "token")
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	rs, err := h.db.GetRadioSetByShareToken(token)
+	if err != nil || rs == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	call, err := h.db.GetCallByID(id)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		h.logger.Error("public call audio metadata failed", "call_id", id, "error", err)
+		http.Error(w, "query", http.StatusInternalServerError)
+		return
+	}
+	sourceIDs, err := h.db.ListReadableSourceIDsForUser(rs.UserID)
+	if err != nil {
+		h.logger.Error("list public call audio readable sources failed", "error", err)
+		http.Error(w, "query sources", http.StatusInternalServerError)
+		return
+	}
+	subscribedTalkgroups := make(map[int]struct{})
+	subscribedGroups := make(map[string]struct{})
+	sourceSet := make(map[string]struct{}, len(sourceIDs))
+	for _, sid := range sourceIDs {
+		sourceSet[sid] = struct{}{}
+	}
+	if rs.IsGroupsMode() {
+		for _, g := range rs.TalkgroupGroups {
+			subscribedGroups[g] = struct{}{}
+		}
+	} else {
+		for _, tg := range rs.Talkgroups {
+			subscribedTalkgroups[tg] = struct{}{}
+		}
+	}
+	if rs.PTTTalkgroup != nil {
+		subscribedTalkgroups[*rs.PTTTalkgroup] = struct{}{}
+	}
+	listener := &streamListener{
+		ownerUserID:     rs.UserID,
+		talkgroups:      subscribedTalkgroups,
+		talkgroupGroups: subscribedGroups,
+		sourceIDs:       sourceSet,
+	}
+	callPtr := &call
+	if !listener.matchesTalkgroup(callPtr) || !listener.matchesCall(callPtr) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	audio, audioType, audioName, _, _, err := h.db.GetCallAudio(id)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		h.logger.Error("public call audio load failed", "call_id", id, "error", err)
+		http.Error(w, "query", http.StatusInternalServerError)
+		return
+	}
+	if strings.EqualFold(r.URL.Query().Get("format"), "mp3") {
+		var transcodeErr error
+		audio, audioType, transcodeErr = preparePublicStreamAudio(r.Context(), audio, audioType, true)
+		if transcodeErr != nil {
+			h.logger.Warn("public call audio mp3 transcode failed",
+				"call_id", id,
+				"audio_type", audioType,
+				"error", transcodeErr,
+			)
+		}
+	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	serveAudioBytes(w, r, audio, audioType, defaultCallAudioName(id, audioName), false, "no-store")
 }
 
 // handlePublicLastCall returns the audio of the most recent call for a radio set.

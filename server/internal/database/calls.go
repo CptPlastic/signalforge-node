@@ -495,6 +495,26 @@ func appendGroupFilter(group string, filters *[]string, args *[]any, argPos *int
 	(*argPos)++
 }
 
+// GetCallByID returns call metadata without the audio blob.
+func (d *DB) GetCallByID(id int64) (Call, error) {
+	var c Call
+	err := d.db.QueryRow(`
+		SELECT c.id, COALESCE(c.user_id, ''), COALESCE(c.source_id, ''), c.datetime, c.system, c.system_label, c.talkgroup, c.talkgroup_label,
+		       c.talkgroup_group, c.talkgroup_tag, c.frequency, c.duration,
+		       c.audio_name, c.audio_type, COALESCE(ct.transcript, ''), COALESCE(ct.status, ''), COALESCE(ct.provider, ''),
+		       COALESCE(c.origin, 'rf'), COALESCE(c.sender_user_id, ''), c.created_at
+		FROM calls c
+		LEFT JOIN call_transcripts ct ON ct.call_id = c.id
+		WHERE c.id = $1`, id,
+	).Scan(
+		&c.ID, &c.UserID, &c.SourceID, &c.DateTime, &c.System, &c.SystemLabel,
+		&c.Talkgroup, &c.TalkgroupLabel, &c.TalkgroupGroup, &c.TalkgroupTag,
+		&c.Frequency, &c.Duration, &c.AudioName, &c.AudioType, &c.TranscriptText, &c.TranscriptStatus, &c.TranscriptProvider,
+		&c.Origin, &c.SenderUserID, &c.CreatedAt,
+	)
+	return c, err
+}
+
 // GetCallAudio returns the raw audio bytes, MIME type, filename, owning user, and source ID for a call.
 func (d *DB) GetCallAudio(id int64) ([]byte, string, string, string, string, error) {
 	var audio []byte

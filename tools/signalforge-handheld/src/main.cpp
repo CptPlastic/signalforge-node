@@ -33,7 +33,6 @@ bool gWifiUp = false;
 bool gListenUp = false;
 uint32_t gLastUiMs = 0;
 uint32_t gLastWifiRetryMs = 0;
-uint32_t gLastListenRetryMs = 0;
 bool gHadWifiOnce = false;
 constexpr uint32_t kWifiRetryMs = 5000;
 uint32_t gRecordStartMs = 0;
@@ -41,6 +40,8 @@ bool gTransmitting = false;
 bool gSpeakerReady = false;
 bool gMicReady = false;
 int64_t gLastCallId = 0;
+int64_t gPendingFetchCallId = 0;
+String gPendingFetchAudioType;
 
 enum class ClipFormat : uint8_t { Mp3, Wav, Unsupported };
 
@@ -141,6 +142,12 @@ void onHubCall(const HubCallEvent &event) {
                 event.audioType.c_str());
 
   if (!event.audio || event.audioLen == 0) {
+#if HANDHELD_ENABLE_AUDIO_PLAYBACK
+    if (gSpeakerReady && event.id > 0 && !gTransmitting) {
+      gPendingFetchCallId = event.id;
+      gPendingFetchAudioType = event.audioType.length() ? event.audioType : String("audio/mpeg");
+    }
+#endif
     return;
   }
 #if !HANDHELD_ENABLE_AUDIO_PLAYBACK
@@ -247,8 +254,38 @@ bool ensurePttSession() {
   return false;
 }
 
+void serviceCallFetch() {
+#if !HANDHELD_ENABLE_AUDIO_PLAYBACK
+  return;
+#endif
+  if (gPendingFetchCallId <= 0 || gTransmitting || gAudioOut.isPlaying() || gPending.data) return;
+  const int64_t callId = gPendingFetchCallId;
+  const String audioType = gPendingFetchAudioType;
+  gPendingFetchCallId = 0;
+  gPendingFetchAudioType = "";
+
+  uint8_t *data = nullptr;
+  size_t len = 0;
+  String fetchedType;
+  if (!gHub.fetchPublicCallAudio(HUB_SHARE_TOKEN, callId, &data, &len, &fetchedType)) {
+    return;
+  }
+  const String type = fetchedType.length() ? fetchedType : audioType;
+  if (isUnsupportedPlaybackType(type, data, len)) {
+    Serial.printf("[audio] skip — %s not supported (need MP3/WAV)\n", type.c_str());
+    free(data);
+    return;
+  }
+  queueClip(data, len, type);
+  Serial.printf("[audio] queued %uB %s (fetched)\n", static_cast<unsigned>(len), type.c_str());
+}
+
 void startListen() {
-  Serial.printf("[listen] opening wss://%s/public/ws/%s?seed=0&format=mp3\n", HUB_HOST, HUB_SHARE_TOKEN);
+  if (gHub.listenClientActive()) {
+    return;
+  }
+  Serial.printf("[listen] opening wss://%s/public/ws/%s?seed=0&format=mp3&inline=0\n", HUB_HOST,
+                HUB_SHARE_TOKEN);
   gHub.connectListen(HUB_SHARE_TOKEN, onHubCall);
   gStatusLine = "listen...";
 }
@@ -338,7 +375,6 @@ void handlePtt() {
     const String uploadMsg = ok ? ("ok #" + String(callId)) : String("failed");
     gDisplay.showPttUpload(uploadMsg.c_str());
     gStatusLine = ok ? "tx ok" : "tx fail";
-    startListen();
   }
 }
 }  // namespace
@@ -392,11 +428,7 @@ void loop() {
   serviceWifi();
   gHub.listenLoop();
   gListenUp = gHub.listenConnected();
-  if (gWifiUp && !gListenUp && !gTransmitting && millis() - gLastListenRetryMs > kWifiRetryMs) {
-    gLastListenRetryMs = millis();
-    Serial.println("[listen] restarting hub stream");
-    startListen();
-  }
+  serviceCallFetch();
   gAudioOut.loop();
   handlePtt();
   servicePlayback();

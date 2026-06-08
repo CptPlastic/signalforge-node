@@ -31,6 +31,8 @@ class HubClient {
   void listenLoop();
   void disconnectListen();
   bool listenConnected() const { return listenUp_; }
+  bool listenClientActive() const { return ws_ != nullptr; }
+  bool hasPendingListenFrame() const { return pendingListenFrame_ != nullptr; }
 
   void setListenConnected(bool up) { listenUp_ = up; }
 
@@ -42,6 +44,12 @@ class HubClient {
                  int64_t *outCallId);
 
   bool handleListenMessage(const char *payload, size_t len);
+  void onListenTextFrame(const uint8_t *payload, size_t length);
+  bool fetchPublicCallAudio(const char *shareToken,
+                            int64_t callId,
+                            uint8_t **outData,
+                            size_t *outLen,
+                            String *outType);
 
  private:
   String host_;
@@ -52,6 +60,11 @@ class HubClient {
   HubCallHandler onCall_;
   void *ws_ = nullptr;
   bool listenUp_ = false;
+  char *pendingListenFrame_ = nullptr;
+  size_t pendingListenFrameLen_ = 0;
+
+  void queueListenFrame(const uint8_t *payload, size_t length);
+  void drainPendingListenFrame();
 
   bool httpRequest(const char *method,
                    const char *path,
@@ -61,4 +74,6 @@ class HubClient {
                    const char *authBearer,
                    int *outStatus,
                    String *outBody);
+
+  bool httpGetBinary(const char *path, int *outStatus, uint8_t **outData, size_t *outLen, String *outType);
 };

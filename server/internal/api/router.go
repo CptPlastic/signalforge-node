@@ -36,6 +36,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Use(middleware.Timeout(30 * time.Second))
 		r.Get("/public/player/{token}", handle.handlePublicPlayer)
 		r.Get("/public/last-call/{token}", handle.handlePublicLastCall)
+		r.Get("/public/calls/{token}/{id}/audio", handle.handlePublicCallAudio)
 		r.Get("/api/v1/health", handle.handleHealth)
 		r.Get("/api/v1/version", handle.handleVersion)
 		r.Get("/api/v1/update-check", handle.handleUpdateCheck)
