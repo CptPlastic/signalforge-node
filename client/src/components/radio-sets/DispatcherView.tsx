@@ -7,6 +7,7 @@ import {
   finalizePttBlob,
   MIN_PTT_BLOB_BYTES,
   pickPttMimeType,
+  playCallOnAudioElement,
   pttBlobMimeType,
 } from '../../lib/pttRecording'
 import { MonitorAudioBar } from '../MonitorAudioBar'
@@ -30,7 +31,7 @@ type Activity = {
   expiresAt: number
 }
 
-type State = 'idle' | 'recording' | 'uploading' | 'error'
+type State = 'idle' | 'arming' | 'recording' | 'uploading' | 'error'
 
 const MIN_DURATION_MS = 300
 const MAX_DURATION_MS = 30_000
@@ -91,7 +92,7 @@ export function DispatcherView({
   const stateRef = useRef(state)
   const selectedIdsRef = useRef(selectedIds)
   const radioSetsRef = useRef(radioSets)
-  const playMonitorCallRef = useRef<(call: Call) => void>(() => {})
+  const playMonitorCallRef = useRef<(call: Call, opts?: { skipChirp?: boolean }) => void>(() => {})
 
   monitorOnRef.current = monitorOn
   rsVolumeRef.current = rsVolume
@@ -118,7 +119,7 @@ export function DispatcherView({
 
   const isTransmitting = useCallback(() => {
     const s = stateRef.current
-    return s === 'recording' || s === 'uploading'
+    return s === 'arming' || s === 'recording' || s === 'uploading'
   }, [])
 
   const resolveAudibleSetName = useCallback((call: Call): string | null => {
@@ -149,7 +150,7 @@ export function DispatcherView({
     clearPlaybackStatus()
   }, [clearPlaybackStatus])
 
-  const playMonitorCall = useCallback((call: Call) => {
+  const playMonitorCall = useCallback((call: Call, opts?: { skipChirp?: boolean }) => {
     if (!monitorOnRef.current) return
 
     if (isTransmitting()) {
@@ -174,14 +175,15 @@ export function DispatcherView({
     setAudibleSetName(setName)
     setNowPlayingLabel(call.talkgroupLabel || `TG ${call.talkgroup}`)
 
-    monitor.volume = volumeToGain(rsVolumeRef.current)
-    monitor.src = `/api/v1/calls/${call.id}/audio?play=1`
-    const chirpReady = isPttOrigin(call.origin)
-      ? playChirp(volumeToGain(chirpVolumeRef.current))
-      : Promise.resolve()
-    chirpReady
-      .then(() => monitor.play())
-      .catch(() => clearPlaybackStatus())
+    const gain = volumeToGain(rsVolumeRef.current)
+    const run = async () => {
+      if (!opts?.skipChirp && isPttOrigin(call.origin)) {
+        await playChirp(volumeToGain(chirpVolumeRef.current))
+      }
+      if (!monitorOnRef.current || isTransmitting()) return
+      await playCallOnAudioElement(monitor, call.id, gain)
+    }
+    void run().catch(() => clearPlaybackStatus())
   }, [clearPlaybackStatus, isTransmitting, resolveAudibleSetName])
 
   playMonitorCallRef.current = playMonitorCall
@@ -249,13 +251,30 @@ export function DispatcherView({
     setLastResults(null)
     targetIdsRef.current = Array.from(selectedIdsRef.current)
     suspendMonitorForTransmit()
-    setTxState('recording')
+    setTxState('arming')
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
       if (requestId !== micRequestRef.current) {
         for (const track of stream.getTracks()) track.stop()
         setTxState('idle')
+        return
+      }
+
+      const audioTrack = stream.getAudioTracks()[0]
+      if (!audioTrack || audioTrack.readyState !== 'live') {
+        for (const track of stream.getTracks()) track.stop()
+        setError('Microphone not available')
+        setTxState('error')
+        globalThis.setTimeout(() => {
+          if (stateRef.current === 'error') setTxState('idle')
+        }, 2500)
         return
       }
 
@@ -331,6 +350,7 @@ export function DispatcherView({
       recorderRef.current = recorder
       startedAtRef.current = Date.now()
       recorder.start()
+      setTxState('recording')
       maxTimerRef.current = globalThis.setTimeout(() => {
         if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
       }, MAX_DURATION_MS)
@@ -346,6 +366,13 @@ export function DispatcherView({
   }, [setTxState, stopStream, suspendMonitorForTransmit])
 
   const stopRecording = useCallback(() => {
+    if (stateRef.current === 'arming') {
+      micRequestRef.current += 1
+      stopStream()
+      recorderRef.current = null
+      setTxState('idle')
+      return
+    }
     if (stateRef.current !== 'recording') return
     micRequestRef.current += 1
     const recorder = recorderRef.current
@@ -403,7 +430,7 @@ export function DispatcherView({
     if (afterTx) {
       afterTxCallRef.current = null
       setMonitorPending(false)
-      playMonitorCallRef.current(afterTx)
+      playMonitorCallRef.current(afterTx, { skipChirp: true })
       return
     }
 
@@ -472,6 +499,7 @@ export function DispatcherView({
 
   const buttonLabel: Record<State, string> = {
     idle: `BROADCAST · HOLD TO TALK (${selectedIds.size} set${selectedIds.size === 1 ? '' : 's'})`,
+    arming: 'KEYING MIC…',
     recording: 'TRANSMITTING TO ALL SELECTED SETS…',
     uploading: 'SENDING…',
     error: error || 'ERROR',
@@ -479,7 +507,7 @@ export function DispatcherView({
   let buttonColor: string
   if (state === 'recording') {
     buttonColor = 'border-console-error text-console-error bg-console-error/10'
-  } else if (state === 'uploading') {
+  } else if (state === 'arming' || state === 'uploading') {
     buttonColor = 'border-console-accent text-console-accent'
   } else if (state === 'error') {
     buttonColor = 'border-console-error text-console-error'

@@ -40,3 +40,31 @@ export const MIN_PTT_BLOB_BYTES = 800
 export function finalizePttBlob(chunks: BlobPart[], recorderMimeType: string | undefined): Blob {
   return new Blob(chunks, { type: pttBlobMimeType(recorderMimeType) })
 }
+
+/** Load call audio into a monitor element and play when the buffer is ready. */
+export function playCallOnAudioElement(
+  audio: HTMLAudioElement,
+  callId: number,
+  volume: number,
+): Promise<void> {
+  audio.volume = volume
+  const src = `/api/v1/calls/${callId}/audio?play=1`
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      audio.removeEventListener('canplay', onReady)
+      audio.removeEventListener('error', onError)
+    }
+    const onReady = () => {
+      cleanup()
+      void audio.play().then(resolve).catch(reject)
+    }
+    const onError = () => {
+      cleanup()
+      reject(new Error('call audio failed to load'))
+    }
+    audio.addEventListener('canplay', onReady)
+    audio.addEventListener('error', onError)
+    audio.src = src
+    audio.load()
+  })
+}
