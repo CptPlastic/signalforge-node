@@ -34,6 +34,10 @@ function newClientId(): string {
   return `disp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+function isPttOrigin(origin?: string): boolean {
+  return origin === 'ptt' || origin === 'ptt-dispatch'
+}
+
 export function DispatcherView({
   radioSets,
   latestCall,
@@ -71,6 +75,10 @@ export function DispatcherView({
   const monitorAudioRef = useRef<HTMLAudioElement | null>(null)
   const seenCallIdsRef = useRef<Set<number>>(new Set())
   const pendingCallRef = useRef<Call | null>(null)
+  const afterTxCallRef = useRef<Call | null>(null)
+  const micRequestRef = useRef(0)
+  const startRecordingRef = useRef<() => void>(() => {})
+  const stopRecordingRef = useRef<() => void>(() => {})
   const monitorOnRef = useRef(monitorOn)
   const rsVolumeRef = useRef(rsVolume)
   const chirpVolumeRef = useRef(chirpVolume)
@@ -97,6 +105,11 @@ export function DispatcherView({
   const selectAll = () => setSelectedIds(new Set(eligibleSets.map((rs) => rs.id)))
   const selectNone = () => setSelectedIds(new Set())
 
+  const setTxState = useCallback((next: State) => {
+    stateRef.current = next
+    setState(next)
+  }, [])
+
   const isTransmitting = useCallback(() => {
     const s = stateRef.current
     return s === 'recording' || s === 'uploading'
@@ -118,6 +131,16 @@ export function DispatcherView({
     setIsPlaying(false)
     setPlaybackSeconds(0)
   }, [])
+
+  const suspendMonitorForTransmit = useCallback(() => {
+    const monitor = monitorAudioRef.current
+    if (monitor) {
+      monitor.pause()
+      monitor.removeAttribute('src')
+      monitor.load()
+    }
+    clearPlaybackStatus()
+  }, [clearPlaybackStatus])
 
   const playMonitorCall = useCallback((call: Call) => {
     if (!monitorOnRef.current) return
@@ -146,7 +169,7 @@ export function DispatcherView({
 
     monitor.volume = volumeToGain(rsVolumeRef.current)
     monitor.src = `/api/v1/calls/${call.id}/audio?play=1`
-    const chirpReady = call.origin === 'ptt'
+    const chirpReady = isPttOrigin(call.origin)
       ? playChirp(volumeToGain(chirpVolumeRef.current))
       : Promise.resolve()
     chirpReady
@@ -204,22 +227,30 @@ export function DispatcherView({
   }, [rsVolume])
 
   const startRecording = useCallback(async () => {
-    if (state !== 'idle') return
-    if (selectedIds.size === 0) {
+    if (stateRef.current !== 'idle') return
+    if (selectedIdsRef.current.size === 0) {
       setError('Select at least one radio set first.')
-      setState('error')
-      globalThis.setTimeout(() => setState((s) => (s === 'error' ? 'idle' : s)), 2000)
+      setTxState('error')
+      globalThis.setTimeout(() => {
+        if (stateRef.current === 'error') setTxState('idle')
+      }, 2000)
       return
     }
+
+    const requestId = ++micRequestRef.current
     setError('')
     setLastResults(null)
-    targetIdsRef.current = Array.from(selectedIds)
-    if (monitorAudioRef.current && !monitorAudioRef.current.paused) {
-      monitorAudioRef.current.pause()
-      clearPlaybackStatus()
-    }
+    targetIdsRef.current = Array.from(selectedIdsRef.current)
+    suspendMonitorForTransmit()
+    setTxState('recording')
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (requestId !== micRequestRef.current) {
+        for (const track of stream.getTracks()) track.stop()
+        return
+      }
+
       streamRef.current = stream
       const mimeType = pickPttMimeType()
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
@@ -231,12 +262,12 @@ export function DispatcherView({
         const elapsed = Date.now() - startedAtRef.current
         stopStream()
         if (elapsed < MIN_DURATION_MS) {
-          setState('idle')
+          setTxState('idle')
           return
         }
         const blob = new Blob(chunksRef.current, { type: pttBlobMimeType(recorder.mimeType) })
         chunksRef.current = []
-        setState('uploading')
+        setTxState('uploading')
         try {
           const response = await api.uploadPTTBroadcast(
             targetIdsRef.current,
@@ -245,32 +276,72 @@ export function DispatcherView({
             newClientId(),
           )
           setLastResults(response.results)
-          setState('idle')
+          const delivered = response.results.find(
+            (result) => result.callId !== undefined && selectedIdsRef.current.has(result.radioSetId),
+          )
+          if (delivered?.callId !== undefined && monitorOnRef.current) {
+            const set = radioSetsRef.current.find((rs) => rs.id === delivered.radioSetId)
+            const talkgroup = delivered.talkgroup ?? set?.pttTalkgroup ?? 0
+            afterTxCallRef.current = {
+              id: delivered.callId,
+              dateTime: Math.floor(Date.now() / 1000),
+              system: 0,
+              systemLabel: '',
+              talkgroup,
+              talkgroupLabel: `TG ${talkgroup}`,
+              talkgroupGroup: '',
+              talkgroupTag: '',
+              frequency: 0,
+              duration: elapsed / 1000,
+              audioName: '',
+              audioType: pttBlobMimeType(recorder.mimeType),
+              origin: 'ptt-dispatch',
+              createdAt: Date.now(),
+            }
+            seenCallIdsRef.current.add(delivered.callId)
+          }
+          setTxState('idle')
         } catch (err) {
           const message = err instanceof ApiError ? `Broadcast failed (${err.status})` : 'Broadcast failed'
           setError(message)
-          setState('error')
-          globalThis.setTimeout(() => setState((s) => (s === 'error' ? 'idle' : s)), 2500)
+          setTxState('error')
+          globalThis.setTimeout(() => {
+            if (stateRef.current === 'error') setTxState('idle')
+          }, 2500)
         }
       }
       recorderRef.current = recorder
       startedAtRef.current = Date.now()
       recorder.start()
-      setState('recording')
       maxTimerRef.current = globalThis.setTimeout(() => {
         if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
       }, MAX_DURATION_MS)
     } catch (err) {
       stopStream()
+      if (requestId !== micRequestRef.current) return
       setError(err instanceof Error && err.name === 'NotAllowedError' ? 'Mic permission denied' : 'Mic unavailable')
-      setState('error')
-      globalThis.setTimeout(() => setState((s) => (s === 'error' ? 'idle' : s)), 2500)
+      setTxState('error')
+      globalThis.setTimeout(() => {
+        if (stateRef.current === 'error') setTxState('idle')
+      }, 2500)
     }
-  }, [selectedIds, state, stopStream, clearPlaybackStatus])
+  }, [setTxState, stopStream, suspendMonitorForTransmit])
 
   const stopRecording = useCallback(() => {
-    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
-  }, [])
+    if (stateRef.current !== 'recording') return
+    micRequestRef.current += 1
+    if (recorderRef.current?.state === 'recording') {
+      recorderRef.current.stop()
+      return
+    }
+    stopStream()
+    setTxState('idle')
+  }, [setTxState, stopStream])
+
+  startRecordingRef.current = () => {
+    void startRecording()
+  }
+  stopRecordingRef.current = stopRecording
 
   useEffect(() => {
     function shouldIgnoreKey(event: KeyboardEvent): boolean {
@@ -286,14 +357,14 @@ export function DispatcherView({
     function onKeyDown(event: KeyboardEvent) {
       if (shouldIgnoreKey(event)) return
       event.preventDefault()
-      void startRecording()
+      startRecordingRef.current()
     }
     function onKeyUp(event: KeyboardEvent) {
       if (event.code !== 'Space') return
       const target = event.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
       event.preventDefault()
-      stopRecording()
+      stopRecordingRef.current()
     }
     globalThis.addEventListener('keydown', onKeyDown)
     globalThis.addEventListener('keyup', onKeyUp)
@@ -301,13 +372,23 @@ export function DispatcherView({
       globalThis.removeEventListener('keydown', onKeyDown)
       globalThis.removeEventListener('keyup', onKeyUp)
     }
-  }, [startRecording, stopRecording])
+  }, [])
 
   useEffect(() => () => stopStream(), [stopStream])
 
   useEffect(() => {
-    if (state !== 'idle' || !pendingCallRef.current || !monitorOnRef.current) return
+    if (state !== 'idle' || !monitorOnRef.current) return
+
+    const afterTx = afterTxCallRef.current
+    if (afterTx) {
+      afterTxCallRef.current = null
+      setMonitorPending(false)
+      playMonitorCallRef.current(afterTx)
+      return
+    }
+
     const pending = pendingCallRef.current
+    if (!pending) return
     pendingCallRef.current = null
     setMonitorPending(false)
     playMonitorCallRef.current(pending)
