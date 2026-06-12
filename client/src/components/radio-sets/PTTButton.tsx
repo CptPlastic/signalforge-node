@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, ApiError } from '../../lib/api'
-import { pickPttMimeType, pttBlobMimeType } from '../../lib/pttRecording'
+import { api } from '../../lib/api'
+import { suspendChirpAudio } from '../../lib/chirp'
+import { getErrorMessage } from '../../lib/format'
+import {
+  finalizePttBlob,
+  MIN_PTT_BLOB_BYTES,
+  pickPttMimeType,
+} from '../../lib/pttRecording'
 
 const MIN_DURATION_MS = 300
 const MAX_DURATION_MS = 30_000
+const RECORDER_TIMESLICE_MS = 250
 
 type State = 'idle' | 'recording' | 'uploading' | 'error'
 
@@ -44,6 +51,7 @@ export function PTTButton({ radioSetId, disabled, enableSpacebar, deviceId, onTr
   const startRecording = useCallback(async () => {
     if (state !== 'idle' || disabled || releaseLockRef.current) return
     setError('')
+    suspendChirpAudio()
     try {
       const audioConstraints: MediaTrackConstraints | true = deviceId
         ? { deviceId: { exact: deviceId } }
@@ -58,28 +66,35 @@ export function PTTButton({ radioSetId, disabled, enableSpacebar, deviceId, onTr
       }
       recorder.onstop = async () => {
         const elapsed = Date.now() - startedAtRef.current
+        const recorderMimeType = recorder.mimeType
         stopStream()
+        recorderRef.current = null
         if (elapsed < MIN_DURATION_MS) {
           setState('idle')
           return
         }
-        const blob = new Blob(chunksRef.current, { type: pttBlobMimeType(recorder.mimeType) })
+        const blob = finalizePttBlob(chunksRef.current, recorderMimeType)
         chunksRef.current = []
+        if (blob.size < MIN_PTT_BLOB_BYTES) {
+          setError(`Recording empty (${blob.size} bytes) — hold PTT longer`)
+          setState('error')
+          globalThis.setTimeout(() => setState((current) => (current === 'error' ? 'idle' : current)), 2500)
+          return
+        }
         setState('uploading')
         try {
           await api.uploadPTT(radioSetId, blob, elapsed / 1000, newClientId())
           onTransmitted?.({ durationSeconds: elapsed / 1000, at: Date.now() })
           setState('idle')
         } catch (err) {
-          const message = err instanceof ApiError ? `Upload failed (${err.status})` : 'Upload failed'
-          setError(message)
+          setError(getErrorMessage(err, 'Upload failed'))
           setState('error')
           globalThis.setTimeout(() => setState((current) => (current === 'error' ? 'idle' : current)), 2500)
         }
       }
       recorderRef.current = recorder
       startedAtRef.current = Date.now()
-      recorder.start()
+      recorder.start(RECORDER_TIMESLICE_MS)
       setState('recording')
       maxTimerRef.current = globalThis.setTimeout(() => {
         if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
@@ -95,7 +110,16 @@ export function PTTButton({ radioSetId, disabled, enableSpacebar, deviceId, onTr
   const stopRecording = useCallback(() => {
     releaseLockRef.current = false
     const recorder = recorderRef.current
-    if (recorder && recorder.state === 'recording') recorder.stop()
+    if (recorder?.state === 'recording') {
+      if (typeof recorder.requestData === 'function') {
+        try {
+          recorder.requestData()
+        } catch {
+          // optional
+        }
+      }
+      recorder.stop()
+    }
   }, [])
 
   useEffect(() => {

@@ -51,3 +51,10 @@ export function playChirp(volume = 0.15): Promise<void> {
 
   return new Promise((resolve) => globalThis.setTimeout(resolve, 250))
 }
+
+/** Release Web Audio output before opening the mic for PTT capture. */
+export function suspendChirpAudio(): void {
+  if (ctx?.state === 'running') {
+    void ctx.suspend()
+  }
+}

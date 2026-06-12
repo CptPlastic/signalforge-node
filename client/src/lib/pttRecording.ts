@@ -33,3 +33,10 @@ export function pttUploadFilename(clientId: string, blobType: string): string {
   if (type.includes('mpeg') || type.includes('mp3')) return `ptt-${clientId}.mp3`
   return `ptt-${clientId}.m4a`
 }
+
+/** Hub rejects clips ≤44 bytes; mobile uses 800 as a practical floor. */
+export const MIN_PTT_BLOB_BYTES = 800
+
+export function finalizePttBlob(chunks: BlobPart[], recorderMimeType: string | undefined): Blob {
+  return new Blob(chunks, { type: pttBlobMimeType(recorderMimeType) })
+}

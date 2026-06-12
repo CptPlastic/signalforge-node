@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, ApiError, type Call, type PTTBroadcastResult, type RadioSet } from '../../lib/api'
-import { playChirp } from '../../lib/chirp'
+import { api, type Call, type PTTBroadcastResult, type RadioSet } from '../../lib/api'
+import { playChirp, suspendChirpAudio } from '../../lib/chirp'
+import { getErrorMessage } from '../../lib/format'
 import { volumeToGain } from '../../lib/monitorAudioSettings'
-import { pickPttMimeType, pttBlobMimeType } from '../../lib/pttRecording'
+import {
+  finalizePttBlob,
+  MIN_PTT_BLOB_BYTES,
+  pickPttMimeType,
+  pttBlobMimeType,
+} from '../../lib/pttRecording'
 import { MonitorAudioBar } from '../MonitorAudioBar'
 
 type Props = Readonly<{
@@ -28,6 +34,7 @@ type State = 'idle' | 'recording' | 'uploading' | 'error'
 
 const MIN_DURATION_MS = 300
 const MAX_DURATION_MS = 30_000
+const RECORDER_TIMESLICE_MS = 250
 
 function newClientId(): string {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
@@ -133,6 +140,7 @@ export function DispatcherView({
   }, [])
 
   const suspendMonitorForTransmit = useCallback(() => {
+    suspendChirpAudio()
     const monitor = monitorAudioRef.current
     if (monitor) {
       monitor.pause()
@@ -248,6 +256,7 @@ export function DispatcherView({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       if (requestId !== micRequestRef.current) {
         for (const track of stream.getTracks()) track.stop()
+        setTxState('idle')
         return
       }
 
@@ -260,13 +269,23 @@ export function DispatcherView({
       }
       recorder.onstop = async () => {
         const elapsed = Date.now() - startedAtRef.current
+        const recorderMimeType = recorder.mimeType
         stopStream()
+        recorderRef.current = null
         if (elapsed < MIN_DURATION_MS) {
           setTxState('idle')
           return
         }
-        const blob = new Blob(chunksRef.current, { type: pttBlobMimeType(recorder.mimeType) })
+        const blob = finalizePttBlob(chunksRef.current, recorderMimeType)
         chunksRef.current = []
+        if (blob.size < MIN_PTT_BLOB_BYTES) {
+          setError(`Recording empty (${blob.size} bytes) — hold PTT longer`)
+          setTxState('error')
+          globalThis.setTimeout(() => {
+            if (stateRef.current === 'error') setTxState('idle')
+          }, 2500)
+          return
+        }
         setTxState('uploading')
         try {
           const response = await api.uploadPTTBroadcast(
@@ -302,7 +321,7 @@ export function DispatcherView({
           }
           setTxState('idle')
         } catch (err) {
-          const message = err instanceof ApiError ? `Broadcast failed (${err.status})` : 'Broadcast failed'
+          const message = getErrorMessage(err, 'Broadcast failed')
           setError(message)
           setTxState('error')
           globalThis.setTimeout(() => {
@@ -312,7 +331,7 @@ export function DispatcherView({
       }
       recorderRef.current = recorder
       startedAtRef.current = Date.now()
-      recorder.start()
+      recorder.start(RECORDER_TIMESLICE_MS)
       maxTimerRef.current = globalThis.setTimeout(() => {
         if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
       }, MAX_DURATION_MS)
@@ -330,11 +349,20 @@ export function DispatcherView({
   const stopRecording = useCallback(() => {
     if (stateRef.current !== 'recording') return
     micRequestRef.current += 1
-    if (recorderRef.current?.state === 'recording') {
-      recorderRef.current.stop()
+    const recorder = recorderRef.current
+    if (recorder?.state === 'recording') {
+      if (typeof recorder.requestData === 'function') {
+        try {
+          recorder.requestData()
+        } catch {
+          // optional — final chunk still arrives on stop()
+        }
+      }
+      recorder.stop()
       return
     }
     stopStream()
+    recorderRef.current = null
     setTxState('idle')
   }, [setTxState, stopStream])
 
