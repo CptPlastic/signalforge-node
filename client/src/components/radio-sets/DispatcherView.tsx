@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError, type Call, type PTTBroadcastResult, type RadioSet } from '../../lib/api'
 import { playChirp } from '../../lib/chirp'
+import { volumeToGain } from '../../lib/monitorAudioSettings'
 import { pickPttMimeType, pttBlobMimeType } from '../../lib/pttRecording'
+import { MonitorAudioBar } from '../MonitorAudioBar'
 
 type Props = Readonly<{
   radioSets: RadioSet[]
   latestCall: Call | null
+  rsVolume: number
+  setRsVolume: (value: number) => void
+  chirpVolume: number
+  setChirpVolume: (value: number) => void
   onBack: () => void
 }>
 
@@ -28,7 +34,15 @@ function newClientId(): string {
   return `disp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
+export function DispatcherView({
+  radioSets,
+  latestCall,
+  rsVolume,
+  setRsVolume,
+  chirpVolume,
+  setChirpVolume,
+  onBack,
+}: Props) {
   const eligibleSets = useMemo(
     () => radioSets.filter((rs) => rs.pttTalkgroup !== undefined),
     [radioSets],
@@ -42,6 +56,11 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
   const [lastResults, setLastResults] = useState<PTTBroadcastResult[] | null>(null)
   const [activityById, setActivityById] = useState<Map<string, Activity>>(new Map())
   const [monitorOn, setMonitorOn] = useState(true)
+  const [audibleSetName, setAudibleSetName] = useState<string | null>(null)
+  const [nowPlayingLabel, setNowPlayingLabel] = useState<string | null>(null)
+  const [monitorPending, setMonitorPending] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [playbackSeconds, setPlaybackSeconds] = useState(0)
 
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -51,6 +70,21 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
   const targetIdsRef = useRef<string[]>([])
   const monitorAudioRef = useRef<HTMLAudioElement | null>(null)
   const seenCallIdsRef = useRef<Set<number>>(new Set())
+  const pendingCallRef = useRef<Call | null>(null)
+  const monitorOnRef = useRef(monitorOn)
+  const rsVolumeRef = useRef(rsVolume)
+  const chirpVolumeRef = useRef(chirpVolume)
+  const stateRef = useRef(state)
+  const selectedIdsRef = useRef(selectedIds)
+  const radioSetsRef = useRef(radioSets)
+  const playMonitorCallRef = useRef<(call: Call) => void>(() => {})
+
+  monitorOnRef.current = monitorOn
+  rsVolumeRef.current = rsVolume
+  chirpVolumeRef.current = chirpVolume
+  stateRef.current = state
+  selectedIdsRef.current = selectedIds
+  radioSetsRef.current = radioSets
 
   const toggleSet = (id: string) => {
     setSelectedIds((prev) => {
@@ -63,6 +97,65 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
   const selectAll = () => setSelectedIds(new Set(eligibleSets.map((rs) => rs.id)))
   const selectNone = () => setSelectedIds(new Set())
 
+  const isTransmitting = useCallback(() => {
+    const s = stateRef.current
+    return s === 'recording' || s === 'uploading'
+  }, [])
+
+  const resolveAudibleSetName = useCallback((call: Call): string | null => {
+    for (const rs of radioSetsRef.current) {
+      if (!selectedIdsRef.current.has(rs.id)) continue
+      if (rs.talkgroups.includes(call.talkgroup) || rs.pttTalkgroup === call.talkgroup) {
+        return rs.name
+      }
+    }
+    return null
+  }, [])
+
+  const clearPlaybackStatus = useCallback(() => {
+    setAudibleSetName(null)
+    setNowPlayingLabel(null)
+    setIsPlaying(false)
+    setPlaybackSeconds(0)
+  }, [])
+
+  const playMonitorCall = useCallback((call: Call) => {
+    if (!monitorOnRef.current) return
+
+    if (isTransmitting()) {
+      pendingCallRef.current = call
+      setMonitorPending(true)
+      return
+    }
+
+    const monitor = monitorAudioRef.current
+    if (!monitor) return
+
+    if (!monitor.paused) {
+      pendingCallRef.current = call
+      setMonitorPending(true)
+      return
+    }
+
+    setMonitorPending(false)
+    pendingCallRef.current = null
+
+    const setName = resolveAudibleSetName(call)
+    setAudibleSetName(setName)
+    setNowPlayingLabel(call.talkgroupLabel || `TG ${call.talkgroup}`)
+
+    monitor.volume = volumeToGain(rsVolumeRef.current)
+    monitor.src = `/api/v1/calls/${call.id}/audio?play=1`
+    const chirpReady = call.origin === 'ptt'
+      ? playChirp(volumeToGain(chirpVolumeRef.current))
+      : Promise.resolve()
+    chirpReady
+      .then(() => monitor.play())
+      .catch(() => clearPlaybackStatus())
+  }, [clearPlaybackStatus, isTransmitting, resolveAudibleSetName])
+
+  playMonitorCallRef.current = playMonitorCall
+
   const stopStream = useCallback(() => {
     if (streamRef.current) {
       for (const track of streamRef.current.getTracks()) track.stop()
@@ -74,6 +167,42 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
     }
   }, [])
 
+  const toggleMonitor = useCallback(() => {
+    setMonitorOn((prev) => {
+      const next = !prev
+      if (!next) {
+        const monitor = monitorAudioRef.current
+        if (monitor) {
+          monitor.pause()
+          monitor.src = ''
+        }
+        pendingCallRef.current = null
+        setMonitorPending(false)
+        clearPlaybackStatus()
+      }
+      return next
+    })
+  }, [clearPlaybackStatus])
+
+  const handleMonitorEnded = useCallback(() => {
+    clearPlaybackStatus()
+    const pending = pendingCallRef.current
+    if (!pending || !monitorOnRef.current || isTransmitting()) {
+      if (pending) setMonitorPending(true)
+      return
+    }
+    pendingCallRef.current = null
+    setMonitorPending(false)
+    playMonitorCallRef.current(pending)
+  }, [clearPlaybackStatus, isTransmitting])
+
+  useEffect(() => {
+    const monitor = monitorAudioRef.current
+    if (monitor) {
+      monitor.volume = volumeToGain(rsVolume)
+    }
+  }, [rsVolume])
+
   const startRecording = useCallback(async () => {
     if (state !== 'idle') return
     if (selectedIds.size === 0) {
@@ -84,12 +213,10 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
     }
     setError('')
     setLastResults(null)
-    // Snapshot the target list so a checkbox change during recording doesn't change destinations.
     targetIdsRef.current = Array.from(selectedIds)
-    // Pause any in-progress monitor playback — dispatcher shouldn't hear chatter
-    // through their own headphones while they're trying to talk.
     if (monitorAudioRef.current && !monitorAudioRef.current.paused) {
       monitorAudioRef.current.pause()
+      clearPlaybackStatus()
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -139,7 +266,7 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
       setState('error')
       globalThis.setTimeout(() => setState((s) => (s === 'error' ? 'idle' : s)), 2500)
     }
-  }, [selectedIds, state, stopStream])
+  }, [selectedIds, state, stopStream, clearPlaybackStatus])
 
   const stopRecording = useCallback(() => {
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
@@ -178,10 +305,14 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
 
   useEffect(() => () => stopStream(), [stopStream])
 
-  // Process incoming live calls: figure out which currently-selected sets a
-  // call matches, light those cards up, and (optionally) play the audio
-  // through the monitor element. Each call only fires this logic once even
-  // though latestCall re-references can happen.
+  useEffect(() => {
+    if (state !== 'idle' || !pendingCallRef.current || !monitorOnRef.current) return
+    const pending = pendingCallRef.current
+    pendingCallRef.current = null
+    setMonitorPending(false)
+    playMonitorCallRef.current(pending)
+  }, [state])
+
   useEffect(() => {
     if (!latestCall) return
     if (seenCallIdsRef.current.has(latestCall.id)) return
@@ -206,22 +337,9 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
       return next
     })
 
-    // Monitor audio: only auto-play when (a) the user toggle is on,
-    // (b) we're not currently transmitting, and (c) nothing else is currently
-    // playing in the monitor element. Overlapping calls light up the card
-    // but don't fight for the speakers.
-    const transmitting = state === 'recording' || state === 'uploading'
-    const monitor = monitorAudioRef.current
-    if (monitorOn && !transmitting && monitor?.paused) {
-      monitor.src = `/api/v1/calls/${latestCall.id}/audio?play=1`
-      const chirpReady = latestCall.origin === 'ptt'
-        ? playChirp((monitor.volume || 1) * 0.35)
-        : Promise.resolve()
-      chirpReady.then(() => monitor.play()).catch(() => {})
-    }
-  }, [latestCall, radioSets, selectedIds, state, monitorOn])
+    playMonitorCallRef.current(latestCall)
+  }, [latestCall, radioSets, selectedIds])
 
-  // Garbage-collect expired activity entries on a tick so cards stop pulsing.
   useEffect(() => {
     if (activityById.size === 0) return
     const timer = globalThis.setInterval(() => {
@@ -241,7 +359,6 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
     return () => globalThis.clearInterval(timer)
   }, [activityById.size])
 
-  // Stop monitor audio when leaving the dispatcher view (component unmount).
   useEffect(() => {
     return () => {
       const monitor = monitorAudioRef.current
@@ -281,24 +398,31 @@ export function DispatcherView({ radioSets, latestCall, onBack }: Props) {
           ← Radio sets
         </button>
         <span className="text-[10px] text-console-muted uppercase tracking-wider">Dispatcher mode</span>
-        <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={monitorOn}
-            onChange={(event) => {
-              const next = event.target.checked
-              setMonitorOn(next)
-              if (!next && monitorAudioRef.current) {
-                monitorAudioRef.current.pause()
-              }
-            }}
-            className="accent-console-accent"
-          />
-          <span className={monitorOn ? 'text-console-accent' : 'text-console-muted'}>Monitor</span>
-        </label>
+        <span className="w-[72px]" aria-hidden />
       </div>
 
-      <audio ref={monitorAudioRef} preload="none" />
+      <MonitorAudioBar
+        monitorOn={monitorOn}
+        onToggleMonitor={toggleMonitor}
+        monitorVolume={rsVolume}
+        onMonitorVolumeChange={setRsVolume}
+        chirpVolume={chirpVolume}
+        onChirpVolumeChange={setChirpVolume}
+        queueLength={monitorPending ? 1 : 0}
+        audibleSetName={audibleSetName}
+        nowPlayingLabel={nowPlayingLabel}
+        isPlaying={isPlaying}
+        playbackSeconds={playbackSeconds}
+      />
+
+      <audio
+        ref={monitorAudioRef}
+        preload="none"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={handleMonitorEnded}
+        onTimeUpdate={(event) => setPlaybackSeconds(event.currentTarget.currentTime)}
+      />
 
       <div className="border border-console-border rounded p-3 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">

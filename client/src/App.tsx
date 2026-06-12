@@ -32,6 +32,13 @@ import { useOverallStatus } from './hooks/useOverallStatus'
 import { useUpdateCheck } from './hooks/useUpdateCheck'
 import { buildFilteredCalls, formatCallLogCount, formatSavedCallCount } from './lib/callFilters'
 import { playChirp } from './lib/chirp'
+import {
+  clampVolume,
+  DEFAULT_CHIRP_VOLUME,
+  getStoredChirpVolume,
+  storeChirpVolume,
+  volumeToGain,
+} from './lib/monitorAudioSettings'
 import { fmtDateTime, fmtTime, getErrorMessage } from './lib/format'
 import { directoryStatusClass, trustTextClass } from './lib/hubStatus'
 import { maybePlayActiveRadioSetCall } from './lib/radioSetPlayback'
@@ -380,8 +387,14 @@ function App() {
   const [rsError, setRsError] = useState('')
   const [rsLoading, setRsLoading] = useState(false)
   const [rsVolume, setRsVolume] = useState(getStoredRadioSetVolume)
+  const [chirpVolume, setChirpVolumeState] = useState(getStoredChirpVolume)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const rsVolumeRef = useRef(rsVolume)
+  const chirpVolumeRef = useRef(chirpVolume)
+
+  const setChirpVolume = useCallback((value: number) => {
+    setChirpVolumeState(clampVolume(value, DEFAULT_CHIRP_VOLUME))
+  }, [])
 
   const {
     versionInfo,
@@ -828,6 +841,11 @@ function App() {
     }
   }, [rsVolume])
 
+  useEffect(() => {
+    chirpVolumeRef.current = chirpVolume
+    storeChirpVolume(chirpVolume)
+  }, [chirpVolume])
+
 
   const ws = useMemo(
     () =>
@@ -921,7 +939,7 @@ function App() {
     }
     const audio = audioRef.current ?? new Audio()
     audio.src = `/api/v1/calls/${call.id}/audio?play=1`
-    const audioVolume = Math.max(1, rsVolumeRef.current) / 100
+    const audioVolume = volumeToGain(rsVolumeRef.current)
     audio.volume = audioVolume
     audio.onended = () => setPlayingId(null)
     if (selectedDeviceId && 'setSinkId' in audio) {
@@ -930,7 +948,9 @@ function App() {
         .catch(console.error)
     }
     audioRef.current = audio
-    const chirpReady = call.origin === 'ptt' ? playChirp(audioVolume * 0.35) : Promise.resolve()
+    const chirpReady = call.origin === 'ptt'
+      ? playChirp(volumeToGain(chirpVolumeRef.current))
+      : Promise.resolve()
     chirpReady.then(() => audio.play())
       .then(() => setPlayingId(call.id))
       .catch((err) => {
@@ -2138,6 +2158,10 @@ function App() {
               <DispatcherView
                 radioSets={radioSets}
                 latestCall={latestCall}
+                rsVolume={rsVolume}
+                setRsVolume={setRsVolume}
+                chirpVolume={chirpVolume}
+                setChirpVolume={setChirpVolume}
                 onBack={() => setDispatcherActive(false)}
               />
             )
