@@ -10,7 +10,6 @@ import {
 
 const MIN_DURATION_MS = 300
 const MAX_DURATION_MS = 30_000
-const RECORDER_TIMESLICE_MS = 250
 
 type State = 'idle' | 'recording' | 'uploading' | 'error'
 
@@ -94,7 +93,7 @@ export function PTTButton({ radioSetId, disabled, enableSpacebar, deviceId, onTr
       }
       recorderRef.current = recorder
       startedAtRef.current = Date.now()
-      recorder.start(RECORDER_TIMESLICE_MS)
+      recorder.start()
       setState('recording')
       maxTimerRef.current = globalThis.setTimeout(() => {
         if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
@@ -110,16 +109,7 @@ export function PTTButton({ radioSetId, disabled, enableSpacebar, deviceId, onTr
   const stopRecording = useCallback(() => {
     releaseLockRef.current = false
     const recorder = recorderRef.current
-    if (recorder?.state === 'recording') {
-      if (typeof recorder.requestData === 'function') {
-        try {
-          recorder.requestData()
-        } catch {
-          // optional
-        }
-      }
-      recorder.stop()
-    }
+    if (recorder?.state === 'recording') recorder.stop()
   }, [])
 
   useEffect(() => {

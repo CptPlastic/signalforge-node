@@ -21,7 +21,7 @@ func serveAudioBytes(w http.ResponseWriter, r *http.Request, audio []byte, audio
 	}
 	// WebM/Opus PTT from older browser uploads is not playable on iOS; serve M4A instead.
 	if pttAudioNeedsNormalize(audioType) {
-		if m4a, err := transcodeAudioToM4A(r.Context(), audio); err == nil {
+		if m4a, err := transcodePTTAudioToM4A(r.Context(), audio, audioType); err == nil {
 			audio = m4a
 			audioType = pttPreferredAudioType
 			audioName = audioNameWithExt(audioName, ".m4a")
@@ -142,27 +142,8 @@ func pttAudioNeedsNormalize(audioType string) bool {
 	}
 }
 
-func transcodeAudioToM4A(ctx context.Context, audio []byte) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(
-		ctx,
-		"ffmpeg",
-		"-hide_banner", "-loglevel", "error",
-		"-i", "pipe:0",
-		"-vn",
-		"-c:a", "aac",
-		"-b:a", "64k",
-		"-movflags", "+faststart",
-		"-f", "mp4",
-		"pipe:1",
-	)
-	cmd.Stdin = bytes.NewReader(audio)
-	return cmd.Output()
-}
-
-// normalizePTTAudio converts browser WebM/Opus clips to M4A so all clients share one format.
+// normalizePTTAudio converts browser WebM/Opus clips to M4A when ffmpeg can; otherwise
+// stores the original bytes so PTT upload does not fail on hubs without transcoding.
 func normalizePTTAudio(ctx context.Context, audio []byte, audioType, audioName string) ([]byte, string, string, error) {
 	if !pttAudioNeedsNormalize(audioType) {
 		if audioType == "" {
@@ -173,11 +154,48 @@ func normalizePTTAudio(ctx context.Context, audio []byte, audioType, audioName s
 		}
 		return audio, audioType, audioName, nil
 	}
-	out, err := transcodeAudioToM4A(ctx, audio)
+	out, err := transcodePTTAudioToM4A(ctx, audio, audioType)
 	if err != nil {
-		return nil, "", "", fmt.Errorf("transcode ptt to m4a: %w", err)
+		stored, storedType, storedName := storePTTAudioAsUploaded(audio, audioType, audioName)
+		return stored, storedType, storedName, nil
 	}
 	return out, pttPreferredAudioType, audioNameWithExt(audioName, ".m4a"), nil
+}
+
+func storePTTAudioAsUploaded(audio []byte, audioType, audioName string) ([]byte, string, string) {
+	t := strings.ToLower(strings.TrimSpace(audioType))
+	if t == "" {
+		audioType = "audio/webm"
+	}
+	if strings.Contains(t, "webm") {
+		audioName = audioNameWithExt(audioName, ".webm")
+	} else if strings.TrimSpace(audioName) == "" {
+		audioName = "ptt.bin"
+	}
+	return audio, audioType, audioName
+}
+
+func transcodePTTAudioToM4A(ctx context.Context, audio []byte, audioType string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	args := []string{"-hide_banner", "-loglevel", "error"}
+	if strings.Contains(strings.ToLower(audioType), "webm") {
+		args = append(args, "-f", "webm")
+	}
+	args = append(args,
+		"-i", "pipe:0",
+		"-vn",
+		"-c:a", "aac",
+		"-b:a", "64k",
+		"-movflags", "+faststart",
+		"-f", "mp4",
+		"pipe:1",
+	)
+
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	cmd.Stdin = bytes.NewReader(audio)
+	return cmd.Output()
 }
 
 func audioNameWithExt(audioName, ext string) string {

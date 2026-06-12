@@ -34,7 +34,6 @@ type State = 'idle' | 'recording' | 'uploading' | 'error'
 
 const MIN_DURATION_MS = 300
 const MAX_DURATION_MS = 30_000
-const RECORDER_TIMESLICE_MS = 250
 
 function newClientId(): string {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
@@ -331,7 +330,7 @@ export function DispatcherView({
       }
       recorderRef.current = recorder
       startedAtRef.current = Date.now()
-      recorder.start(RECORDER_TIMESLICE_MS)
+      recorder.start()
       maxTimerRef.current = globalThis.setTimeout(() => {
         if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
       }, MAX_DURATION_MS)
@@ -351,13 +350,6 @@ export function DispatcherView({
     micRequestRef.current += 1
     const recorder = recorderRef.current
     if (recorder?.state === 'recording') {
-      if (typeof recorder.requestData === 'function') {
-        try {
-          recorder.requestData()
-        } catch {
-          // optional — final chunk still arrives on stop()
-        }
-      }
       recorder.stop()
       return
     }

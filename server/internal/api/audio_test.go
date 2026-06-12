@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -119,5 +120,23 @@ func TestAudioNameWithExt(t *testing.T) {
 	}
 	if got := audioNameWithExt("call", ".mp3"); got != "call.mp3" {
 		t.Fatalf("expected call.mp3, got %q", got)
+	}
+}
+
+func TestNormalizePTTAudioStoresWebMWhenTranscodeFails(t *testing.T) {
+	// Not valid webm — ffmpeg should fail; upload must still succeed with original bytes.
+	in := []byte(strings.Repeat("x", 128))
+	out, outType, outName, err := normalizePTTAudio(t.Context(), in, "audio/webm", "ptt.webm")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(out) != string(in) {
+		t.Fatal("expected original bytes when transcode fails")
+	}
+	if outType != "audio/webm" {
+		t.Fatalf("expected audio/webm, got %q", outType)
+	}
+	if outName != "ptt.webm" {
+		t.Fatalf("expected ptt.webm, got %q", outName)
 	}
 }
