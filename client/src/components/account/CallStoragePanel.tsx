@@ -10,6 +10,97 @@ function configTone(enabled: boolean): string {
   return enabled ? 'text-console-accent' : 'text-console-muted'
 }
 
+type ArchiveProgress = {
+  phase: 'starting' | 'batch' | 'done' | 'paused'
+  batch: number
+  initialRemaining: number
+  remaining: number
+  archived: number
+  deleted: number
+  freedBytes: number
+  s3Dirs: number
+  startedAt: number
+  lastBatchSize: number
+  statusLine: string
+}
+
+function fmtElapsed(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  if (h > 0) return `${h}h ${m}m ${s}s`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
+
+function archiveProgressPct(progress: ArchiveProgress): number {
+  if (progress.initialRemaining <= 0) return progress.phase === 'done' ? 100 : 0
+  const done = progress.initialRemaining - progress.remaining
+  return Math.min(100, Math.max(0, (done / progress.initialRemaining) * 100))
+}
+
+function ArchiveProgressPanel({ progress }: { progress: ArchiveProgress }) {
+  const [now, setNow] = useState(Date.now())
+
+  useEffect(() => {
+    const id = globalThis.window.setInterval(() => setNow(Date.now()), 1000)
+    return () => globalThis.window.clearInterval(id)
+  }, [])
+
+  const pct = archiveProgressPct(progress)
+  const elapsed = fmtElapsed(now - progress.startedAt)
+
+  return (
+    <div className="rounded border border-console-accent/40 bg-console-accent/5 p-3 flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="console-label text-[10px]">ARCHIVE IN PROGRESS</p>
+        <span className="text-[10px] text-console-accent tracking-wider">
+          {progress.phase === 'batch' ? '● PROCESSING' : progress.phase === 'starting' ? '● STARTING' : '● FINISHING'}
+        </span>
+      </div>
+
+      <div className="h-2 rounded bg-console-border overflow-hidden">
+        <div
+          className="h-full bg-console-accent transition-[width] duration-500 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      <div className="flex items-center justify-between gap-2 text-[10px] text-console-muted tabular-nums">
+        <span>{pct.toFixed(0)}% of backlog</span>
+        <span>{elapsed} elapsed</span>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2 text-xs">
+        <div className="text-console-muted">
+          Batch <span className="text-console-text tabular-nums">{progress.batch}</span>
+          {progress.lastBatchSize > 0 && (
+            <span className="text-console-muted"> · last {progress.lastBatchSize.toLocaleString()}</span>
+          )}
+        </div>
+        <div className="text-console-muted">
+          Archived <span className="text-console-accent tabular-nums">{progress.archived.toLocaleString()}</span>
+        </div>
+        <div className="text-console-muted">
+          Remaining <span className="text-console-text tabular-nums">{progress.remaining.toLocaleString()}</span>
+        </div>
+        <div className="text-console-muted">
+          Freed <span className="text-console-text tabular-nums">{fmtBytes(progress.freedBytes)}</span>
+        </div>
+        {progress.s3Dirs > 0 && (
+          <div className="text-console-muted sm:col-span-2">
+            S3 day folders synced <span className="text-console-text tabular-nums">{progress.s3Dirs}</span>
+          </div>
+        )}
+      </div>
+
+      <p className="text-[11px] text-console-accent">{progress.statusLine}</p>
+      <p className="text-[10px] text-console-muted">Keep this tab open. Large backlogs can take a while — each batch exports audio, syncs to storage, then deletes from Postgres.</p>
+    </div>
+  )
+}
+
 export function CallStoragePanel() {
   const [stats, setStats] = useState<CallStorageStats | null>(null)
   const [loading, setLoading] = useState(false)
@@ -17,6 +108,7 @@ export function CallStoragePanel() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [lastResult, setLastResult] = useState<ArchiveCallsResult | null>(null)
+  const [archiveProgress, setArchiveProgress] = useState<ArchiveProgress | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -48,6 +140,7 @@ export function CallStoragePanel() {
     setWorking(true)
     setError('')
     setMessage('')
+    setArchiveProgress(null)
     try {
       if (dryRun) {
         const result = await api.archiveCalls({
@@ -66,9 +159,39 @@ export function CallStoragePanel() {
       let totalFreed = 0
       let totalS3 = 0
       let totalBatches = 0
+      let initialRemaining = 0
+      const startedAt = Date.now()
+
+      setArchiveProgress({
+        phase: 'starting',
+        batch: 0,
+        initialRemaining: 0,
+        remaining: 0,
+        archived: 0,
+        deleted: 0,
+        freedBytes: 0,
+        s3Dirs: 0,
+        startedAt,
+        lastBatchSize: 0,
+        statusLine: 'Preparing archive sweep…',
+      })
 
       for (;;) {
-        setMessage('Archiving… keep this tab open until remaining hits 0.')
+        const nextBatch = totalBatches + 1
+        setArchiveProgress((prev) => ({
+          phase: 'batch',
+          batch: nextBatch,
+          initialRemaining: initialRemaining || prev?.initialRemaining || 0,
+          remaining: prev?.remaining ?? initialRemaining,
+          archived: totalArchived,
+          deleted: totalDeleted,
+          freedBytes: totalFreed,
+          s3Dirs: totalS3,
+          startedAt,
+          lastBatchSize: prev?.lastBatchSize ?? 0,
+          statusLine: `Batch ${nextBatch}: exporting calls, syncing storage, deleting from database…`,
+        }))
+
         const result = await api.archiveCalls({
           olderThanDays: stats.retentionDays,
           dryRun: false,
@@ -80,16 +203,37 @@ export function CallStoragePanel() {
         totalFreed += result.freedBytes
         totalS3 += result.s3DirsSynced
 
+        if (initialRemaining === 0) {
+          initialRemaining = result.remainingOld + result.archived
+        }
+
         if (result.archived === 0) {
+          setArchiveProgress(null)
           setLastResult(result)
           setMessage('Nothing to archive.')
           break
         }
 
+        setArchiveProgress({
+          phase: result.remainingOld > 0 && !result.stoppedEarly ? 'batch' : result.stoppedEarly ? 'paused' : 'done',
+          batch: totalBatches,
+          initialRemaining,
+          remaining: result.remainingOld,
+          archived: totalArchived,
+          deleted: totalDeleted,
+          freedBytes: totalFreed,
+          s3Dirs: totalS3,
+          startedAt,
+          lastBatchSize: result.archived,
+          statusLine:
+            result.remainingOld > 0 && !result.stoppedEarly
+              ? `Batch ${totalBatches} complete — ${result.archived.toLocaleString()} calls archived, ${result.remainingOld.toLocaleString()} remaining.`
+              : result.stoppedEarly
+                ? `Paused after batch ${totalBatches} — server safety limit reached.`
+                : `Final batch complete — vacuum queued, backlog cleared.`,
+        })
+
         if (result.remainingOld > 0 && !result.stoppedEarly) {
-          setMessage(
-            `${totalArchived.toLocaleString()} archived (${fmtBytes(totalFreed)} freed) — ${result.remainingOld.toLocaleString()} remaining…`,
-          )
           continue
         }
 
@@ -117,6 +261,7 @@ export function CallStoragePanel() {
       setError(getErrorMessage(err, 'Archive failed'))
     } finally {
       setWorking(false)
+      setArchiveProgress(null)
     }
   }
 
@@ -236,7 +381,9 @@ export function CallStoragePanel() {
         </button>
       </div>
 
-      {message && <div className="text-[11px] text-console-accent">{message}</div>}
+      {archiveProgress && working && <ArchiveProgressPanel progress={archiveProgress} />}
+
+      {message && !working && <div className="text-[11px] text-console-accent">{message}</div>}
       {error && <div className="text-[11px] text-console-error">{error}</div>}
       {lastResult?.note && <div className="text-[10px] text-console-muted">{lastResult.note}</div>}
 
