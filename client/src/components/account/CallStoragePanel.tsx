@@ -61,7 +61,7 @@ export function CallStoragePanel() {
         )
       } else {
         setMessage(
-          `Archived ${result.archived} calls, deleted ${result.deleted}, freed ${fmtBytes(result.freedBytes)}${result.s3DirsSynced ? `, synced ${result.s3DirsSynced} day folder(s) to S3` : ''}.`,
+          `Archived ${result.archived} calls, deleted ${result.deleted}, freed ${fmtBytes(result.freedBytes)}${result.s3DirsSynced ? `, synced ${result.s3DirsSynced} day folder(s) to S3` : ''}${result.vacuumQueued ? '; database vacuum queued' : ''}.`,
         )
         await refresh()
       }

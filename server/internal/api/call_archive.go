@@ -8,10 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/projectseven-co-ltd/p7-scanner/server/internal/database"
 )
+
+var callArchiveVacuumMu sync.Mutex
 
 const (
 	callArchiveBatchLimit   = 100
@@ -57,6 +60,7 @@ type archiveCallsResult struct {
 	S3URI         string `json:"s3Uri,omitempty"`
 	S3DirsSynced  int    `json:"s3DirsSynced"`
 	LocalRemoved  bool   `json:"localRemoved"`
+	VacuumQueued  bool   `json:"vacuumQueued"`
 	DryRun        bool   `json:"dryRun"`
 	RemainingOld  int64  `json:"remainingOld"`
 	Note          string `json:"note,omitempty"`
@@ -182,7 +186,7 @@ func (h *handler) archiveCalls(req archiveCallsRequest) (archiveCallsResult, err
 		DryRun:       req.DryRun,
 		RemainingOld: remaining,
 		FreedBytes:   freedBytes,
-		Note:         "Postgres may not return disk until VACUUM runs. When S3 is configured, DB rows are deleted only after s3cmd sync succeeds.",
+		Note:         "When a retention sweep finishes (remainingOld=0), VACUUM FULL runs automatically to return disk to the OS.",
 	}
 	if req.DryRun || remaining == 0 {
 		return result, nil
@@ -241,7 +245,36 @@ func (h *handler) archiveCalls(req archiveCallsRequest) (archiveCallsResult, err
 		}
 		result.LocalRemoved = true
 	}
+
+	if result.Deleted > 0 {
+		result.VacuumQueued = h.scheduleCallsVacuum(result.Deleted, result.RemainingOld)
+	}
 	return result, nil
+}
+
+// scheduleCallsVacuum runs after deletes. Intermediate batches get a light VACUUM;
+// when remainingOld hits zero, VACUUM FULL shrinks the table file back to the OS.
+func (h *handler) scheduleCallsVacuum(deleted int, remainingOld int64) bool {
+	if deleted <= 0 {
+		return false
+	}
+	full := h.cfg.CallArchiveVacuumFull && remainingOld == 0
+	go func() {
+		callArchiveVacuumMu.Lock()
+		defer callArchiveVacuumMu.Unlock()
+		start := time.Now()
+		mode := "analyze"
+		if full {
+			mode = "full"
+		}
+		h.logger.Info("call archive vacuum starting", "mode", mode, "deleted", deleted, "remaining_old", remainingOld)
+		if err := h.db.VacuumCallsTable(full); err != nil {
+			h.logger.Error("call archive vacuum failed", "mode", mode, "error", err)
+			return
+		}
+		h.logger.Info("call archive vacuum completed", "mode", mode, "duration_ms", time.Since(start).Milliseconds())
+	}()
+	return true
 }
 
 func writeCallArchiveFile(archiveDir string, rec database.CallArchiveRecord) (string, error) {

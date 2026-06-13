@@ -226,6 +226,7 @@ export type ArchiveCallsResult = {
   s3Uri?: string
   s3DirsSynced: number
   localRemoved: boolean
+  vacuumQueued?: boolean
   dryRun: boolean
   remainingOld: number
   note?: string

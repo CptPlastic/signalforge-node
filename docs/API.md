@@ -129,6 +129,7 @@ Environment:
 | `CALL_ARCHIVE_S3_URI` | Optional `s3://space-name/prefix` destination (DigitalOcean Spaces or other S3-compatible store). |
 | `CALL_ARCHIVE_S3CFG` | Path to the [s3cmd](https://docs.digitalocean.com/products/spaces/reference/s3cmd/) config file inside the api container (default `/etc/signalforge/s3cfg`). |
 | `CALL_ARCHIVE_DELETE_LOCAL_AFTER_S3` | When `true`, remove local day folders after a successful `s3cmd sync`. |
+| `CALL_ARCHIVE_VACUUM_FULL` | When `true` (default), run `VACUUM FULL` on `calls` after the last batch of a retention sweep finishes (`remainingOld=0`). Intermediate batches run `VACUUM ANALYZE` only. |
 | `SPACES_ACCESS_KEY` / `SPACES_SECRET_KEY` / `SPACES_ENDPOINT` | Optional — api entrypoint writes `CALL_ARCHIVE_S3CFG` at start (e.g. `nyc3.digitaloceanspaces.com`). |
 
 Archive layout:
@@ -157,7 +158,7 @@ Archive request body:
 
 `dryRun: true` reports how many calls and bytes would be freed without writing or deleting anything.
 
-After large deletes, Postgres may not return disk until `VACUUM` runs. When `CALL_ARCHIVE_S3_URI` is set, each batch is uploaded with `s3cmd sync` before rows are deleted from Postgres.
+After large deletes, the hub vacuums the `calls` table automatically. `VACUUM FULL` (returning disk to the OS) runs when a retention sweep finishes; set `CALL_ARCHIVE_VACUUM_FULL=false` to skip the full shrink and rely on `VACUUM ANALYZE` only.
 
 Example Spaces setup:
 

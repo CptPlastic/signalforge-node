@@ -105,3 +105,14 @@ func (d *DB) DeleteCallsByIDs(ids []int64) (int64, error) {
 	}
 	return result.RowsAffected()
 }
+
+// VacuumCallsTable reclaims dead tuple space after bulk deletes. Use full=true to
+// return disk to the OS (brief exclusive lock on calls); otherwise ANALYZE only.
+func (d *DB) VacuumCallsTable(full bool) error {
+	query := "VACUUM ANALYZE calls"
+	if full {
+		query = "VACUUM FULL ANALYZE calls"
+	}
+	_, err := d.db.Exec(query)
+	return err
+}
