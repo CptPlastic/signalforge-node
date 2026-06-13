@@ -404,6 +404,49 @@ func (h *handler) handleMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleDeleteMyAccount permanently deletes the signed-in user and revokes the session.
+func (h *handler) handleDeleteMyAccount(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.requireAuthenticated(w, r)
+	if !ok {
+		return
+	}
+	if user.Role == "admin" {
+		if !h.ensureMoreThanOneActiveAdmin(w, "delete account", "cannot delete the last active admin account") {
+			return
+		}
+	}
+
+	_ = h.db.AppendAuditLog(user.ID, "auth.account_deleted", "user", user.ID, map[string]any{
+		"email": user.Email,
+	})
+
+	deleted, err := h.db.DeleteUser(user.ID)
+	if err != nil {
+		h.logger.Error("delete my account failed", "user_id", user.ID, "error", err)
+		http.Error(w, "delete account", http.StatusInternalServerError)
+		return
+	}
+	if !deleted {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+
+	if token := sessionTokenFromRequest(r); token != "" {
+		_ = h.db.RevokeSession(token)
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   h.cfg.AppEnv == "production",
+		MaxAge:   -1,
+	})
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // handleRefreshSession extends the caller's active session by a fresh TTL.
 // Used by the web client's "RE-AUTH" banner to keep a session alive without
 // going through the full magic-link round-trip.

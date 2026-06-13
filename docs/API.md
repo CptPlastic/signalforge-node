@@ -46,6 +46,7 @@ curl https://p7hub.projectseven.us/api/v1/health
 | `GET` | `/api/v1/auth/verify?token=...` | Verify a magic-link token and create a session cookie. |
 | `POST` | `/api/v1/auth/logout` | Revoke the current session. |
 | `GET` | `/api/v1/auth/me` | Return current session/user state. |
+| `DELETE` | `/api/v1/auth/me` | Permanently delete the signed-in account and revoke the session (required for App Store account-deletion guidelines). |
 
 ## Hub Identity And Directory
 
