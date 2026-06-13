@@ -23,6 +23,9 @@
 #
 # With mock radio sidecar (test/staging only):
 #   docker compose --env-file .env.production -f docker-compose.plesk.yml --profile mock up -d
+#
+# Call archive runs as a background job (no long HTTP hold). If you use sync mode or other
+# long admin requests through Plesk's reverse proxy, raise its read timeout above 120s.
 
 services:
   postgres:

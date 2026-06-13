@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, type ArchiveCallsResult, type CallStorageStats } from '../../lib/api'
+import { api, type ArchiveCallsResult, type ArchiveJobStatus, type CallStorageStats } from '../../lib/api'
 import { fmtBytes, fmtDateTime, getErrorMessage } from '../../lib/format'
 
 function configStatus(enabled: boolean): string {
@@ -32,6 +32,36 @@ function fmtElapsed(ms: number): string {
   if (h > 0) return `${h}h ${m}m ${s}s`
   if (m > 0) return `${m}m ${s}s`
   return `${s}s`
+}
+
+function jobToProgress(job: ArchiveJobStatus): ArchiveProgress {
+  const initialRemaining =
+    job.initialRemaining && job.initialRemaining > 0
+      ? job.initialRemaining
+      : job.archived + job.remainingOld
+  return {
+    phase: job.running ? 'batch' : job.phase === 'paused' ? 'paused' : 'done',
+    batch: job.batches ?? 0,
+    initialRemaining,
+    remaining: job.remainingOld,
+    archived: job.archived,
+    deleted: job.deleted,
+    freedBytes: job.freedBytes,
+    s3Dirs: job.s3DirsSynced,
+    startedAt: (job.startedAt ?? Math.floor(Date.now() / 1000)) * 1000,
+    lastBatchSize: job.lastBatchSize ?? 0,
+    statusLine: job.statusLine || (job.running ? 'Archive running in background…' : 'Archive finished.'),
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.window.setTimeout(resolve, ms)
+  })
+}
+
+function isArchiveJobStatus(value: ArchiveCallsResult | ArchiveJobStatus): value is ArchiveJobStatus {
+  return 'running' in value
 }
 
 function archiveProgressPct(progress: ArchiveProgress): number {
@@ -96,7 +126,7 @@ function ArchiveProgressPanel({ progress }: { progress: ArchiveProgress }) {
       </div>
 
       <p className="text-[11px] text-console-accent">{progress.statusLine}</p>
-      <p className="text-[10px] text-console-muted">Keep this tab open. Large backlogs can take a while — each batch exports audio, syncs to storage, then deletes from Postgres.</p>
+      <p className="text-[10px] text-console-muted">Keep this tab open for live progress, or return later — the job keeps running on the server.</p>
     </div>
   )
 }
@@ -126,6 +156,53 @@ export function CallStoragePanel() {
     void refresh()
   }, [refresh])
 
+  const pollArchiveJob = useCallback(async () => {
+    for (;;) {
+      const job = await api.archiveJobStatus()
+      setArchiveProgress(jobToProgress(job))
+      if (!job.running) {
+        setLastResult(job)
+        if (job.error) {
+          setError(job.error)
+        } else if (job.stoppedEarly) {
+          setMessage(
+            `Paused: ${job.archived.toLocaleString()} archived, ${job.remainingOld.toLocaleString()} still remaining. Run again to continue.`,
+          )
+        } else if (job.archived === 0) {
+          setMessage('Nothing to archive.')
+        } else {
+          setMessage(
+            `Done: ${job.archived.toLocaleString()} calls archived, ${fmtBytes(job.freedBytes)} freed${job.s3DirsSynced ? `, ${job.s3DirsSynced} day folder(s) synced to S3` : ''}${job.vacuumQueued ? '; database vacuum queued' : ''}.`,
+          )
+        }
+        setArchiveProgress(null)
+        await refresh()
+        return
+      }
+      await sleep(2000)
+    }
+  }, [refresh])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const job = await api.archiveJobStatus()
+        if (!job.running || cancelled) return
+        setWorking(true)
+        setArchiveProgress(jobToProgress(job))
+        await pollArchiveJob()
+      } catch {
+        // ignore status probe on load
+      } finally {
+        if (!cancelled) setWorking(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [pollArchiveJob])
+
   async function runArchive(dryRun: boolean) {
     if (!stats?.retentionDays) {
       setError('Set CALL_RETENTION_DAYS in the stack env file before archiving.')
@@ -133,7 +210,7 @@ export function CallStoragePanel() {
     }
     if (!dryRun) {
       const ok = globalThis.window.confirm(
-        `Archive and delete all calls older than ${stats.retentionDays} days? This runs automatically in batches until the backlog is cleared${stats.archiveS3Uri ? ' (uploading to Spaces)' : ''}.`,
+        `Archive and delete all calls older than ${stats.retentionDays} days? This runs in the background on the server until the backlog is cleared${stats.archiveS3Uri ? ' (uploading to Spaces)' : ''}.`,
       )
       if (!ok) return
     }
@@ -146,7 +223,11 @@ export function CallStoragePanel() {
         const result = await api.archiveCalls({
           olderThanDays: stats.retentionDays,
           dryRun: true,
+          async: false,
         })
+        if (isArchiveJobStatus(result)) {
+          throw new Error('unexpected background archive response for dry run')
+        }
         setLastResult(result)
         setMessage(
           `Dry run: ${result.remainingOld.toLocaleString()} calls (${fmtBytes(result.freedBytes)}) would be archived.`,
@@ -154,114 +235,21 @@ export function CallStoragePanel() {
         return
       }
 
-      let totalArchived = 0
-      let totalDeleted = 0
-      let totalFreed = 0
-      let totalS3 = 0
-      let totalBatches = 0
-      let initialRemaining = 0
-      const startedAt = Date.now()
-
-      setArchiveProgress({
-        phase: 'starting',
-        batch: 0,
-        initialRemaining: 0,
-        remaining: 0,
-        archived: 0,
-        deleted: 0,
-        freedBytes: 0,
-        s3Dirs: 0,
-        startedAt,
-        lastBatchSize: 0,
-        statusLine: 'Preparing archive sweep…',
+      const started = await api.archiveCalls({
+        olderThanDays: stats.retentionDays,
+        async: true,
+        limit: 100,
       })
-
-      for (;;) {
-        const nextBatch = totalBatches + 1
-        setArchiveProgress((prev) => ({
-          phase: 'batch',
-          batch: nextBatch,
-          initialRemaining: initialRemaining || prev?.initialRemaining || 0,
-          remaining: prev?.remaining ?? initialRemaining,
-          archived: totalArchived,
-          deleted: totalDeleted,
-          freedBytes: totalFreed,
-          s3Dirs: totalS3,
-          startedAt,
-          lastBatchSize: prev?.lastBatchSize ?? 0,
-          statusLine: `Batch ${nextBatch}: exporting calls, syncing storage, deleting from database…`,
-        }))
-
-        const result = await api.archiveCalls({
-          olderThanDays: stats.retentionDays,
-          dryRun: false,
-          untilEmpty: false,
-        })
-        totalBatches += result.batches ?? 1
-        totalArchived += result.archived
-        totalDeleted += result.deleted
-        totalFreed += result.freedBytes
-        totalS3 += result.s3DirsSynced
-
-        if (initialRemaining === 0) {
-          initialRemaining = result.remainingOld + result.archived
-        }
-
-        if (result.archived === 0) {
-          setArchiveProgress(null)
-          setLastResult(result)
-          setMessage('Nothing to archive.')
-          break
-        }
-
-        setArchiveProgress({
-          phase: result.remainingOld > 0 && !result.stoppedEarly ? 'batch' : result.stoppedEarly ? 'paused' : 'done',
-          batch: totalBatches,
-          initialRemaining,
-          remaining: result.remainingOld,
-          archived: totalArchived,
-          deleted: totalDeleted,
-          freedBytes: totalFreed,
-          s3Dirs: totalS3,
-          startedAt,
-          lastBatchSize: result.archived,
-          statusLine:
-            result.remainingOld > 0 && !result.stoppedEarly
-              ? `Batch ${totalBatches} complete — ${result.archived.toLocaleString()} calls archived, ${result.remainingOld.toLocaleString()} remaining.`
-              : result.stoppedEarly
-                ? `Paused after batch ${totalBatches} — server safety limit reached.`
-                : `Final batch complete — vacuum queued, backlog cleared.`,
-        })
-
-        if (result.remainingOld > 0 && !result.stoppedEarly) {
-          continue
-        }
-
-        setLastResult({
-          ...result,
-          archived: totalArchived,
-          deleted: totalDeleted,
-          freedBytes: totalFreed,
-          s3DirsSynced: totalS3,
-          batches: totalBatches,
-        })
-        if (result.stoppedEarly) {
-          setMessage(
-            `Paused by server safety limit: ${totalArchived.toLocaleString()} archived, ${result.remainingOld.toLocaleString()} still remaining. Run again to continue.`,
-          )
-        } else {
-          setMessage(
-            `Done: ${totalArchived.toLocaleString()} calls archived, ${fmtBytes(totalFreed)} freed${totalS3 ? `, ${totalS3} day folder(s) synced to S3` : ''}${result.vacuumQueued ? '; database vacuum queued' : ''}.`,
-          )
-        }
-        await refresh()
-        break
+      if (!isArchiveJobStatus(started)) {
+        throw new Error('expected background archive job')
       }
+      setArchiveProgress(jobToProgress(started))
+      await pollArchiveJob()
     } catch (err) {
       setError(getErrorMessage(err, 'Archive failed'))
+      setArchiveProgress(null)
     } finally {
       setWorking(false)
-      setArchiveProgress(null)
     }
   }
 
@@ -285,7 +273,7 @@ export function CallStoragePanel() {
 
       <p className="text-[11px] text-console-muted">
         Call audio lives in Postgres and can fill the database volume. Configure retention in the stack env file;
-        <strong> Archive Now</strong> runs automatically until the backlog is cleared (500 calls per internal batch).
+        <strong> Archive Now</strong> runs in the background on the server until the backlog is cleared (100 calls per batch).
       </p>
 
       {stats && (

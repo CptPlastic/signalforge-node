@@ -235,6 +235,17 @@ export type ArchiveCallsResult = {
   note?: string
 }
 
+export type ArchiveJobStatus = ArchiveCallsResult & {
+  running: boolean
+  phase: string
+  statusLine: string
+  error?: string
+  startedAt?: number
+  updatedAt?: number
+  lastBatchSize?: number
+  initialRemaining?: number
+}
+
 export type TalkgroupInfo = {
   talkgroup: number
   talkgroupLabel: string
@@ -467,11 +478,12 @@ export const api = {
   revokeShareToken: (id: string) =>
     request<RadioSet>(`/api/v1/radio-sets/${encodeURIComponent(id)}/share`, { method: 'DELETE' }),
   callStorageStats: () => request<CallStorageStats>('/api/v1/admin/calls/storage'),
-  archiveCalls: (body: { olderThanDays?: number; dryRun?: boolean; limit?: number; untilEmpty?: boolean }) =>
-    request<ArchiveCallsResult>('/api/v1/admin/calls/archive', {
+  archiveCalls: (body: { olderThanDays?: number; dryRun?: boolean; limit?: number; untilEmpty?: boolean; async?: boolean }) =>
+    request<ArchiveCallsResult | ArchiveJobStatus>('/api/v1/admin/calls/archive', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  archiveJobStatus: () => request<ArchiveJobStatus>('/api/v1/admin/calls/archive/status'),
   uploadPTT: async (
     id: string,
     audio: Blob,

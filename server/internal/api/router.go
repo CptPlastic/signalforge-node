@@ -32,6 +32,12 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 	r.Get("/ws", handle.handleWebSocket)
 	r.Get("/public/ws/{token}", handle.handlePublicWS)
 
+	// Long-running admin maintenance (sync API clients only).
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Timeout(20 * time.Minute))
+		r.Post("/api/v1/admin/calls/archive", handle.handleArchiveCalls)
+	})
+
 	// All other routes run under a 30-second timeout.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Timeout(30 * time.Second))
@@ -71,7 +77,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Get("/api/v1/audit-logs", handle.handleListAuditLogs)
 		r.Get("/api/v1/calls/groups", handle.handleListCallGroups)
 		r.Get("/api/v1/admin/calls/storage", handle.handleCallStorageStats)
-		r.Post("/api/v1/admin/calls/archive", handle.handleArchiveCalls)
+		r.Get("/api/v1/admin/calls/archive/status", handle.handleArchiveJobStatus)
 		r.Get("/api/v1/calls", handle.handleListCalls)
 		r.Get("/api/v1/calls/{id}/audio", handle.handleCallAudio)
 		r.Post("/internal/transcription/jobs/claim", handle.handleClaimTranscriptionJob)

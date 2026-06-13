@@ -51,6 +51,7 @@ type archiveCallsRequest struct {
 	DryRun        bool  `json:"dryRun"`
 	Limit         int   `json:"limit"`
 	UntilEmpty    *bool `json:"untilEmpty"`
+	Async         *bool `json:"async"`
 }
 
 type archiveCallsResult struct {
@@ -116,6 +117,18 @@ func (h *handler) handleArchiveCalls(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+
+	if archiveAsync(req) {
+		status, code, err := h.startArchiveJob(admin.ID, req)
+		if err != nil {
+			h.logger.Error("start archive job failed", "error", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, code, status)
+		return
+	}
+
 	result, err := h.archiveCalls(req)
 	if err != nil {
 		h.logger.Error("archive calls failed", "error", err)
@@ -133,6 +146,7 @@ func (h *handler) handleArchiveCalls(w http.ResponseWriter, r *http.Request) {
 		"untilEmpty":    archiveUntilEmpty(req),
 		"stoppedEarly":  result.StoppedEarly,
 		"remainingOld":  result.RemainingOld,
+		"async":         false,
 	})
 	writeJSON(w, http.StatusOK, result)
 }
@@ -150,12 +164,18 @@ func (h *handler) startCallArchiveLoop() {
 		defer timer.Stop()
 		for {
 			<-timer.C
+			if !archiveSweepMu.TryLock() {
+				h.logger.Info("scheduled call archive skipped, sweep already running")
+				timer.Reset(callArchiveLoopInterval)
+				continue
+			}
 			untilEmpty := true
-			result, err := h.archiveCalls(archiveCallsRequest{
+			result, err := h.archiveCallsWithProgress(archiveCallsRequest{
 				OlderThanDays: h.cfg.CallRetentionDays,
 				Limit:         callArchiveBatchLimit,
 				UntilEmpty:    &untilEmpty,
-			})
+			}, nil)
+			archiveSweepMu.Unlock()
 			if err != nil {
 				h.logger.Error("scheduled call archive failed", "error", err)
 			} else if result.Archived > 0 {
@@ -194,71 +214,29 @@ func (h *handler) archiveCalls(req archiveCallsRequest) (archiveCallsResult, err
 	if days <= 0 {
 		return archiveCallsResult{}, fmt.Errorf("olderThanDays must be > 0 (or set CALL_RETENTION_DAYS)")
 	}
-	limit := req.Limit
-	if limit <= 0 || limit > callArchiveBatchLimit {
-		limit = callArchiveBatchLimit
-	}
 
-	cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour).Unix()
-	remaining, err := h.db.CountCallsOlderThan(cutoff)
-	if err != nil {
-		return archiveCallsResult{}, fmt.Errorf("count old calls: %w", err)
-	}
-	totalFreedBytes, err := h.db.SumAudioBytesOlderThan(cutoff)
-	if err != nil {
-		return archiveCallsResult{}, fmt.Errorf("sum audio bytes: %w", err)
-	}
-
-	result := archiveCallsResult{
-		CutoffUnix:   cutoff,
-		ArchiveDir:   archiveDir,
-		S3URI:        strings.TrimSpace(h.cfg.CallArchiveS3URI),
-		DryRun:       req.DryRun,
-		RemainingOld: remaining,
-		BatchLimit:   limit,
-		Note:         "Archives run in batches until the backlog is cleared. VACUUM FULL runs automatically when remainingOld reaches 0.",
-	}
 	if req.DryRun {
-		result.FreedBytes = totalFreedBytes
-		return result, nil
-	}
-	if remaining == 0 {
-		return result, nil
-	}
-
-	untilEmpty := archiveUntilEmpty(req)
-	deadline := time.Now().Add(callArchiveMaxSweepDuration)
-	for {
-		batch, err := h.archiveCallsBatch(archiveDir, cutoff, limit)
+		cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour).Unix()
+		remaining, err := h.db.CountCallsOlderThan(cutoff)
 		if err != nil {
-			return result, err
+			return archiveCallsResult{}, fmt.Errorf("count old calls: %w", err)
 		}
-		result.Batches++
-		result.Archived += batch.Archived
-		result.Deleted += batch.Deleted
-		result.FreedBytes += batch.FreedBytes
-		result.S3DirsSynced += batch.S3DirsSynced
-		result.LocalRemoved = result.LocalRemoved || batch.LocalRemoved
-		result.RemainingOld = batch.RemainingOld
-
-		if batch.Archived == 0 || batch.RemainingOld == 0 || !untilEmpty {
-			break
+		totalFreedBytes, err := h.db.SumAudioBytesOlderThan(cutoff)
+		if err != nil {
+			return archiveCallsResult{}, fmt.Errorf("sum audio bytes: %w", err)
 		}
-		if time.Now().After(deadline) {
-			result.StoppedEarly = true
-			result.Note = fmt.Sprintf(
-				"Sweep paused after %s (safety limit). %d calls remain — run again or wait for the 6-hour scheduler.",
-				callArchiveMaxSweepDuration,
-				batch.RemainingOld,
-			)
-			break
-		}
+		return archiveCallsResult{
+			CutoffUnix:   cutoff,
+			ArchiveDir:   archiveDir,
+			S3URI:        strings.TrimSpace(h.cfg.CallArchiveS3URI),
+			DryRun:       true,
+			RemainingOld: remaining,
+			FreedBytes:   totalFreedBytes,
+			Note:         "Archives run in batches until the backlog is cleared. VACUUM FULL runs automatically when remainingOld reaches 0.",
+		}, nil
 	}
 
-	if result.Deleted > 0 {
-		result.VacuumQueued = h.scheduleCallsVacuum(result.Deleted, result.RemainingOld)
-	}
-	return result, nil
+	return h.archiveCallsWithProgress(req, nil)
 }
 
 func (h *handler) archiveCallsBatch(archiveDir string, cutoff int64, limit int) (archiveCallsBatchResult, error) {

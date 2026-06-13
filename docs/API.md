@@ -144,7 +144,8 @@ Archive layout:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/admin/calls/storage` | Call count, total audio bytes, oldest/newest call timestamps, retention config. |
-| `POST` | `/api/v1/admin/calls/archive` | Export then delete calls older than N days. Runs in batches of up to 500 until the backlog is cleared (`untilEmpty`, default `true`). |
+| `GET` | `/api/v1/admin/calls/archive/status` | Background archive job progress (`running`, `phase`, counts, `statusLine`). |
+| `POST` | `/api/v1/admin/calls/archive` | Export then delete calls older than N days. Default: **async** background sweep (returns immediately). |
 
 Archive request body:
 
@@ -152,12 +153,14 @@ Archive request body:
 {
   "olderThanDays": 30,
   "dryRun": true,
-  "limit": 500,
-  "untilEmpty": true
+  "limit": 100,
+  "async": true
 }
 ```
 
 `dryRun: true` reports how many calls and bytes would be freed without writing or deleting anything.
+
+`async: true` (default for real runs) starts a background sweep on the server and returns job status immediately — avoids HTTP proxy timeouts. Poll `GET /api/v1/admin/calls/archive/status` every few seconds. Set `async: false` for a synchronous single sweep (requires long proxy timeouts).
 
 `untilEmpty: true` (default for real runs) keeps batching until `remainingOld` is 0 or a 4-hour safety limit is hit. Set `untilEmpty: false` for a single batch only.
 
