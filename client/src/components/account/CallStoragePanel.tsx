@@ -73,6 +73,7 @@ export function CallStoragePanel() {
   }
 
   const archiveConfigured = Boolean(stats?.archiveDir?.trim())
+  const envNotReachingContainer = stats && !stats.archiveDirFromEnv && !stats.retentionDaysFromEnv
   const s3Configured = Boolean(stats?.archiveS3Uri?.trim())
 
   return (
@@ -119,9 +120,15 @@ export function CallStoragePanel() {
               <span className={`tabular-nums ${stats.retentionDays > 0 ? 'text-console-accent' : 'text-console-error'}`}>
                 {stats.retentionDays > 0 ? `${stats.retentionDays} days` : 'not set'}
               </span>
+              {stats.retentionDaysFromEnv === false && stats.retentionDays > 0 && (
+                <span className="text-console-muted"> (server default)</span>
+              )}
             </div>
             <div className="text-console-muted break-all">
               Archive dir: <span className="text-console-text">{stats.archiveDir || '—'}</span>
+              {stats.archiveDirFromEnv === false && stats.archiveDir && (
+                <span className="text-console-muted"> (default — env not in container)</span>
+              )}
             </div>
             <div className="text-console-muted break-all">
               S3 URI: <span className="text-console-text">{stats.archiveS3Uri || '—'}</span>
@@ -140,15 +147,19 @@ export function CallStoragePanel() {
         </div>
       )}
 
-      {!archiveConfigured && stats && (
+      {envNotReachingContainer && (
         <div className="rounded border border-console-error/40 bg-console-error/10 px-3 py-2 text-[11px] text-console-error">
-          CALL_ARCHIVE_DIR is not configured. Add retention settings to your stack env file and redeploy.
+          Stack env vars are not reaching the api container. In Portainer → Stack → Environment, set{' '}
+          <code>CALL_RETENTION_DAYS=30</code> and <code>CALL_ARCHIVE_DIR=/data/call-archive</code>, update the stack
+          compose from the latest repo (must include pass-through lines under <code>api.environment</code>), then{' '}
+          <strong>Update the stack</strong> with pull + recreate. Verify with{' '}
+          <code>/api/v1/version</code> — look for <code>callRetentionDays</code> and <code>callArchiveDir</code>.
         </div>
       )}
 
       {archiveConfigured && stats && stats.retentionDays <= 0 && (
         <div className="rounded border border-console-error/40 bg-console-error/10 px-3 py-2 text-[11px] text-console-error">
-          CALL_RETENTION_DAYS is not set. Add it to the stack env file (e.g. <code>30</code>) and redeploy.
+          CALL_RETENTION_DAYS is not set. Add it to the Portainer stack Environment (e.g. <code>30</code>) and redeploy.
         </div>
       )}
 

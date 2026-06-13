@@ -78,10 +78,12 @@ func (h *handler) handleCallStorageStats(w http.ResponseWriter, r *http.Request)
 		"oldestCallAt":                stats.OldestCallAt,
 		"newestCallAt":                stats.NewestCallAt,
 		"retentionDays":               h.cfg.CallRetentionDays,
+		"retentionDaysFromEnv":        os.Getenv("CALL_RETENTION_DAYS") != "",
 		"archiveDir":                  h.cfg.CallArchiveDir,
+		"archiveDirFromEnv":           strings.TrimSpace(os.Getenv("CALL_ARCHIVE_DIR")) != "",
 		"archiveS3Uri":                h.cfg.CallArchiveS3URI,
 		"archiveS3Cfg":                h.cfg.CallArchiveS3Cfg,
-		"archiveDeleteLocalAfterS3":     h.cfg.CallArchiveDeleteLocalAfterS3,
+		"archiveDeleteLocalAfterS3":   h.cfg.CallArchiveDeleteLocalAfterS3,
 		"archiveLoopEnabled":          h.callArchiveLoopEnabled(),
 	})
 }

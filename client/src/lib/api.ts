@@ -208,7 +208,9 @@ export type CallStorageStats = {
   oldestCallAt: number
   newestCallAt: number
   retentionDays: number
+  retentionDaysFromEnv?: boolean
   archiveDir: string
+  archiveDirFromEnv?: boolean
   archiveS3Uri: string
   archiveS3Cfg: string
   archiveDeleteLocalAfterS3: boolean

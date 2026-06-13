@@ -69,8 +69,12 @@ func (h *handler) handleVersion(w http.ResponseWriter, _ *http.Request) {
 		"deployTag":             h.cfg.DeployTag,
 		"uploadKeyRequired":     uploadKeyRequired,
 		"transcriptionEnabled":   strings.TrimSpace(h.cfg.TranscriptionWorkerToken) != "",
-		"passwordLoginEnabled":   h.cfg.AuthPasswordLoginEnabled,
+		"passwordLoginEnabled":    h.cfg.AuthPasswordLoginEnabled,
 		"emailDeliveryConfigured": h.emailDeliveryConfigured(),
+		"callRetentionDays":       h.cfg.CallRetentionDays,
+		"callArchiveDir":          h.cfg.CallArchiveDir,
+		"callArchiveS3Uri":        h.cfg.CallArchiveS3URI,
+		"callArchiveLoopEnabled":  h.callArchiveLoopEnabled(),
 	})
 }
 

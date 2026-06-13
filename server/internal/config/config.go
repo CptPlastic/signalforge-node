@@ -74,7 +74,7 @@ func Load() (Config, error) {
 		AuthAutoApproveUsers:     getBoolEnv("AUTH_AUTO_APPROVE_USERS", false),
 		AuthPasswordLoginEnabled: getBoolEnv("AUTH_PASSWORD_LOGIN_ENABLED", false),
 		CallRetentionDays:        getIntEnv("CALL_RETENTION_DAYS", 0),
-		CallArchiveDir:           strings.TrimSpace(getEnv("CALL_ARCHIVE_DIR", "")),
+		CallArchiveDir:           strings.TrimSpace(getEnv("CALL_ARCHIVE_DIR", "/data/call-archive")),
 		CallArchiveS3URI:         strings.TrimSpace(getEnv("CALL_ARCHIVE_S3_URI", "")),
 		CallArchiveS3Cfg:         strings.TrimSpace(getEnv("CALL_ARCHIVE_S3CFG", "/etc/signalforge/s3cfg")),
 		CallArchiveDeleteLocalAfterS3: getBoolEnv("CALL_ARCHIVE_DELETE_LOCAL_AFTER_S3", false),
