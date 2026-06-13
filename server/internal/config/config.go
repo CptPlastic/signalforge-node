@@ -35,6 +35,11 @@ type Config struct {
 	AuthBootstrapPassword    string
 	AuthAutoApproveUsers     bool
 	AuthPasswordLoginEnabled bool
+	CallRetentionDays        int
+	CallArchiveDir           string
+	CallArchiveS3URI         string
+	CallArchiveS3Cfg         string
+	CallArchiveDeleteLocalAfterS3 bool
 	LogLevel                 slog.Level
 }
 
@@ -68,6 +73,11 @@ func Load() (Config, error) {
 		AuthBootstrapPassword:    getEnv("AUTH_BOOTSTRAP_PASSWORD", ""),
 		AuthAutoApproveUsers:     getBoolEnv("AUTH_AUTO_APPROVE_USERS", false),
 		AuthPasswordLoginEnabled: getBoolEnv("AUTH_PASSWORD_LOGIN_ENABLED", false),
+		CallRetentionDays:        getIntEnv("CALL_RETENTION_DAYS", 0),
+		CallArchiveDir:           strings.TrimSpace(getEnv("CALL_ARCHIVE_DIR", "")),
+		CallArchiveS3URI:         strings.TrimSpace(getEnv("CALL_ARCHIVE_S3_URI", "")),
+		CallArchiveS3Cfg:         strings.TrimSpace(getEnv("CALL_ARCHIVE_S3CFG", "/etc/signalforge/s3cfg")),
+		CallArchiveDeleteLocalAfterS3: getBoolEnv("CALL_ARCHIVE_DELETE_LOCAL_AFTER_S3", false),
 	}
 
 	logLevel := getEnv("LOG_LEVEL", "info")
@@ -114,6 +124,18 @@ func getBoolEnv(key string, fallback bool) bool {
 		return fallback
 	}
 	return value == "1" || value == "true" || value == "yes" || value == "on"
+}
+
+func getIntEnv(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	var parsed int
+	if _, err := fmt.Sscanf(value, "%d", &parsed); err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func getInt64Env(key string, fallback int64) int64 {

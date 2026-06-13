@@ -116,6 +116,60 @@ Common `/api/v1/calls` query parameters:
 | `sort` | Field such as `datetime`, `duration`, `talkgroup`, or `frequency`. |
 | `order` | `asc` or `desc`. |
 
+## Call Storage And Retention (Admin)
+
+Call audio is stored in Postgres (`BYTEA`). On busy hubs this grows quickly and can fill the database volume. Configure archival to export old calls to disk and remove them from the database.
+
+Environment:
+
+| Variable | Meaning |
+| --- | --- |
+| `CALL_ARCHIVE_DIR` | Host path for exported call files (mount a spacious volume here). |
+| `CALL_RETENTION_DAYS` | When set with `CALL_ARCHIVE_DIR`, the hub auto-archives calls older than this many days every 6 hours. `0` disables the scheduler (manual API still works). |
+| `CALL_ARCHIVE_S3_URI` | Optional `s3://space-name/prefix` destination (DigitalOcean Spaces or other S3-compatible store). |
+| `CALL_ARCHIVE_S3CFG` | Path to the [s3cmd](https://docs.digitalocean.com/products/spaces/reference/s3cmd/) config file inside the api container (default `/etc/signalforge/s3cfg`). |
+| `CALL_ARCHIVE_DELETE_LOCAL_AFTER_S3` | When `true`, remove local day folders after a successful `s3cmd sync`. |
+| `SPACES_ACCESS_KEY` / `SPACES_SECRET_KEY` / `SPACES_ENDPOINT` | Optional — api entrypoint writes `CALL_ARCHIVE_S3CFG` at start (e.g. `nyc3.digitaloceanspaces.com`). |
+
+Archive layout:
+
+```text
+/data/call-archive/
+  2026-06-01/
+    call-12345.json
+    call-12345.mp3
+```
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/admin/calls/storage` | Call count, total audio bytes, oldest/newest call timestamps, retention config. |
+| `POST` | `/api/v1/admin/calls/archive` | Export then delete a batch of calls older than N days. |
+
+Archive request body:
+
+```json
+{
+  "olderThanDays": 30,
+  "dryRun": true,
+  "limit": 100
+}
+```
+
+`dryRun: true` reports how many calls and bytes would be freed without writing or deleting anything.
+
+After large deletes, Postgres may not return disk until `VACUUM` runs. When `CALL_ARCHIVE_S3_URI` is set, each batch is uploaded with `s3cmd sync` before rows are deleted from Postgres.
+
+Example Spaces setup:
+
+```bash
+# In stack env (entrypoint generates /etc/signalforge/s3cfg):
+SPACES_ACCESS_KEY=your-key
+SPACES_SECRET_KEY=your-secret
+SPACES_ENDPOINT=nyc3.digitaloceanspaces.com
+CALL_ARCHIVE_S3_URI=s3://your-space/signalforge-hub/call-archive
+CALL_ARCHIVE_DELETE_LOCAL_AFTER_S3=true
+```
+
 ## Radio Sets And Public Player
 
 Authenticated session required for radio-set management. Public player routes are unauthenticated when a share token exists.

@@ -1,0 +1,14 @@
+# Example s3cmd config for DigitalOcean Spaces.
+# Copy to /etc/signalforge/s3cfg on the host and mount into the api container,
+# or set SPACES_ACCESS_KEY / SPACES_SECRET_KEY / SPACES_ENDPOINT and let the
+# entrypoint generate this file at container start.
+#
+# Setup guide: https://docs.digitalocean.com/products/spaces/reference/s3cmd/
+
+[default]
+access_key = REPLACE_WITH_SPACES_ACCESS_KEY
+secret_key = REPLACE_WITH_SPACES_SECRET_KEY
+host_base = nyc3.digitaloceanspaces.com
+host_bucket = %(bucket)s.nyc3.digitaloceanspaces.com
+use_https = True
+signature_v2 = False

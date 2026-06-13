@@ -44,6 +44,15 @@ func main() {
 		"bootstrapPasswordConfigured", strings.TrimSpace(cfg.AuthBootstrapPassword) != "",
 		"autoApproveUsers", cfg.AuthAutoApproveUsers,
 	)
+	if cfg.CallRetentionDays > 0 || cfg.CallArchiveDir != "" {
+		logger.Info("call archive configuration",
+			"retentionDays", cfg.CallRetentionDays,
+			"archiveDir", cfg.CallArchiveDir,
+			"archiveS3Uri", cfg.CallArchiveS3URI,
+			"deleteLocalAfterS3", cfg.CallArchiveDeleteLocalAfterS3,
+			"autoArchive", cfg.CallRetentionDays > 0 && cfg.CallArchiveDir != "",
+		)
+	}
 
 	db, err := database.Open(cfg.DatabaseURL)
 	if err != nil {

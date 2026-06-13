@@ -9,6 +9,7 @@ import {
 } from '../../lib/userDrafts'
 import type { AppView } from '../../types/app'
 import { ActiveView } from '../ActiveView'
+import { CallStoragePanel } from './CallStoragePanel'
 
 type AccountViewProps = Readonly<{
   activeView: AppView
@@ -629,6 +630,8 @@ export function AccountView({
         {authUser && authError && <div className="text-[11px] text-console-error">{authError}</div>}
 
         {showAdminPanels && <AdminOperatorPanel onOpenHub={onOpenHub} />}
+
+        {showAdminPanels && <CallStoragePanel />}
 
         {showAdminPanels && (
           <UserManagementPanel

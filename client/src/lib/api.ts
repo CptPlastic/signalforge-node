@@ -202,6 +202,33 @@ export type AuditLogEntry = {
   createdAt: number
 }
 
+export type CallStorageStats = {
+  callCount: number
+  audioBytes: number
+  oldestCallAt: number
+  newestCallAt: number
+  retentionDays: number
+  archiveDir: string
+  archiveS3Uri: string
+  archiveS3Cfg: string
+  archiveDeleteLocalAfterS3: boolean
+  archiveLoopEnabled: boolean
+}
+
+export type ArchiveCallsResult = {
+  cutoffUnix: number
+  archived: number
+  deleted: number
+  freedBytes: number
+  archiveDir: string
+  s3Uri?: string
+  s3DirsSynced: number
+  localRemoved: boolean
+  dryRun: boolean
+  remainingOld: number
+  note?: string
+}
+
 export type TalkgroupInfo = {
   talkgroup: number
   talkgroupLabel: string
@@ -433,6 +460,12 @@ export const api = {
     request<RadioSet>(`/api/v1/radio-sets/${encodeURIComponent(id)}/share`, { method: 'POST' }),
   revokeShareToken: (id: string) =>
     request<RadioSet>(`/api/v1/radio-sets/${encodeURIComponent(id)}/share`, { method: 'DELETE' }),
+  callStorageStats: () => request<CallStorageStats>('/api/v1/admin/calls/storage'),
+  archiveCalls: (body: { olderThanDays?: number; dryRun?: boolean; limit?: number }) =>
+    request<ArchiveCallsResult>('/api/v1/admin/calls/archive', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   uploadPTT: async (
     id: string,
     audio: Blob,

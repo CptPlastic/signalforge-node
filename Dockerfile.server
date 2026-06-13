@@ -9,13 +9,16 @@ COPY server ./
 RUN sh b
 
 FROM alpine:3.20
-RUN apk add --no-cache ffmpeg ca-certificates su-exec \
+RUN apk add --no-cache ffmpeg ca-certificates su-exec s3cmd \
 	&& addgroup -S app \
 	&& adduser -S -G app -u 10001 app
 WORKDIR /app
 COPY --from=builder /out/server /usr/local/bin/p7-scanner-server
 COPY docker/server-entrypoint.sh /usr/local/bin/server-entrypoint.sh
-RUN chmod +x /usr/local/bin/server-entrypoint.sh
+COPY docker/s3cfg.example /etc/signalforge/s3cfg.example
+RUN chmod +x /usr/local/bin/server-entrypoint.sh \
+	&& mkdir -p /etc/signalforge /data/call-archive \
+	&& chown -R app:app /etc/signalforge /data/call-archive
 EXPOSE 8080
 ENTRYPOINT ["server-entrypoint.sh"]
 CMD ["p7-scanner-server"]

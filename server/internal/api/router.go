@@ -25,6 +25,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 	handle := newHandler(cfg, db, h, sh, logger)
 	handle.startFederationSyncLoop()
 	handle.startHubDirectorySyncLoop()
+	handle.startCallArchiveLoop()
 	r.Use(handle.withUserContext)
 
 	// Long-lived connections — no request timeout.
@@ -69,6 +70,8 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Delete("/api/v1/users/{id}", handle.handleDeleteUser)
 		r.Get("/api/v1/audit-logs", handle.handleListAuditLogs)
 		r.Get("/api/v1/calls/groups", handle.handleListCallGroups)
+		r.Get("/api/v1/admin/calls/storage", handle.handleCallStorageStats)
+		r.Post("/api/v1/admin/calls/archive", handle.handleArchiveCalls)
 		r.Get("/api/v1/calls", handle.handleListCalls)
 		r.Get("/api/v1/calls/{id}/audio", handle.handleCallAudio)
 		r.Post("/internal/transcription/jobs/claim", handle.handleClaimTranscriptionJob)
