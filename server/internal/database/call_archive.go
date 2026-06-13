@@ -52,7 +52,7 @@ func (d *DB) SumAudioBytesOlderThan(cutoffUnix int64) (int64, error) {
 // ListCallsForArchive returns calls (with audio) older than cutoffUnix, oldest first.
 func (d *DB) ListCallsForArchive(cutoffUnix int64, limit int) ([]CallArchiveRecord, error) {
 	if limit <= 0 || limit > 500 {
-		limit = 100
+		limit = 500
 	}
 	rows, err := d.db.Query(`
 		SELECT c.id, COALESCE(c.user_id, ''), COALESCE(c.source_id, ''), c.datetime, c.system, c.system_label,

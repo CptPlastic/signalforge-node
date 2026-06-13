@@ -144,7 +144,7 @@ Archive layout:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/admin/calls/storage` | Call count, total audio bytes, oldest/newest call timestamps, retention config. |
-| `POST` | `/api/v1/admin/calls/archive` | Export then delete a batch of calls older than N days. |
+| `POST` | `/api/v1/admin/calls/archive` | Export then delete calls older than N days. Runs in batches of up to 500 until the backlog is cleared (`untilEmpty`, default `true`). |
 
 Archive request body:
 
@@ -152,11 +152,14 @@ Archive request body:
 {
   "olderThanDays": 30,
   "dryRun": true,
-  "limit": 100
+  "limit": 500,
+  "untilEmpty": true
 }
 ```
 
 `dryRun: true` reports how many calls and bytes would be freed without writing or deleting anything.
+
+`untilEmpty: true` (default for real runs) keeps batching until `remainingOld` is 0 or a 4-hour safety limit is hit. Set `untilEmpty: false` for a single batch only.
 
 After large deletes, the hub vacuums the `calls` table automatically. `VACUUM FULL` (returning disk to the OS) runs when a retention sweep finishes; set `CALL_ARCHIVE_VACUUM_FULL=false` to skip the full shrink and rely on `VACUUM ANALYZE` only.
 

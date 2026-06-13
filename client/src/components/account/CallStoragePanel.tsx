@@ -41,7 +41,7 @@ export function CallStoragePanel() {
     }
     if (!dryRun) {
       const ok = globalThis.window.confirm(
-        `Archive and delete calls older than ${stats.retentionDays} days? Audio is exported first${stats.archiveS3Uri ? ' to Spaces' : ''}.`,
+        `Archive and delete all calls older than ${stats.retentionDays} days? This runs automatically in batches until the backlog is cleared${stats.archiveS3Uri ? ' (uploading to Spaces)' : ''}.`,
       )
       if (!ok) return
     }
@@ -49,21 +49,69 @@ export function CallStoragePanel() {
     setError('')
     setMessage('')
     try {
-      const result = await api.archiveCalls({
-        olderThanDays: stats.retentionDays,
-        dryRun,
-        limit: 100,
-      })
-      setLastResult(result)
       if (dryRun) {
+        const result = await api.archiveCalls({
+          olderThanDays: stats.retentionDays,
+          dryRun: true,
+        })
+        setLastResult(result)
         setMessage(
           `Dry run: ${result.remainingOld.toLocaleString()} calls (${fmtBytes(result.freedBytes)}) would be archived.`,
         )
-      } else {
-        setMessage(
-          `Archived ${result.archived} calls, deleted ${result.deleted}, freed ${fmtBytes(result.freedBytes)}${result.s3DirsSynced ? `, synced ${result.s3DirsSynced} day folder(s) to S3` : ''}${result.vacuumQueued ? '; database vacuum queued' : ''}.`,
-        )
+        return
+      }
+
+      let totalArchived = 0
+      let totalDeleted = 0
+      let totalFreed = 0
+      let totalS3 = 0
+      let totalBatches = 0
+
+      for (;;) {
+        setMessage('Archiving… keep this tab open until remaining hits 0.')
+        const result = await api.archiveCalls({
+          olderThanDays: stats.retentionDays,
+          dryRun: false,
+          untilEmpty: false,
+        })
+        totalBatches += result.batches ?? 1
+        totalArchived += result.archived
+        totalDeleted += result.deleted
+        totalFreed += result.freedBytes
+        totalS3 += result.s3DirsSynced
+
+        if (result.archived === 0) {
+          setLastResult(result)
+          setMessage('Nothing to archive.')
+          break
+        }
+
+        if (result.remainingOld > 0 && !result.stoppedEarly) {
+          setMessage(
+            `${totalArchived.toLocaleString()} archived (${fmtBytes(totalFreed)} freed) — ${result.remainingOld.toLocaleString()} remaining…`,
+          )
+          continue
+        }
+
+        setLastResult({
+          ...result,
+          archived: totalArchived,
+          deleted: totalDeleted,
+          freedBytes: totalFreed,
+          s3DirsSynced: totalS3,
+          batches: totalBatches,
+        })
+        if (result.stoppedEarly) {
+          setMessage(
+            `Paused by server safety limit: ${totalArchived.toLocaleString()} archived, ${result.remainingOld.toLocaleString()} still remaining. Run again to continue.`,
+          )
+        } else {
+          setMessage(
+            `Done: ${totalArchived.toLocaleString()} calls archived, ${fmtBytes(totalFreed)} freed${totalS3 ? `, ${totalS3} day folder(s) synced to S3` : ''}${result.vacuumQueued ? '; database vacuum queued' : ''}.`,
+          )
+        }
         await refresh()
+        break
       }
     } catch (err) {
       setError(getErrorMessage(err, 'Archive failed'))
@@ -92,7 +140,7 @@ export function CallStoragePanel() {
 
       <p className="text-[11px] text-console-muted">
         Call audio lives in Postgres and can fill the database volume. Configure retention in the stack env file;
-        this panel shows live status and lets you run archive batches.
+        <strong> Archive Now</strong> runs automatically until the backlog is cleared (500 calls per internal batch).
       </p>
 
       {stats && (
@@ -184,7 +232,7 @@ export function CallStoragePanel() {
           className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
           disabled={working || !stats?.retentionDays || !archiveConfigured}
         >
-          {working ? 'WORKING...' : 'ARCHIVE NOW'}
+          {working ? 'ARCHIVING…' : 'ARCHIVE NOW'}
         </button>
       </div>
 

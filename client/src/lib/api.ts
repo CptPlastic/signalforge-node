@@ -229,6 +229,9 @@ export type ArchiveCallsResult = {
   vacuumQueued?: boolean
   dryRun: boolean
   remainingOld: number
+  batches?: number
+  batchLimit?: number
+  stoppedEarly?: boolean
   note?: string
 }
 
@@ -464,7 +467,7 @@ export const api = {
   revokeShareToken: (id: string) =>
     request<RadioSet>(`/api/v1/radio-sets/${encodeURIComponent(id)}/share`, { method: 'DELETE' }),
   callStorageStats: () => request<CallStorageStats>('/api/v1/admin/calls/storage'),
-  archiveCalls: (body: { olderThanDays?: number; dryRun?: boolean; limit?: number }) =>
+  archiveCalls: (body: { olderThanDays?: number; dryRun?: boolean; limit?: number; untilEmpty?: boolean }) =>
     request<ArchiveCallsResult>('/api/v1/admin/calls/archive', {
       method: 'POST',
       body: JSON.stringify(body),
