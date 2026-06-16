@@ -17,6 +17,7 @@ import (
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/recorder"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/service"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/tui"
+	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/trunk"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/updater"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -68,6 +69,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(
 		newHubCommand(opts),
 		newRecorderCommand(opts),
+		trunk.NewCommand(opts.hubURL, opts.sourceKey),
 		newOnboardCommand(opts),
 		newServiceCommand(opts),
 		newTUICommand(opts),
@@ -670,6 +672,7 @@ func printRootHelp(out io.Writer) {
 	commandRow(out, "ONB", "onboard/setup/init", "interactive hub + folder + canary setup")
 	commandRow(out, "SVC", "service/svc", "install or manage background watch service")
 	commandRow(out, "REC", "recorder/rec/r", "inspect, upload, watch, and open recorder console")
+	commandRow(out, "TRK", "trunk/tr/t", "OKWIN trunk recorder — run sf trunk setup")
 	commandRow(out, "TUI", "tui/console/dash", "open the full-screen recorder dashboard")
 	commandRow(out, "UPD", "update/upd/up", "check the public package release feed")
 	commandRow(out, "VER", "version/ver/v", "show build metadata; -v, --v, --version")
