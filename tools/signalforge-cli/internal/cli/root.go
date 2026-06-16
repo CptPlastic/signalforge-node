@@ -672,7 +672,7 @@ func printRootHelp(out io.Writer) {
 	commandRow(out, "ONB", "onboard/setup/init", "interactive hub + folder + canary setup")
 	commandRow(out, "SVC", "service/svc", "install or manage background watch service")
 	commandRow(out, "REC", "recorder/rec/r", "inspect, upload, watch, and open recorder console")
-	commandRow(out, "TRK", "trunk/tr/t", "OKWIN trunk recorder — run sf trunk setup")
+	commandRow(out, "TRK", "trunk/trk/tr/t", "OKWIN trunk recorder — run sf trk setup")
 	commandRow(out, "TUI", "tui/console/dash", "open the full-screen recorder dashboard")
 	commandRow(out, "UPD", "update/upd/up", "check the public package release feed")
 	commandRow(out, "VER", "version/ver/v", "show build metadata; -v, --v, --version")

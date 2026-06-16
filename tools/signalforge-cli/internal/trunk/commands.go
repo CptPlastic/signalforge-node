@@ -33,7 +33,7 @@ func NewCommand(hubURL, sourceKey string) *cobra.Command {
 	}
 	cmd := &cobra.Command{
 		Use:     "trunk",
-		Aliases: []string{"tr", "t"},
+		Aliases: []string{"trk", "tr", "t"},
 		Short:   "SDR trunk recorder for OKWIN and GMRS",
 		Run: func(cmd *cobra.Command, _ []string) {
 			printBanner(cmd.OutOrStdout(), "Trunk Recorder")
@@ -111,7 +111,7 @@ func newTrunkDevices(opts *trunkOptions) *cobra.Command {
 func newTrunkCheck(opts *trunkOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:     "check",
-		Aliases: []string{"preflight", "doctor"},
+		Aliases: []string{"chk", "preflight", "doctor"},
 		Short:   "Preflight checks before starting the trunk recorder",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := loadTrunkConfig(opts)
