@@ -26,6 +26,8 @@ sf trk setup --yes    # automatic if you ran sf onboard
 
 Config defaults to `~/.config/signalforge/trunk.yaml`.
 
+On macOS with Homebrew 6+, `sf trk deps` automatically runs `brew trust` for the Trunk Recorder tap before installing.
+
 ## Start recording
 
 ```bash
