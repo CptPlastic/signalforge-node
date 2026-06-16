@@ -111,7 +111,7 @@ func Run(ctx context.Context, out io.Writer, opts Options) (Result, error) {
 		if csvPath == "" {
 			csvPath, err = ResolveSampleCSV("")
 			if err != nil {
-				result.Blockers = append(result.Blockers, "no RR data — pass --csv or add control channels via sf trunk import-rr")
+				result.Blockers = append(result.Blockers, "no RR data — pass --csv or run: sf trk imp")
 			}
 		}
 		if csvPath != "" {
@@ -197,7 +197,7 @@ func NeedsRRImport(cfg config.Config) bool {
 // Analyze splits preflight results into hard blockers and soft warnings.
 func Analyze(deps Report, report check.Report) (blockers, warnings []string) {
 	if !deps.Ready() {
-		blockers = append(blockers, "trunk-recorder not installed — run: sf trunk install-deps")
+		blockers = append(blockers, "trunk-recorder not installed — run: sf trk deps")
 	}
 	for _, item := range deps.Items {
 		if item.Name == "homebrew" && item.Status == "missing" {
@@ -211,7 +211,7 @@ func Analyze(deps Report, report check.Report) (blockers, warnings []string) {
 		case "warn":
 			switch item.Label {
 			case "sdr.count":
-				warnings = append(warnings, "no RTL-SDR dongles detected yet — plug them in before sf trunk start")
+				warnings = append(warnings, "no RTL-SDR dongles detected yet — plug them in, then: sf trk start")
 			case "trunk-recorder.json":
 				warnings = append(warnings, item.Message)
 			case "hub.source_key":

@@ -121,6 +121,8 @@ sf h chk
 sf rec i -i ./calls
 sf rec w -i ./calls -k sk_live_REPLACE_WITH_SOURCE_KEY
 sf trk setup -k sk_live_REPLACE_WITH_SOURCE_KEY
+sf trk chk
+sf trk start
 sf upd chk
 sf ver
 signalforge h chk

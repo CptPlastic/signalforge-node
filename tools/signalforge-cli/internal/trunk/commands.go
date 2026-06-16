@@ -37,7 +37,7 @@ func NewCommand(hubURL, sourceKey string) *cobra.Command {
 		Short:   "SDR trunk recorder for OKWIN and GMRS",
 		Run: func(cmd *cobra.Command, _ []string) {
 			printBanner(cmd.OutOrStdout(), "Trunk Recorder")
-			printLine(cmd.OutOrStdout(), "info", "start here", "sf trunk setup")
+			printLine(cmd.OutOrStdout(), "info", "quick", "sf trk setup")
 			_ = cmd.Help()
 		},
 	}
@@ -45,16 +45,19 @@ func NewCommand(hubURL, sourceKey string) *cobra.Command {
 	cmd.PersistentFlags().StringVar(&opts.hubURL, "hub-url", opts.hubURL, "SignalForge Hub base URL")
 	cmd.PersistentFlags().StringVar(&opts.sourceKey, "source-key", opts.sourceKey, "Hub source upload key")
 
-	cmd.AddCommand(newTrunkSetup(opts))
-	cmd.AddCommand(newTrunkInstallDeps(opts))
-	cmd.AddCommand(newTrunkStart(opts))
-	cmd.AddCommand(newTrunkCheck(opts))
-	cmd.AddCommand(newTrunkRenderConfig(opts))
-	cmd.AddCommand(newTrunkDevices(opts))
-	cmd.AddCommand(newTrunkStatus(opts))
-	cmd.AddCommand(newTrunkImportRR(opts))
-	cmd.AddCommand(newTrunkSyncRR(opts))
-	cmd.AddCommand(newTrunkInit(opts))
+	// Short primary names — long forms remain as aliases.
+	cmd.AddCommand(
+		newTrunkSetup(opts),
+		newTrunkStart(opts),
+		newTrunkCheck(opts),
+		newTrunkDevices(opts),
+		newTrunkStatus(opts),
+		newTrunkInstallDeps(opts),
+		newTrunkImportRR(opts),
+		newTrunkRenderConfig(opts),
+		newTrunkInit(opts),
+		newTrunkSyncRR(opts),
+	)
 	return cmd
 }
 
@@ -88,8 +91,8 @@ func newTrunkStart(opts *trunkOptions) *cobra.Command {
 
 func newTrunkDevices(opts *trunkOptions) *cobra.Command {
 	return &cobra.Command{
-		Use:     "devices",
-		Aliases: []string{"dev", "sdr"},
+		Use:     "dev",
+		Aliases: []string{"devices", "sdr"},
 		Short:   "List discovered SDRs and role assignments",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			pool := sdr.NewPool()
@@ -110,9 +113,9 @@ func newTrunkDevices(opts *trunkOptions) *cobra.Command {
 
 func newTrunkCheck(opts *trunkOptions) *cobra.Command {
 	return &cobra.Command{
-		Use:     "check",
-		Aliases: []string{"chk", "preflight", "doctor"},
-		Short:   "Preflight checks before starting the trunk recorder",
+		Use:     "chk",
+		Aliases: []string{"check", "preflight", "doctor"},
+		Short:   "Preflight checks before starting",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := loadTrunkConfig(opts)
 			if err != nil {
@@ -137,9 +140,9 @@ func newTrunkCheck(opts *trunkOptions) *cobra.Command {
 
 func newTrunkRenderConfig(opts *trunkOptions) *cobra.Command {
 	return &cobra.Command{
-		Use:     "render-config",
-		Aliases: []string{"render", "gen-config"},
-		Short:   "Generate Trunk Recorder config.json from trunk.yaml",
+		Use:     "render",
+		Aliases: []string{"render-config", "gen-config"},
+		Short:   "Generate trunk-recorder.json from trunk.yaml",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := loadTrunkConfig(opts)
 			if err != nil {
@@ -158,8 +161,8 @@ func newTrunkRenderConfig(opts *trunkOptions) *cobra.Command {
 
 func newTrunkStatus(opts *trunkOptions) *cobra.Command {
 	return &cobra.Command{
-		Use:     "status",
-		Aliases: []string{"stat", "st"},
+		Use:     "st",
+		Aliases: []string{"status", "stat"},
 		Short:   "Show trunk recorder status",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := loadTrunkConfig(opts)
@@ -191,9 +194,9 @@ func newTrunkImportRR(opts *trunkOptions) *cobra.Command {
 	var pdfPath, csvPath, name, sysid string
 	var force bool
 	cmd := &cobra.Command{
-		Use:     "import-rr",
-		Aliases: []string{"import", "rr"},
-		Short:   "Import trunk system data from RadioReference export",
+		Use:     "imp",
+		Aliases: []string{"import-rr", "import", "rr"},
+		Short:   "Import RadioReference export",
 		Long: `Import OKWIN (sid 6949) or other systems from RadioReference PDF/CSV exports.
 Download from https://www.radioreference.com/db/sid/<sid>/download (Premium required).`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -248,8 +251,9 @@ func newTrunkSyncRR(opts *trunkOptions) *cobra.Command {
 	var sid int
 	var apiKey, username, password string
 	cmd := &cobra.Command{
-		Use:   "sync-rr",
-		Short: "Sync system metadata from RadioReference SOAP API",
+		Use:     "sync",
+		Aliases: []string{"sync-rr"},
+		Short:   "Sync system metadata from RadioReference SOAP API",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if apiKey == "" || username == "" || password == "" {
 				return fmt.Errorf("set --rr-api-key, --rr-username, and --rr-password (requires RR premium + developer API key)")

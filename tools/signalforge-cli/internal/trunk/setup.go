@@ -61,8 +61,8 @@ Use --yes for fully automatic setup with saved profile defaults.`,
 
 func newTrunkInstallDeps(opts *trunkOptions) *cobra.Command {
 	return &cobra.Command{
-		Use:     "install-deps",
-		Aliases: []string{"deps", "install-trunk-recorder"},
+		Use:     "deps",
+		Aliases: []string{"install-deps", "install-trunk-recorder"},
 		Short:   "Install trunk-recorder and dependencies",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := cmd.OutOrStdout()
@@ -79,7 +79,7 @@ func newTrunkInstallDeps(opts *trunkOptions) *cobra.Command {
 			if !deps.Ready() {
 				return fmt.Errorf("trunk-recorder still not ready")
 			}
-			printLine(out, "ok", "done", "run sf trunk setup to finish configuration")
+			printLine(out, "ok", "done", "run sf trk setup")
 			return nil
 		},
 	}
@@ -215,10 +215,10 @@ func printSetupNextSteps(out io.Writer, configPath string, readyToStart bool) {
 	fmt.Fprintln(out)
 	printLine(out, "info", "config", configPath)
 	if readyToStart {
-		printLine(out, "info", "start", fmt.Sprintf("sf trunk start --config %q", configPath))
+		printLine(out, "info", "start", fmt.Sprintf("sf trk start"))
 		return
 	}
 	printLine(out, "info", "next", "plug in RTL-SDR dongles")
-	fmt.Fprintf(out, "  sf trunk devices\n")
-	fmt.Fprintf(out, "  sf trunk start --config %q\n", configPath)
+	fmt.Fprintf(out, "  sf trk dev\n")
+	fmt.Fprintf(out, "  sf trk start\n")
 }

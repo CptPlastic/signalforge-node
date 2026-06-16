@@ -71,7 +71,7 @@ func Run(cfg config.Config, configPath string, hubClient *hub.Client) (report Re
 	for _, sys := range cfg.Trunking.Systems {
 		ccs := len(sys.AllControlFrequenciesMHz())
 		if ccs == 0 {
-			items = append(items, Item{fmt.Sprintf("rr.%s", sys.Name), "error", "no control channels — run sf trunk import-rr"})
+			items = append(items, Item{fmt.Sprintf("rr.%s", sys.Name), "error", "no control channels — run sf trk imp"})
 			continue
 		}
 		items = append(items, Item{fmt.Sprintf("rr.%s", sys.Name), "ok", fmt.Sprintf("%d control channels, %d sites", ccs, len(sys.Sites))})
@@ -98,7 +98,7 @@ func Run(cfg config.Config, configPath string, hubClient *hub.Client) (report Re
 	trPath := cfg.Resolve(cfg.Decode.TrunkRecorder.ConfigPath, configPath)
 	if engine == config.EngineTrunkRecorder {
 		if _, err := os.Stat(trPath); err != nil {
-			items = append(items, Item{"trunk-recorder.json", "warn", fmt.Sprintf("not generated yet — run sf trunk render-config (expected %s)", trPath)})
+			items = append(items, Item{"trunk-recorder.json", "warn", fmt.Sprintf("not generated yet — run sf trk render (expected %s)", trPath)})
 		} else {
 			items = append(items, Item{"trunk-recorder.json", "ok", trPath})
 		}
