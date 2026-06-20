@@ -200,15 +200,15 @@ function AuthAccessCard({
       {emailEnabled && (
       <div className="border border-console-border rounded p-4 sm:p-5 flex flex-col gap-4">
         <div className="flex flex-col gap-2 text-center sm:text-left">
-          <p className="console-label text-xs">ACCOUNT ACCESS</p>
-          <h2 className="text-sm sm:text-base text-console-text">Sign in with your email — no app switching required.</h2>
-          <p className="text-[11px] text-console-muted">Request a code, then enter the 6-digit code from your email right here.</p>
+          <p className="console-label text-xs">CREATE ACCOUNT / SIGN IN</p>
+          <h2 className="text-sm sm:text-base text-console-text">New here? Enter your email — we&apos;ll create your account and send a code.</h2>
+          <p className="text-[11px] text-console-muted">Returning users: same flow — request a code, then enter the 6 digits from your email.</p>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
           <div className="border border-console-border rounded p-3 flex flex-col gap-3 bg-console-bg/30">
-            <p className="console-label text-xs">STEP 1: REQUEST CODE</p>
-            <p className="text-[11px] text-console-muted">Enter your email address and request a sign-in code.</p>
+            <p className="console-label text-xs">STEP 1: YOUR EMAIL</p>
+            <p className="text-[11px] text-console-muted">First-time sign-up starts here — no separate registration form.</p>
             <input
               value={authEmail}
               onChange={(event) => onAuthEmailChange(event.target.value)}
@@ -226,6 +226,14 @@ function AuthAccessCard({
             >
               {authLoading ? 'WORKING...' : 'SEND CODE'}
             </button>
+            <a
+              href="https://signalforge.org/join.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-console-muted hover:text-console-accent underline-offset-2 hover:underline"
+            >
+              Step-by-step join guide ↗
+            </a>
           </div>
 
           <div className="border border-console-border rounded p-3 flex flex-col gap-3 bg-console-bg/30">

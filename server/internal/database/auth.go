@@ -296,6 +296,29 @@ func (d *DB) GetSessionExpiresAt(token string) (int64, bool, error) {
 	return expiresAt, true, nil
 }
 
+// GetUserByID returns a single user by primary key.
+func (d *DB) GetUserByID(userID string) (User, bool, error) {
+	var user User
+	err := d.db.QueryRow(`
+		SELECT id, email, role, status,
+		       COALESCE(tx_enabled, FALSE),
+		       COALESCE(dispatcher_enabled, FALSE),
+		       (password_hash IS NOT NULL AND BTRIM(password_hash) <> ''),
+		       created_at, updated_at
+		FROM users WHERE id = $1`, userID).Scan(
+		&user.ID, &user.Email, &user.Role, &user.Status,
+		&user.TxEnabled, &user.DispatcherEnabled, &user.PasswordConfigured,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, false, nil
+		}
+		return User{}, false, err
+	}
+	return user, true, nil
+}
+
 // ListUsers returns all users for admin management.
 func (d *DB) ListUsers() ([]User, error) {
 	rows, err := d.db.Query(`

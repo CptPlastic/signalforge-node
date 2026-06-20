@@ -81,6 +81,11 @@ function copyToClipboard(text: string) {
   void navigator.clipboard?.writeText(text)
 }
 
+function publicMetaWSURL(token: string): string {
+  const protocol = globalThis.window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${globalThis.window.location.host}/public/ws-meta/${encodeURIComponent(token)}`
+}
+
 function FieldUnitConfigRow({
   label,
   hint,
@@ -569,20 +574,25 @@ export function RadioSetsView({
                       </button>
                     </div>
                     {[
-                      { label: 'Player', url: `/public/player/${radioSet.shareToken}` },
-                    ].map(({ label, url }) => (
+                      {
+                        label: 'Player',
+                        value: `${globalThis.window.location.origin}/public/player/${radioSet.shareToken}`,
+                      },
+                      {
+                        label: 'Meta WS',
+                        value: publicMetaWSURL(radioSet.shareToken),
+                      },
+                    ].map(({ label, value }) => (
                       <div key={label} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                        <span className="text-[10px] text-console-muted w-10 flex-shrink-0">{label}</span>
+                        <span className="text-[10px] text-console-muted w-14 flex-shrink-0">{label}</span>
                         <input
                           readOnly
-                          value={`${globalThis.window.location.origin}${url}`}
+                          value={value}
                           onClick={(event) => (event.target as HTMLInputElement).select()}
                           className="flex-1 bg-console-bg border border-console-border/50 rounded px-1.5 py-0.5 text-[10px] text-console-accent outline-none min-w-0"
                         />
                         <button
-                          onClick={() =>
-                            navigator.clipboard?.writeText(`${globalThis.window.location.origin}${url}`)
-                          }
+                          onClick={() => copyToClipboard(value)}
                           className="px-1.5 py-1 sm:py-0.5 border border-console-border text-console-muted rounded text-[10px] hover:border-console-accent hover:text-console-accent flex-shrink-0"
                         >
                           COPY

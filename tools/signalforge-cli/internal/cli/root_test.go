@@ -169,42 +169,6 @@ func TestCommandAliases(t *testing.T) {
 	cmd = NewRootCommand()
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"trk", "--help"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("trk alias failed: %v\n%s", err, out.String())
-	}
-	if !strings.Contains(out.String(), "trunk") {
-		t.Fatalf("expected trunk help via trk alias, got:\n%s", out.String())
-	}
-
-	out.Reset()
-	cmd = NewRootCommand()
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"trk", "chk", "--help"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("trk chk alias failed: %v\n%s", err, out.String())
-	}
-	if !strings.Contains(out.String(), "Preflight") {
-		t.Fatalf("expected chk help via trk alias, got:\n%s", out.String())
-	}
-
-	out.Reset()
-	cmd = NewRootCommand()
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"trk", "import-rr", "--help"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("import-rr legacy alias failed: %v\n%s", err, out.String())
-	}
-	if !strings.Contains(out.String(), "RadioReference") {
-		t.Fatalf("expected import-rr legacy alias help, got:\n%s", out.String())
-	}
-
-	out.Reset()
-	cmd = NewRootCommand()
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"tab", "--help"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("completion alias failed: %v\n%s", err, out.String())

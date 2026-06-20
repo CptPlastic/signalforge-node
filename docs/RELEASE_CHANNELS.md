@@ -23,12 +23,14 @@ SignalForge has three repositories in the working set. They do not all publish t
 | Scoop bucket | `p7-scanner` release workflow | tag `signalforge-cli-v*` | `CptPlastic/scoop-signalforge` manifest update | Windows `scoop install` |
 | Hub container images | `p7-scanner` | push to `main` / workflow dispatch | GHCR images and `signalforge.org/p7-scanner-update.json` | deployed hubs, admin update checks |
 | Legacy recorder UI | `p7-scanner` | manual workflow dispatch only | build artifacts for internal/manual testing | none by default |
+| SignalForge Scanner (internal SDRTrunk fork) | `signalforge-scanner` | tag `signalforge-scanner-v*` | GitHub Releases on `signalforge-scanner` only | internal trunk listening |
 
 ## What We Are Not Doing
 
 - No new official recorder app releases from `signalforge.org`.
 - No official binary releases from `signalforge-node`.
 - No new automatic `ui-v*` desktop recorder publishing.
+- No SignalForge Scanner releases on `signalforge.org` — community trunk listening uses upstream SDRTrunk.
 
 ## Release Names
 

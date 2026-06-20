@@ -50,6 +50,7 @@ import {
 import { WebSocketClient } from './lib/ws'
 import { isMobileUserAgent, tryOpenSignalforgeApp } from './lib/mobileAuthHandoff'
 import type { AppView } from './types/app'
+import { readInitialAppView } from './types/app'
 
 type WsCallEvent = { type: 'call'; call: Call; sourceId?: string }
 type WsSourceDeletedEvent = { type: 'source_deleted'; sourceId: string }
@@ -308,7 +309,7 @@ function App() {
   const [hideMuted, setHideMuted] = useState(true)
   const [settingsMap, setSettingsMap] = useState<Record<number, TalkgroupSetting>>({})
   const [sourcesMap, setSourcesMap] = useState<Record<string, IngestionSource>>({})
-  const [activeView, setActiveView] = useState<AppView>('monitor')
+  const [activeView, setActiveView] = useState<AppView>(() => readInitialAppView())
   const [talkgroupSearch, setTalkgroupSearch] = useState('')
   const [talkgroupActionID, setTalkgroupActionID] = useState<number | null>(null)
   const [newSourceID, setNewSourceID] = useState('')
@@ -659,6 +660,14 @@ function App() {
     refreshHubPeers()
     refreshFederationStatus()
   }, [authUser])
+
+  useEffect(() => {
+  const params = new URLSearchParams(globalThis.window.location.search)
+  if (!params.has('view')) return
+  params.delete('view')
+  const qs = params.toString()
+  globalThis.window.history.replaceState({}, '', qs ? `?${qs}` : globalThis.window.location.pathname)
+  }, [])
 
   useEffect(() => {
   const token = new URLSearchParams(globalThis.window.location.search).get('token')
@@ -1859,7 +1868,7 @@ function App() {
             Private console for monitoring, organizing, and sharing community radio traffic through SignalForge.
           </p>
           <p className="text-console-muted text-[11px] leading-6">
-            Sign in to manage sources, radio sets, talkgroups, and live call playback. Recorder downloads are published publicly through SignalForge.
+            Sign in or create an account to manage sources, radio sets, talkgroups, and live call playback. Recorder downloads are published publicly through SignalForge.
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
@@ -1867,8 +1876,16 @@ function App() {
             onClick={() => setActiveView('account')}
             className="px-3 py-2 border border-console-accent text-console-accent rounded text-[10px] uppercase tracking-widest hover:bg-console-accent hover:bg-opacity-10"
           >
-            ACCOUNT SIGN IN
+            CREATE ACCOUNT / SIGN IN
           </button>
+          <a
+            href="https://signalforge.org/join.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-2 border border-console-border text-console-muted rounded text-[10px] uppercase tracking-widest hover:border-console-accent hover:text-console-accent"
+          >
+            JOIN GUIDE ↗
+          </a>
           <a
             href="https://signalforge.org/#recorder"
             className="px-3 py-2 border border-console-border text-console-muted rounded text-[10px] uppercase tracking-widest hover:border-console-accent hover:text-console-accent"

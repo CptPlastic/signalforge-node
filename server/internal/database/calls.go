@@ -269,7 +269,7 @@ func (d *DB) GetRecentCallsForTalkgroupGroups(userID string, groups []string, li
 	q := fmt.Sprintf(
 		`SELECT DISTINCT c.id, COALESCE(c.user_id,''), COALESCE(c.source_id,''), c.datetime, c.system, c.system_label,
 		        c.talkgroup, c.talkgroup_label, c.talkgroup_group, c.talkgroup_tag, c.frequency, c.duration,
-		        c.audio_name, c.audio_type, c.created_at
+		        c.audio_name, c.audio_type, COALESCE(c.origin, 'rf'), COALESCE(c.sender_user_id, ''), c.created_at
 		 FROM calls c
 		 LEFT JOIN ingestion_sources s ON s.id = c.source_id
 		 WHERE (c.user_id = $1 OR s.user_id = $1 OR s.is_shared = TRUE OR EXISTS (
@@ -295,7 +295,7 @@ func (d *DB) GetRecentCallsForTalkgroupGroups(userID string, groups []string, li
 		if err := rows.Scan(
 			&c.ID, &c.UserID, &c.SourceID, &c.DateTime, &c.System, &c.SystemLabel,
 			&c.Talkgroup, &c.TalkgroupLabel, &c.TalkgroupGroup, &c.TalkgroupTag,
-			&c.Frequency, &c.Duration, &c.AudioName, &c.AudioType, &c.CreatedAt,
+			&c.Frequency, &c.Duration, &c.AudioName, &c.AudioType, &c.Origin, &c.SenderUserID, &c.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -598,7 +598,7 @@ func (d *DB) GetRecentCallsForTalkgroups(userID string, talkgroups []int, limit 
 	q := fmt.Sprintf(
 		`SELECT DISTINCT c.id, COALESCE(c.user_id,''), COALESCE(c.source_id,''), c.datetime, c.system, c.system_label,
 		        c.talkgroup, c.talkgroup_label, c.talkgroup_group, c.talkgroup_tag, c.frequency, c.duration,
-		        c.audio_name, c.audio_type, c.created_at
+		        c.audio_name, c.audio_type, COALESCE(c.origin, 'rf'), COALESCE(c.sender_user_id, ''), c.created_at
 		 FROM calls c
 		 LEFT JOIN ingestion_sources s ON s.id = c.source_id
 		 WHERE (c.user_id = $1 OR s.user_id = $1 OR s.is_shared = TRUE OR EXISTS (
@@ -624,7 +624,7 @@ func (d *DB) GetRecentCallsForTalkgroups(userID string, talkgroups []int, limit 
 		if err := rows.Scan(
 			&c.ID, &c.UserID, &c.SourceID, &c.DateTime, &c.System, &c.SystemLabel,
 			&c.Talkgroup, &c.TalkgroupLabel, &c.TalkgroupGroup, &c.TalkgroupTag,
-			&c.Frequency, &c.Duration, &c.AudioName, &c.AudioType, &c.CreatedAt,
+			&c.Frequency, &c.Duration, &c.AudioName, &c.AudioType, &c.Origin, &c.SenderUserID, &c.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

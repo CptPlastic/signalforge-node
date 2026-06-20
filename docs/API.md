@@ -193,6 +193,34 @@ Authenticated session required for radio-set management. Public player routes ar
 | `DELETE` | `/api/v1/radio-sets/{id}/share` | Revoke a public player share token. |
 | `GET` | `/public/player/{token}` | Public embeddable player page. |
 | `GET` | `/public/ws/{token}` | Public WebSocket carrying call metadata and base64 audio atomically. Query: `seed=0` skips recent-call seeding; `format=mp3` transcodes non-MP3 clips to `audio/mpeg` (for embedded players). |
+| `GET` | `/public/ws-meta/{token}` | Metadata-only WebSocket for the same radio set share token. Each message uses `cmd: "call_meta"` with no audio. Query: `seed=0` skips recent-call seeding. |
+
+Example `call_meta` frame:
+
+```json
+{
+  "cmd": "call_meta",
+  "id": 1124569,
+  "talkgroup": 3247,
+  "talkgroupLabel": "OKC PD Santa Fe",
+  "talkgroupGroup": "Oklahoma City",
+  "dateTime": 1781752255,
+  "duration": 1.4142,
+  "frequency": 853175000,
+  "systemLabel": "OKWIN",
+  "site": "Oklahoma",
+  "sourceType": "PTT",
+  "sourceLabel": "CANARY",
+  "category": "ptt"
+}
+```
+
+Field notes:
+
+- **PTT** — `sourceType: "PTT"`, `category: "ptt"`, `sourceLabel` is the sender email prefix (or `PTT` when unknown). Virtual talkgroups `9000000`–`9999999` are always classified as PTT. PTT calls use the set's virtual talkgroup and appear on any share token for that set.
+- **Canary** — detected when `talkgroupLabel` contains `CANARY` or `audioName` starts with `canary-`; `sourceLabel` becomes `CANARY` while `category` still reflects origin (`rf` for upload probes, `ptt` if sent via PTT).
+- **Scanner** — `sourceType: "RF"`, `category: "rf"`, `sourceLabel` is the ingestion source label.
+
 | `GET` | `/public/last-call/{token}` | Most recent call audio for a public share token. |
 
 ## Sources And Source Keys

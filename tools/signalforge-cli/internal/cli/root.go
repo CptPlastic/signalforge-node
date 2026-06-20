@@ -17,7 +17,6 @@ import (
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/recorder"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/service"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/tui"
-	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/trunk"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/updater"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -69,22 +68,31 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(
 		newHubCommand(opts),
 		newRecorderCommand(opts),
-		trunk.NewCommand(opts.hubURL, opts.sourceKey),
 		newOnboardCommand(opts),
 		newServiceCommand(opts),
 		newTUICommand(opts),
 		newUpdateCommand(),
 		newVersionCommand(),
 	)
+	stampCommandGroups(cmd)
 	configureCompletionAliases(cmd)
+	stampCompletionGroup(cmd)
 	configureHelp(cmd)
 	return cmd
+}
+
+func stampCompletionGroup(root *cobra.Command) {
+	for _, cmd := range root.Commands() {
+		if cmd.Name() == "completion" {
+			stampGroup(cmd, "TAB")
+		}
+	}
 }
 
 func configureHelp(root *cobra.Command) {
 	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
 		if cmd == root {
-			printRootHelp(cmd.OutOrStdout())
+			printRootHelp(cmd.OutOrStdout(), root)
 			return
 		}
 		printCommandHelp(cmd.OutOrStdout(), cmd)
@@ -165,7 +173,7 @@ func newHubCommand(opts *options) *cobra.Command {
 }
 
 func newRecorderCommand(opts *options) *cobra.Command {
-	cmd := &cobra.Command{Use: "recorder", Aliases: []string{"rec", "r"}, Short: "Recorder setup, source-key, and audio input checks"}
+	cmd := &cobra.Command{Use: "rec", Aliases: []string{"recorder", "r"}, Short: "Recorder setup, source-key, and audio input checks"}
 	cmd.AddCommand(&cobra.Command{
 		Use:     "check",
 		Aliases: []string{"chk"},
@@ -655,28 +663,25 @@ func color(code, value string) string {
 	return code + value + ansiReset
 }
 
-func printRootHelp(out io.Writer) {
+func printRootHelp(out io.Writer, root *cobra.Command) {
 	fmt.Fprintf(out, "\n%s\n", color(ansiCyan, "SignalForge Console"))
 	fmt.Fprintf(out, "%s\n\n", color(ansiDim, "// recorder setup // hub checks // package updates"))
 	printLine(out, "ok", "platform", runtime.GOOS+"/"+runtime.GOARCH)
 	printLine(out, "info", "hub", "https://p7hub.projectseven.us")
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s\n", color(ansiCyan, "Quick Start"))
-	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf onboard"))
+	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf onb"))
 	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf rec chk"))
-	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf rec i -i ./calls"))
 	fmt.Fprintf(out, "  %s\n", color(ansiDim, "sf rec w -i ./calls -k sk_live_..."))
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s\n", color(ansiCyan, "Commands"))
-	commandRow(out, "HUB", "hub/h", "check hub health and version")
-	commandRow(out, "ONB", "onboard/setup/init", "interactive hub + folder + canary setup")
-	commandRow(out, "SVC", "service/svc", "install or manage background watch service")
-	commandRow(out, "REC", "recorder/rec/r", "inspect, upload, watch, and open recorder console")
-	commandRow(out, "TRK", "trk", "OKWIN trunk recorder — sf trk setup")
-	commandRow(out, "TUI", "tui/console/dash", "open the full-screen recorder dashboard")
-	commandRow(out, "UPD", "update/upd/up", "check the public package release feed")
-	commandRow(out, "VER", "version/ver/v", "show build metadata; -v, --v, --version")
-	commandRow(out, "TAB", "completion", "generate shell completion scripts")
+	for _, child := range root.Commands() {
+		if !child.IsAvailableCommand() || child.IsAdditionalHelpTopicCommand() {
+			continue
+		}
+		group := commandGroup(child)
+		commandRow(out, group, rootHelpName(child), child.Short)
+	}
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s sf <command> --help (signalforge also works)\n", color(ansiDim, "more:"))
 	fmt.Fprintf(out, "%s SIGNALFORGE_NO_UPDATE_CHECK=1 disables quiet daily update checks\n", color(ansiDim, "env:"))
@@ -684,13 +689,13 @@ func printRootHelp(out io.Writer) {
 
 func printCommandHelp(out io.Writer, cmd *cobra.Command) {
 	fmt.Fprintf(out, "\n%s\n", color(ansiCyan, "SignalForge Console"))
-	fmt.Fprintf(out, "%s\n\n", color(ansiDim, "// "+cmd.CommandPath()))
+	fmt.Fprintf(out, "%s\n\n", color(ansiDim, "// "+preferredCommandPath(cmd)))
 	if cmd.Short != "" {
 		printLine(out, "info", "about", cmd.Short)
 	}
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s\n", color(ansiCyan, "Usage"))
-	fmt.Fprintf(out, "  %s\n", cmd.UseLine())
+	fmt.Fprintf(out, "  %s\n", preferredUseLine(cmd))
 	if cmd.HasAvailableSubCommands() {
 		fmt.Fprintln(out)
 		fmt.Fprintf(out, "%s\n", color(ansiCyan, "Commands"))
@@ -698,7 +703,7 @@ func printCommandHelp(out io.Writer, cmd *cobra.Command) {
 			if !child.IsAvailableCommand() || child.IsAdditionalHelpTopicCommand() {
 				continue
 			}
-			commandRow(out, "CMD", commandLabel(child), child.Short)
+			commandRow(out, commandGroup(child), commandLabel(child), child.Short)
 		}
 	}
 	printFlagSet(out, cmd.NonInheritedFlags(), "Flags")
@@ -708,15 +713,12 @@ func printCommandHelp(out io.Writer, cmd *cobra.Command) {
 }
 
 func commandRow(out io.Writer, group, name, summary string) {
-	padding := 18 - len(name)
+	label := fmt.Sprintf("[%s] %s", group, name)
+	padding := 24 - len(label)
 	if padding < 1 {
 		padding = 1
 	}
-	fmt.Fprintf(out, "  %s %s%s%s\n", color(ansiGreen, "["+group+"]"), color(ansiYellow, name), strings.Repeat(" ", padding), summary)
-}
-
-func commandLabel(cmd *cobra.Command) string {
-	return cmd.Name()
+	fmt.Fprintf(out, "  %s%s%s\n", color(ansiGreen, label), strings.Repeat(" ", padding), summary)
 }
 
 func printFlagSet(out io.Writer, flags *pflag.FlagSet, title string) {

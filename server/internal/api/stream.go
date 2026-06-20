@@ -31,6 +31,9 @@ type streamCallMeta struct {
 	Origin         string  `json:"origin,omitempty"`
 	SenderUserID   string  `json:"senderUserId,omitempty"`
 	SenderEmail    string  `json:"senderEmail,omitempty"`
+	SourceID       string  `json:"-"`
+	TalkgroupTag   string  `json:"-"`
+	AudioName      string  `json:"-"`
 }
 
 type streamChunk struct {
@@ -44,6 +47,35 @@ type streamListener struct {
 	talkgroupGroups map[string]struct{}
 	sourceIDs       map[string]struct{}
 	ch              chan streamChunk
+}
+
+const (
+	pttTalkgroupMin = 9000000
+	pttTalkgroupMax = 9999999
+)
+
+func isPTTCall(call *database.Call) bool {
+	if call == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(call.Origin)) {
+	case "ptt", "ptt-dispatch":
+		return true
+	}
+	return call.Talkgroup >= pttTalkgroupMin && call.Talkgroup <= pttTalkgroupMax
+}
+
+func publicStreamSubscription(rs *database.RadioSet) (talkgroups []int, groups []string) {
+	if rs.IsGroupsMode() {
+		groups = append(groups, rs.TalkgroupGroups...)
+	} else {
+		talkgroups = append(talkgroups, rs.Talkgroups...)
+	}
+	if rs.PTTTalkgroup != nil {
+		talkgroups = append(talkgroups, *rs.PTTTalkgroup)
+		groups = append(groups, "PTT")
+	}
+	return talkgroups, groups
 }
 
 // streamHub fans new calls out to all active HTTP stream and SSE listeners.
@@ -74,6 +106,9 @@ func (sh *streamHub) push(call *database.Call, audio []byte) {
 		Origin:         call.Origin,
 		SenderUserID:   call.SenderUserID,
 		SenderEmail:    call.SenderEmail,
+		SourceID:       call.SourceID,
+		TalkgroupTag:   call.TalkgroupTag,
+		AudioName:      call.AudioName,
 	}
 	chunk := streamChunk{audio: audio, meta: meta}
 
@@ -122,6 +157,10 @@ func (l *streamListener) matchesTalkgroup(call *database.Call) bool {
 }
 
 func (l *streamListener) matchesCall(call *database.Call) bool {
+	// PTT calls have no source_id; talkgroup subscription is the access gate.
+	if isPTTCall(call) {
+		return true
+	}
 	if l.ownerUserID != "" && l.ownerUserID == call.UserID {
 		return true
 	}
@@ -243,16 +282,7 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 	)
 
 	// Public-share subscribers also see PTT calls on the set's virtual PTT talkgroup.
-	subscribedTalkgroups := make([]int, 0, len(rs.Talkgroups)+1)
-	subscribedGroups := make([]string, 0, len(rs.TalkgroupGroups))
-	if rs.IsGroupsMode() {
-		subscribedGroups = append(subscribedGroups, rs.TalkgroupGroups...)
-	} else {
-		subscribedTalkgroups = append(subscribedTalkgroups, rs.Talkgroups...)
-	}
-	if rs.PTTTalkgroup != nil {
-		subscribedTalkgroups = append(subscribedTalkgroups, *rs.PTTTalkgroup)
-	}
+	subscribedTalkgroups, subscribedGroups := publicStreamSubscription(rs)
 
 	// Subscribe before seeding so no live calls are missed during the seed phase.
 	ch, unsubscribe := h.streamHub.subscribe(rs.UserID, subscribedTalkgroups, subscribedGroups, sourceIDs)

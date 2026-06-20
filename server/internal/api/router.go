@@ -31,6 +31,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 	// Long-lived connections — no request timeout.
 	r.Get("/ws", handle.handleWebSocket)
 	r.Get("/public/ws/{token}", handle.handlePublicWS)
+	r.Get("/public/ws-meta/{token}", handle.handlePublicWSMeta)
 
 	// Long-running admin maintenance (sync API clients only).
 	r.Group(func(r chi.Router) {

@@ -12,6 +12,11 @@ const VIEW_LABELS: Record<AppView, string> = {
   account: 'ACCOUNT',
 }
 
+function getViewLabel(view: AppView, authUser: AuthUser | null): string {
+  if (view === 'account' && !authUser) return 'JOIN'
+  return VIEW_LABELS[view]
+}
+
 type AppNavProps = Readonly<{
   activeView: AppView
   authUser: AuthUser | null
@@ -49,7 +54,7 @@ export function AppNav({ activeView, authUser, onViewChange }: AppNavProps) {
             className={`min-w-0 px-2.5 py-1 border rounded uppercase tracking-wider transition-all text-[10px] sm:text-xs ${getViewButtonClass(activeView, view, authUser)}`}
             disabled={!isAvailable}
           >
-            {VIEW_LABELS[view]}
+            {getViewLabel(view, authUser)}
           </button>
         )
       })}

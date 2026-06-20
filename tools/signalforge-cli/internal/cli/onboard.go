@@ -14,7 +14,6 @@ import (
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/profile"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/recorder"
 	"github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-cli/internal/service"
-	trunkcfg "github.com/projectseven-co-ltd/p7-scanner/tools/signalforge-trunk/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +36,7 @@ func newOnboardCommand(opts *options) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:     "onboard",
-		Aliases: []string{"setup", "init"},
+		Aliases: []string{"onb", "setup", "init"},
 		Short:   "Interactive walkthrough for hub, ingest folder, and canary monitoring",
 		Long:    "Configure SignalForge monitoring and save a profile under your user config directory.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -345,26 +344,6 @@ func newOnboardCommand(opts *options) *cobra.Command {
 					return err
 				}
 				printServiceStatus(cmd, svcStatus)
-			}
-
-			setupTrunk, err := prompt.askYesNo("Set up OKWIN trunk recorder (RTL-SDR → Hub)", false)
-			if err != nil {
-				return err
-			}
-			if setupTrunk {
-				trunkPath, err := prompt.ask("Trunk config path", "trunk.yaml")
-				if err != nil {
-					return err
-				}
-				trunkPath = expandPath(strings.TrimSpace(trunkPath))
-				cfg := trunkcfg.Default()
-				cfg.Hub.BaseURL = prof.HubURL
-				cfg.Hub.SourceKey = prof.SourceKey
-				if err := trunkcfg.Save(trunkPath, cfg); err != nil {
-					return err
-				}
-				printLine(out, "ok", "trunk config", trunkPath)
-				printLine(out, "info", "trunk next", fmt.Sprintf("sf trunk setup --config %q", trunkPath))
 			}
 
 			printOnboardNextSteps(out, prof, doInstall)
