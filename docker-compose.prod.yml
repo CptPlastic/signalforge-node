@@ -120,10 +120,7 @@ services:
 
   discord-bot:
     profiles: ["discord"]
-    build:
-      context: ./deploy/discord-bot
-      dockerfile: Dockerfile
-    image: signalforge-discord-bot:local
+    image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
     restart: unless-stopped
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN:-}
@@ -136,10 +133,7 @@ services:
 
   discord-register:
     profiles: ["discord-register"]
-    build:
-      context: ./deploy/discord-bot
-      dockerfile: Dockerfile
-    image: signalforge-discord-bot:local
+    image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN:-}
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}

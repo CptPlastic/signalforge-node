@@ -24,8 +24,8 @@
 # With mock radio sidecar (test/staging only):
 #   docker compose --env-file .env.production -f docker-compose.plesk.yml --profile mock up -d
 #
-# Optional Discord bot — enable with COMPOSE_PROFILES=discord (or hub,discord if you use other profiles).
-# Requires deploy/discord-bot in the repo checkout (Git deploy) OR pre-built signalforge-discord-bot:local on the host.
+# Optional Discord bot — enable with COMPOSE_PROFILES=discord when DISCORD_* secrets are set.
+# Image is built by CI and published to ghcr.io (same IMAGE_TAG as api/web).
 # One-time slash commands: COMPOSE_PROFILES=discord-register docker compose -f docker-compose.plesk.yml run --rm discord-register
 #
 # Call archive runs as a background job (no long HTTP hold). If you use sync mode or other
@@ -161,10 +161,7 @@ services:
 
   discord-bot:
     profiles: ["discord"]
-    build:
-      context: ./deploy/discord-bot
-      dockerfile: Dockerfile
-    image: signalforge-discord-bot:local
+    image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
     restart: unless-stopped
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN:-}
@@ -177,10 +174,7 @@ services:
 
   discord-register:
     profiles: ["discord-register"]
-    build:
-      context: ./deploy/discord-bot
-      dockerfile: Dockerfile
-    image: signalforge-discord-bot:local
+    image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN:-}
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
