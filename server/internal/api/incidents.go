@@ -36,6 +36,48 @@ type incidentResponse struct {
 	ShareURL  string              `json:"shareUrl,omitempty"`
 }
 
+type incidentListItem struct {
+	database.Incident
+	ShareURL string `json:"shareUrl,omitempty"`
+}
+
+func (h *handler) incidentPublicPlayerURL(incident database.Incident) string {
+	if incident.Exposure != "community" || incident.Status != "active" || incident.RadioSetID == "" {
+		return ""
+	}
+	rs, found, err := h.db.GetRadioSetForPTT(incident.RadioSetID)
+	if err != nil || !found || rs.ShareToken == nil || *rs.ShareToken == "" {
+		return ""
+	}
+	base := strings.TrimRight(h.cfg.HubPublicURL, "/")
+	if base == "" {
+		return ""
+	}
+	return base + "/public/player/" + *rs.ShareToken
+}
+
+func (h *handler) ensureCommunityShareToken(incident database.Incident) (string, error) {
+	if incident.Exposure != "community" || incident.RadioSetID == "" {
+		return "", nil
+	}
+	rs, found, err := h.db.GetRadioSetForPTT(incident.RadioSetID)
+	if err != nil || !found {
+		return "", err
+	}
+	if rs.ShareToken != nil && *rs.ShareToken != "" {
+		return h.incidentPublicPlayerURL(incident), nil
+	}
+	token := database.NewShareToken()
+	if err := h.db.SetRadioSetShareToken(rs.ID, rs.UserID, token); err != nil {
+		return "", err
+	}
+	base := strings.TrimRight(h.cfg.HubPublicURL, "/")
+	if base == "" {
+		return "", nil
+	}
+	return base + "/public/player/" + token, nil
+}
+
 func canManageIncidents(user authUser) bool {
 	return isAdmin(user) || user.DispatcherEnabled
 }
@@ -184,7 +226,14 @@ func (h *handler) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	if incidents == nil {
 		incidents = []database.Incident{}
 	}
-	writeJSON(w, http.StatusOK, incidents)
+	items := make([]incidentListItem, 0, len(incidents))
+	for _, inc := range incidents {
+		items = append(items, incidentListItem{
+			Incident: inc,
+			ShareURL: h.incidentPublicPlayerURL(inc),
+		})
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 func (h *handler) handleListIncidentSignals(w http.ResponseWriter, r *http.Request) {
@@ -272,13 +321,15 @@ func (h *handler) createIncidentFromTemplate(user authUser, req createIncidentRe
 			return incidentResponse{}, err
 		}
 		resp.Incident = activated
-		if exposure == "community" {
-			token := database.NewShareToken()
-			if err := h.db.SetRadioSetShareToken(rs.ID, user.ID, token); err == nil {
-				rs.ShareToken = &token
-				resp.RadioSet = &rs
-				if base := strings.TrimRight(h.cfg.HubPublicURL, "/"); base != "" {
-					resp.ShareURL = base + "/public/player/" + token
+		shareURL, shareErr := h.ensureCommunityShareToken(activated)
+		if shareErr != nil {
+			h.logger.Error("ensure incident share token failed", "error", shareErr, "incidentId", activated.ID)
+		} else if shareURL != "" {
+			resp.ShareURL = shareURL
+			if rs.ShareToken == nil {
+				rs2, found, _ := h.db.GetRadioSetForPTT(rs.ID)
+				if found {
+					resp.RadioSet = &rs2
 				}
 			}
 		}
@@ -332,8 +383,15 @@ func (h *handler) handleActivateIncident(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "activate incident", http.StatusInternalServerError)
 		return
 	}
+	shareURL, _ := h.ensureCommunityShareToken(activated)
+	resp := incidentResponse{Incident: activated, ShareURL: shareURL}
+	if activated.RadioSetID != "" {
+		if rs, found, rsErr := h.db.GetRadioSetForPTT(activated.RadioSetID); rsErr == nil && found {
+			resp.RadioSet = &rs
+		}
+	}
 	_ = h.db.AppendAuditLog(user.ID, "incident.activated", "incident", activated.ID, nil)
-	writeJSON(w, http.StatusOK, activated)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *handler) handleCloseIncident(w http.ResponseWriter, r *http.Request) {

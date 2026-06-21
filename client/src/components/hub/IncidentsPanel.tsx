@@ -15,35 +15,47 @@ type Props = Readonly<{
   isAdmin: boolean
   hubPeers: HubPeer[]
   onNotify: (message: string) => void
+  onOpenRadioSet?: (radioSetId: string) => void
 }>
 
-export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify }: Props) {
+type IncidentTab = 'active' | 'archive'
+
+const EXPOSURES = ['members', 'community', 'internal'] as const
+const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
+
+export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRadioSet }: Props) {
   const canManage = isAdmin || !!authUser.dispatcherEnabled
 
   const [settings, setSettings] = useState<IncidentSettings | null>(null)
   const [settingsDraft, setSettingsDraft] = useState<IncidentSettings | null>(null)
   const [templates, setTemplates] = useState<IncidentTemplate[]>([])
   const [incidents, setIncidents] = useState<Incident[]>([])
+  const [archivedIncidents, setArchivedIncidents] = useState<Incident[]>([])
   const [signals, setSignals] = useState<IncidentSignal[]>([])
   const [loading, setLoading] = useState(false)
+  const [tab, setTab] = useState<IncidentTab>('active')
   const [templateId, setTemplateId] = useState('weather-severe')
   const [title, setTitle] = useState('')
+  const [exposure, setExposure] = useState('members')
+  const [priority, setPriority] = useState('normal')
+  const [notes, setNotes] = useState('')
   const [activate, setActivate] = useState(true)
 
   const refresh = useCallback(async () => {
     if (!canManage) return
     setLoading(true)
     try {
-      const [s, t, i, sig] = await Promise.all([
+      const [s, t, all, sig] = await Promise.all([
         api.incidentSettings(),
         api.incidentTemplates(),
-        api.incidents(),
+        api.incidents(true),
         api.incidentSignals().catch(() => [] as IncidentSignal[]),
       ])
       setSettings(s)
       setSettingsDraft(s)
       setTemplates(t)
-      setIncidents(i)
+      setIncidents(all.filter((i) => i.status === 'active' || i.status === 'draft' || i.status === 'monitoring'))
+      setArchivedIncidents(all.filter((i) => i.status === 'closed' || i.status === 'archived'))
       setSignals(sig)
     } catch (err) {
       console.error(err)
@@ -56,6 +68,13 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify }: Props)
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  useEffect(() => {
+    const tmpl = templates.find((t) => t.id === templateId)
+    if (!tmpl) return
+    setExposure(tmpl.defaultExposure || 'members')
+    setPriority(tmpl.defaultPriority || 'normal')
+  }, [templateId, templates])
 
   if (!canManage) {
     return (
@@ -90,10 +109,14 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify }: Props)
       const resp = await api.createIncident({
         title: title.trim(),
         templateId,
+        exposure,
+        priority,
+        notes: notes.trim(),
         activate,
       })
-      onNotify(resp.shareUrl ? `Incident active — ${resp.shareUrl}` : 'Incident created')
+      onNotify(resp.shareUrl ? `Incident active — player link ready` : 'Incident created')
       setTitle('')
+      setNotes('')
       await refresh()
     } catch (err) {
       console.error(err)
@@ -117,12 +140,122 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify }: Props)
     }
   }
 
+  function copyShareUrl(url: string) {
+    void navigator.clipboard.writeText(url).then(
+      () => onNotify('Public player link copied'),
+      () => onNotify(url),
+    )
+  }
+
+  function renderIncidentRow(inc: Incident, actions: 'full' | 'archive-only') {
+    const isActive = inc.status === 'active' || inc.status === 'draft' || inc.status === 'monitoring'
+    return (
+      <div key={inc.id} className="border border-console-border rounded p-2 flex flex-col gap-2">
+        <div className="flex justify-between gap-2 items-start">
+          <div>
+            <div className="text-console-text">{inc.title}</div>
+            <div className="text-console-muted text-[10px] uppercase">
+              {inc.status} · {inc.priority} · {inc.exposure}
+              {inc.openedAt ? ` · opened ${fmtDateTime(inc.openedAt)}` : ''}
+            </div>
+          </div>
+          <div className="flex gap-1 shrink-0 flex-wrap justify-end">
+            {actions === 'full' && inc.status === 'draft' && (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  setLoading(true)
+                  api.activateIncident(inc.id)
+                    .then((r) => {
+                      if (r.shareUrl) copyShareUrl(r.shareUrl)
+                      else onNotify('Incident activated')
+                      return refresh()
+                    })
+                    .catch(() => onNotify('Activate failed'))
+                    .finally(() => setLoading(false))
+                }}
+                className="px-2 py-0.5 border border-console-accent text-console-accent rounded text-[10px]"
+              >
+                ACTIVATE
+              </button>
+            )}
+            {actions === 'full' && isActive && (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  setLoading(true)
+                  api.closeIncident(inc.id)
+                    .then(() => { onNotify('Incident closed'); return refresh() })
+                    .catch(() => onNotify('Close failed'))
+                    .finally(() => setLoading(false))
+                }}
+                className="px-2 py-0.5 border border-console-error text-console-error rounded text-[10px]"
+              >
+                CLOSE
+              </button>
+            )}
+            {inc.status === 'closed' && (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  setLoading(true)
+                  api.archiveIncident(inc.id)
+                    .then(() => { onNotify('Archived'); return refresh() })
+                    .catch(() => onNotify('Archive failed'))
+                    .finally(() => setLoading(false))
+                }}
+                className="px-2 py-0.5 border border-console-border rounded text-[10px]"
+              >
+                ARCHIVE
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {inc.radioSetId && onOpenRadioSet && isActive && (
+            <button
+              type="button"
+              onClick={() => onOpenRadioSet(inc.radioSetId!)}
+              className="px-2 py-0.5 border border-console-accent text-console-accent rounded text-[10px]"
+            >
+              LISTEN IN HUB
+            </button>
+          )}
+          {inc.shareUrl && (
+            <>
+              <a
+                href={inc.shareUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-2 py-0.5 border border-console-border text-console-muted rounded text-[10px] hover:text-console-accent"
+              >
+                PUBLIC PLAYER
+              </a>
+              <button
+                type="button"
+                onClick={() => copyShareUrl(inc.shareUrl!)}
+                className="px-2 py-0.5 border border-console-border rounded text-[10px] text-console-muted hover:text-console-accent"
+              >
+                COPY LINK
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const visibleIncidents = tab === 'active' ? incidents : archivedIncidents
+
   return (
     <div className="border border-console-border rounded p-3 flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <p className="console-label text-xs">// INCIDENTS</p>
-          <p className="text-[11px] text-console-muted">NWS/IEM signals → radio sets on the fly.</p>
+          <p className="text-[11px] text-console-muted">Open incident → radio set → listen or share.</p>
         </div>
         <button
           type="button"
@@ -151,7 +284,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify }: Props)
               checked={settingsDraft.incidentAutoSuggest}
               onChange={(e) => setSettingsDraft({ ...settingsDraft, incidentAutoSuggest: e.target.checked })}
             />
-            Auto-suggest from NWS/IEM (draft incidents)
+            Auto-suggest from NWS/IEM (draft signals)
           </label>
           <label className="flex items-center gap-2 text-console-muted">
             <input
@@ -162,7 +295,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify }: Props)
             Auto-open tornado warnings
           </label>
           <div>
-            <p className="text-console-muted mb-1">Watch areas (state codes, comma-separated)</p>
+            <p className="text-console-muted mb-1">Watch areas (state codes)</p>
             <input
               value={(settingsDraft.incidentWatchAreas ?? []).join(', ')}
               onChange={(e) =>
@@ -176,7 +309,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify }: Props)
             />
           </div>
           <div>
-            <p className="text-console-muted mb-1">Handler hub (optional peer)</p>
+            <p className="text-console-muted mb-1">Handler hub (optional)</p>
             <select
               value={settingsDraft.incidentHandlerHubId ?? ''}
               onChange={(e) => setSettingsDraft({ ...settingsDraft, incidentHandlerHubId: e.target.value })}
@@ -197,7 +330,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify }: Props)
             SAVE SETTINGS
           </button>
           {!settings?.incidentManagementEnabled && (
-            <p className="text-console-error text-[11px]">Enable incident management and save to activate poller + create.</p>
+            <p className="text-console-error text-[11px]">Enable incident management and save to activate.</p>
           )}
         </div>
       )}
@@ -219,9 +352,43 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify }: Props)
           placeholder="Severe Weather — Yukon"
           className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent"
         />
+        <div className="grid gap-2 md:grid-cols-2">
+          <div>
+            <p className="text-console-muted mb-1">Exposure</p>
+            <select
+              value={exposure}
+              onChange={(e) => setExposure(e.target.value)}
+              className="w-full bg-console-bg border border-console-border rounded px-2 py-1"
+            >
+              {EXPOSURES.map((e) => (
+                <option key={e} value={e}>{e}</option>
+              ))}
+            </select>
+            <p className="text-[10px] text-console-muted mt-0.5">community = public player link</p>
+          </div>
+          <div>
+            <p className="text-console-muted mb-1">Priority</p>
+            <select
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+              className="w-full bg-console-bg border border-console-border rounded px-2 py-1"
+            >
+              {PRIORITIES.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Operator notes (optional)"
+          rows={2}
+          className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent resize-y"
+        />
         <label className="flex items-center gap-2 text-console-muted">
           <input type="checkbox" checked={activate} onChange={(e) => setActivate(e.target.checked)} />
-          Activate immediately (+ share link if community template)
+          Activate immediately
         </label>
         <button
           type="button"
@@ -233,15 +400,22 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify }: Props)
         </button>
       </div>
 
-      {signals.length > 0 && (
-        <div className="flex flex-col gap-1 text-xs">
-          <div className="flex items-center justify-between">
-            <p className="console-label text-[10px]">SUGGESTED SIGNALS</p>
-            <button type="button" onClick={() => void pollSignals()} disabled={loading} className="text-[10px] text-console-muted hover:text-console-accent">
-              POLL NWS/IEM
-            </button>
-          </div>
-          {signals.slice(0, 8).map((sig) => (
+      <div className="flex flex-col gap-1 text-xs">
+        <div className="flex items-center justify-between gap-2">
+          <p className="console-label text-[10px]">WEATHER SIGNALS</p>
+          <button
+            type="button"
+            onClick={() => void pollSignals()}
+            disabled={loading || !settings?.incidentManagementEnabled}
+            className="text-[10px] text-console-muted hover:text-console-accent disabled:opacity-50"
+          >
+            POLL NWS/IEM
+          </button>
+        </div>
+        {signals.length === 0 ? (
+          <p className="text-console-muted text-[10px]">No pending signals — poll or wait for auto-suggest.</p>
+        ) : (
+          signals.slice(0, 8).map((sig) => (
             <div key={sig.id} className="border border-console-border rounded p-2 flex justify-between gap-2">
               <div>
                 <div className="text-console-text">{sig.title || sig.eventType}</div>
@@ -253,7 +427,11 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify }: Props)
                 onClick={() => {
                   setLoading(true)
                   api.promoteIncidentSignal(sig.id)
-                    .then((r) => { onNotify(r.shareUrl || 'Promoted'); return refresh() })
+                    .then((r) => {
+                      if (r.shareUrl) copyShareUrl(r.shareUrl)
+                      else onNotify('Incident opened from signal')
+                      return refresh()
+                    })
                     .catch(() => onNotify('Promote failed'))
                     .finally(() => setLoading(false))
                 }}
@@ -262,30 +440,31 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify }: Props)
                 OPEN
               </button>
             </div>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
 
-      {incidents.length > 0 && (
-        <div className="flex flex-col gap-1 text-xs">
-          <p className="console-label text-[10px]">ACTIVE / RECENT</p>
-          {incidents.map((inc) => (
-            <div key={inc.id} className="border border-console-border rounded p-2 flex justify-between gap-2 items-start">
-              <div>
-                <div className="text-console-text">{inc.title}</div>
-                <div className="text-console-muted text-[10px] uppercase">{inc.status} · {inc.priority} · {inc.exposure}</div>
-              </div>
-              <div className="flex gap-1 shrink-0">
-                {inc.status === 'draft' && (
-                  <button type="button" disabled={loading} onClick={() => { setLoading(true); api.activateIncident(inc.id).then(() => refresh()).finally(() => setLoading(false)) }} className="px-2 py-0.5 border border-console-border rounded text-[10px]">ACTIVATE</button>
-                )}
-                {inc.status !== 'closed' && inc.status !== 'archived' && (
-                  <button type="button" disabled={loading} onClick={() => { setLoading(true); api.closeIncident(inc.id).then(() => refresh()).finally(() => setLoading(false)) }} className="px-2 py-0.5 border border-console-error text-console-error rounded text-[10px]">CLOSE</button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="flex gap-2 text-[10px]">
+        <button
+          type="button"
+          onClick={() => setTab('active')}
+          className={`px-2 py-0.5 border rounded ${tab === 'active' ? 'border-console-accent text-console-accent' : 'border-console-border text-console-muted'}`}
+        >
+          ACTIVE ({incidents.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('archive')}
+          className={`px-2 py-0.5 border rounded ${tab === 'archive' ? 'border-console-accent text-console-accent' : 'border-console-border text-console-muted'}`}
+        >
+          CLOSED / ARCHIVE ({archivedIncidents.length})
+        </button>
+      </div>
+
+      {visibleIncidents.length === 0 ? (
+        <p className="text-console-muted text-[11px]">No incidents in this view.</p>
+      ) : (
+        visibleIncidents.map((inc) => renderIncidentRow(inc, tab === 'active' ? 'full' : 'archive-only'))
       )}
     </div>
   )

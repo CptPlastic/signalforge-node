@@ -112,6 +112,7 @@ export type Incident = {
   archivedAt: number
   createdAt: number
   updatedAt: number
+  shareUrl?: string
 }
 
 export type IncidentSignal = {
@@ -511,7 +512,7 @@ export const api = {
       method: 'POST',
     }),
   activateIncident: (id: string) =>
-    request<Incident>(`/api/v1/incidents/${encodeURIComponent(id)}/activate`, { method: 'POST' }),
+    request<CreateIncidentResponse>(`/api/v1/incidents/${encodeURIComponent(id)}/activate`, { method: 'POST' }),
   closeIncident: (id: string) =>
     request<Incident>(`/api/v1/incidents/${encodeURIComponent(id)}/close`, { method: 'POST' }),
   archiveIncident: (id: string) =>

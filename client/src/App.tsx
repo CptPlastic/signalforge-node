@@ -2755,6 +2755,10 @@ function App() {
               isAdmin={isAdmin}
               hubPeers={hubPeers}
               onNotify={setHubMessage}
+              onOpenRadioSet={(radioSetId) => {
+                setSelectedSetID(radioSetId)
+                setActiveView('monitor')
+              }}
             />
           )}
 
