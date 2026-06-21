@@ -17,9 +17,16 @@ type HubIdentity struct {
 	TrustIssuerHubID          string `json:"trustIssuerHubId"`
 	TrustCertificate          string `json:"trustCertificate"`
 	TrustExpiresAt            int64  `json:"trustExpiresAt"`
-	TrustVerifiedAt           int64  `json:"trustVerifiedAt"`
-	CreatedAt                 int64  `json:"createdAt"`
-	UpdatedAt                 int64  `json:"updatedAt"`
+	TrustVerifiedAt           int64    `json:"trustVerifiedAt"`
+	IncidentManagementEnabled bool     `json:"incidentManagementEnabled"`
+	IncidentHandlerHubID      string   `json:"incidentHandlerHubId"`
+	IncidentAutoSuggest       bool     `json:"incidentAutoSuggest"`
+	IncidentAutoOpen          bool     `json:"incidentAutoOpen"`
+	IncidentWatchAreas        []string `json:"incidentWatchAreas"`
+	IncidentWatchPointLat     float64  `json:"incidentWatchPointLat"`
+	IncidentWatchPointLon     float64  `json:"incidentWatchPointLon"`
+	CreatedAt                 int64    `json:"createdAt"`
+	UpdatedAt                 int64    `json:"updatedAt"`
 }
 
 // HubInvite is an admin-generated token another hub can use to become a trusted peer.
@@ -209,4 +216,55 @@ type FederatedCall struct {
 	Source    string `json:"sourceId"`
 	Audio     []byte `json:"-"`
 	AudioBase string `json:"audioBase64,omitempty"`
+}
+
+// IncidentTemplate defines talkgroup scope and defaults for a class of incident.
+type IncidentTemplate struct {
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	IncidentType     string   `json:"incidentType"`
+	SelectionMode    string   `json:"selectionMode"`
+	Talkgroups       []int    `json:"talkgroups"`
+	TalkgroupGroups  []string `json:"talkgroupGroups"`
+	DefaultExposure  string   `json:"defaultExposure"`
+	DefaultPriority  string   `json:"defaultPriority"`
+	NWSEventPatterns []string `json:"nwsEventPatterns"`
+	CreatedAt        int64    `json:"createdAt"`
+	UpdatedAt        int64    `json:"updatedAt"`
+}
+
+// Incident is a hub-scoped operational event with a linked radio set.
+type Incident struct {
+	ID                string          `json:"id"`
+	Title             string          `json:"title"`
+	IncidentType      string          `json:"incidentType"`
+	Status            string          `json:"status"`
+	Priority          string          `json:"priority"`
+	Exposure          string          `json:"exposure"`
+	RadioSetID        string          `json:"radioSetId,omitempty"`
+	TemplateID        string          `json:"templateId,omitempty"`
+	OpenedByUserID    string          `json:"openedByUserId,omitempty"`
+	HandlerIncidentID string          `json:"handlerIncidentId,omitempty"`
+	Notes             string          `json:"notes"`
+	Metadata          json.RawMessage `json:"metadata,omitempty"`
+	OpenedAt          int64           `json:"openedAt"`
+	ClosedAt          int64           `json:"closedAt"`
+	ArchivedAt        int64           `json:"archivedAt"`
+	CreatedAt         int64           `json:"createdAt"`
+	UpdatedAt         int64           `json:"updatedAt"`
+}
+
+// IncidentSignal is an external or automated hint (NWS, IEM LSR, etc.).
+type IncidentSignal struct {
+	ID         string          `json:"id"`
+	Source     string          `json:"source"`
+	ExternalID string          `json:"externalId"`
+	EventType  string          `json:"eventType"`
+	Severity   string          `json:"severity"`
+	Title      string          `json:"title"`
+	Detail     string          `json:"detail"`
+	TemplateID string          `json:"templateId,omitempty"`
+	IncidentID string          `json:"incidentId,omitempty"`
+	Raw        json.RawMessage `json:"raw,omitempty"`
+	ReceivedAt int64           `json:"receivedAt"`
 }

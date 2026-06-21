@@ -34,6 +34,9 @@ func Open(dsn string) (*DB, error) {
 	if err := d.migrate(); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if err := d.SeedDefaultIncidentTemplates(); err != nil {
+		return nil, fmt.Errorf("seed incident templates: %w", err)
+	}
 	return d, nil
 }
 

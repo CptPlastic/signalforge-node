@@ -597,3 +597,18 @@ func (d *DB) CountActiveAdmins() (int, error) {
 	`).Scan(&count)
 	return count, err
 }
+
+// FirstAdminUserID returns an active admin user id for system automation.
+func (d *DB) FirstAdminUserID() (string, error) {
+	var id string
+	err := d.db.QueryRow(`
+		SELECT id FROM users
+		WHERE role = 'admin' AND status = 'active'
+		ORDER BY created_at ASC
+		LIMIT 1
+	`).Scan(&id)
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("no active admin user")
+	}
+	return id, err
+}

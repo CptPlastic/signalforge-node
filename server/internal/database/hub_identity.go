@@ -21,36 +21,21 @@ func (d *DB) GetHubIdentity() (*HubIdentity, bool, error) {
 		SELECT hub_id, name, public_url, region, contact, public_key, private_key,
 		       federation_enabled, directory_validation_status, trust_level,
 		       trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
-		       created_at, updated_at
+		       incident_management_enabled, incident_handler_hub_id, incident_auto_suggest,
+		       incident_auto_open, incident_watch_areas, incident_watch_point_lat,
+		       incident_watch_point_lon, created_at, updated_at
 		FROM hub_identity
 		WHERE id = 'local'`)
 
-	var identity HubIdentity
-	if err := row.Scan(
-		&identity.HubID,
-		&identity.Name,
-		&identity.PublicURL,
-		&identity.Region,
-		&identity.Contact,
-		&identity.PublicKey,
-		&identity.PrivateKey,
-		&identity.FederationEnabled,
-		&identity.DirectoryValidationStatus,
-		&identity.TrustLevel,
-		&identity.TrustIssuerHubID,
-		&identity.TrustCertificate,
-		&identity.TrustExpiresAt,
-		&identity.TrustVerifiedAt,
-		&identity.CreatedAt,
-		&identity.UpdatedAt,
-	); err != nil {
+	identity, err := scanHubIdentityIncidentFields(row)
+	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, false, nil
 		}
 		return nil, false, err
 	}
 
-	return &identity, true, nil
+	return identity, true, nil
 }
 
 // UpsertHubIdentity stores the single local hub identity row.
@@ -93,7 +78,9 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 		RETURNING hub_id, name, public_url, region, contact, public_key, private_key,
 		          federation_enabled, directory_validation_status, trust_level,
 		          trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
-		          created_at, updated_at`,
+		          incident_management_enabled, incident_handler_hub_id, incident_auto_suggest,
+		          incident_auto_open, incident_watch_areas, incident_watch_point_lat,
+		          incident_watch_point_lon, created_at, updated_at`,
 		identity.HubID,
 		identity.Name,
 		identity.PublicURL,
@@ -111,29 +98,7 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 		now,
 	)
 
-	var saved HubIdentity
-	if err := row.Scan(
-		&saved.HubID,
-		&saved.Name,
-		&saved.PublicURL,
-		&saved.Region,
-		&saved.Contact,
-		&saved.PublicKey,
-		&saved.PrivateKey,
-		&saved.FederationEnabled,
-		&saved.DirectoryValidationStatus,
-		&saved.TrustLevel,
-		&saved.TrustIssuerHubID,
-		&saved.TrustCertificate,
-		&saved.TrustExpiresAt,
-		&saved.TrustVerifiedAt,
-		&saved.CreatedAt,
-		&saved.UpdatedAt,
-	); err != nil {
-		return nil, err
-	}
-
-	return &saved, nil
+	return scanHubIdentityIncidentFields(row)
 }
 
 // SetHubIdentityKeyPair stores the local hub signing keypair and returns the public identity.
@@ -146,31 +111,11 @@ func (d *DB) SetHubIdentityKeyPair(publicKey, privateKey string) (*HubIdentity, 
 		RETURNING hub_id, name, public_url, region, contact, public_key, private_key,
 		          federation_enabled, directory_validation_status, trust_level,
 		          trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
-		          created_at, updated_at`, publicKey, privateKey, now)
+		          incident_management_enabled, incident_handler_hub_id, incident_auto_suggest,
+		          incident_auto_open, incident_watch_areas, incident_watch_point_lat,
+		          incident_watch_point_lon, created_at, updated_at`, publicKey, privateKey, now)
 
-	var saved HubIdentity
-	if err := row.Scan(
-		&saved.HubID,
-		&saved.Name,
-		&saved.PublicURL,
-		&saved.Region,
-		&saved.Contact,
-		&saved.PublicKey,
-		&saved.PrivateKey,
-		&saved.FederationEnabled,
-		&saved.DirectoryValidationStatus,
-		&saved.TrustLevel,
-		&saved.TrustIssuerHubID,
-		&saved.TrustCertificate,
-		&saved.TrustExpiresAt,
-		&saved.TrustVerifiedAt,
-		&saved.CreatedAt,
-		&saved.UpdatedAt,
-	); err != nil {
-		return nil, err
-	}
-
-	return &saved, nil
+	return scanHubIdentityIncidentFields(row)
 }
 
 // CreateHubInvite stores a new peer invite token.

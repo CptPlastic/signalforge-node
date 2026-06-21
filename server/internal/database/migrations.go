@@ -249,6 +249,69 @@ func (d *DB) migrate() error {
 		-- Radio sets can follow explicit talkgroup IDs or dynamic talkgroup_group names.
 		ALTER TABLE radio_sets ADD COLUMN IF NOT EXISTS selection_mode TEXT NOT NULL DEFAULT 'talkgroups';
 		ALTER TABLE radio_sets ADD COLUMN IF NOT EXISTS talkgroup_groups JSONB NOT NULL DEFAULT '[]';
+
+		-- Incident management (opt-in per hub).
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS incident_management_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS incident_handler_hub_id TEXT NOT NULL DEFAULT '';
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS incident_auto_suggest BOOLEAN NOT NULL DEFAULT TRUE;
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS incident_auto_open BOOLEAN NOT NULL DEFAULT FALSE;
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS incident_watch_areas JSONB NOT NULL DEFAULT '["OK"]'::jsonb;
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS incident_watch_point_lat DOUBLE PRECISION NOT NULL DEFAULT 35.5067;
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS incident_watch_point_lon DOUBLE PRECISION NOT NULL DEFAULT -97.7625;
+
+		CREATE TABLE IF NOT EXISTS incident_templates (
+			id                  TEXT PRIMARY KEY,
+			name                TEXT NOT NULL,
+			incident_type       TEXT NOT NULL DEFAULT 'custom',
+			selection_mode      TEXT NOT NULL DEFAULT 'groups',
+			talkgroups          JSONB NOT NULL DEFAULT '[]'::jsonb,
+			talkgroup_groups    JSONB NOT NULL DEFAULT '[]'::jsonb,
+			default_exposure    TEXT NOT NULL DEFAULT 'members',
+			default_priority    TEXT NOT NULL DEFAULT 'normal',
+			nws_event_patterns  JSONB NOT NULL DEFAULT '[]'::jsonb,
+			created_at          BIGINT NOT NULL,
+			updated_at          BIGINT NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS incidents (
+			id                  TEXT PRIMARY KEY,
+			title               TEXT NOT NULL,
+			incident_type       TEXT NOT NULL DEFAULT 'custom',
+			status              TEXT NOT NULL DEFAULT 'draft',
+			priority            TEXT NOT NULL DEFAULT 'normal',
+			exposure            TEXT NOT NULL DEFAULT 'members',
+			radio_set_id        TEXT,
+			template_id         TEXT,
+			opened_by_user_id   TEXT,
+			handler_incident_id TEXT NOT NULL DEFAULT '',
+			notes               TEXT NOT NULL DEFAULT '',
+			metadata            JSONB NOT NULL DEFAULT '{}'::jsonb,
+			opened_at           BIGINT NOT NULL DEFAULT 0,
+			closed_at           BIGINT NOT NULL DEFAULT 0,
+			archived_at         BIGINT NOT NULL DEFAULT 0,
+			created_at          BIGINT NOT NULL,
+			updated_at          BIGINT NOT NULL,
+			FOREIGN KEY (radio_set_id) REFERENCES radio_sets(id) ON DELETE SET NULL,
+			FOREIGN KEY (opened_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status, updated_at DESC);
+
+		CREATE TABLE IF NOT EXISTS incident_signals (
+			id           TEXT PRIMARY KEY,
+			source       TEXT NOT NULL,
+			external_id  TEXT NOT NULL,
+			event_type   TEXT NOT NULL DEFAULT '',
+			severity     TEXT NOT NULL DEFAULT 'normal',
+			title        TEXT NOT NULL DEFAULT '',
+			detail       TEXT NOT NULL DEFAULT '',
+			template_id  TEXT NOT NULL DEFAULT '',
+			incident_id  TEXT NOT NULL DEFAULT '',
+			raw          JSONB NOT NULL DEFAULT '{}'::jsonb,
+			received_at  BIGINT NOT NULL,
+			UNIQUE(source, external_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_incident_signals_pending ON incident_signals(received_at DESC)
+			WHERE incident_id = '' OR incident_id IS NULL;
 	`)
 	return err
 }
