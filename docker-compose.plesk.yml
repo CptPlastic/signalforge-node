@@ -25,6 +25,7 @@
 #   docker compose --env-file .env.production -f docker-compose.plesk.yml --profile mock up -d
 #
 # Discord bot: set DISCORD_TOKEN + DISCORD_CLIENT_ID + DISCORD_GUILD_ID.
+# Set DISCORD_BOT_WORKER_TOKEN once in stack Environment variables (api + discord-bot share it).
 # Slash commands register automatically on startup. Optional: WELCOME_CHANNEL_ID (needs Server Members Intent).
 # Image: ghcr.io/signalforge-org/signalforge-discord-bot
 #
@@ -84,7 +85,8 @@ services:
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
       TRANSCRIPTION_WORKER_TOKEN: ${TRANSCRIPTION_WORKER_TOKEN:-}
       TRANSCRIPTION_MIN_DURATION_SECONDS: ${TRANSCRIPTION_MIN_DURATION_SECONDS:-0.75}
-      DISCORD_BOT_WORKER_TOKEN: ${DISCORD_BOT_WORKER_TOKEN:-}
+      # Pass-through (no ${}) — same pattern as AUTH_*; avoids empty override wiping env_file.
+      DISCORD_BOT_WORKER_TOKEN:
       # Pass-through from stack Environment variables (no ${} — avoids wiping values and
       # avoids compose re-parsing $ characters inside passwords).
       AUTH_BOOTSTRAP_EMAIL:
@@ -163,15 +165,20 @@ services:
   discord-bot:
     image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
     restart: unless-stopped
+    env_file:
+      - path: .env.production
+        required: false
+      - path: .env
+        required: false
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN:-}
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
       WELCOME_CHANNEL_ID: ${WELCOME_CHANNEL_ID:-}
       DIRECTORY_FEED_URL: ${DIRECTORY_FEED_URL:-https://signalforge.org/directory/hubs.json}
-      HOSTED_HUB_URL: ${HOSTED_HUB_URL:-https://p7hub.projectseven.us}
+      HOSTED_HUB_URL: ${HOSTED_HUB_URL:-${APP_BASE_URL:-https://p7hub.projectseven.us}}
       SITE_URL: ${SITE_URL:-https://signalforge.org}
-      DISCORD_BOT_WORKER_TOKEN: ${DISCORD_BOT_WORKER_TOKEN:-}
+      DISCORD_BOT_WORKER_TOKEN:
 
 volumes:
   postgres_data:
