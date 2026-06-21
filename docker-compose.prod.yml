@@ -119,10 +119,11 @@ services:
         condition: service_healthy
 
   discord-bot:
+    profiles: ["discord"]
     build:
       context: ./deploy/discord-bot
       dockerfile: Dockerfile
-    image: ${DISCORD_BOT_IMAGE:-signalforge-discord-bot:${DISCORD_BOT_TAG:-local}}
+    image: signalforge-discord-bot:local
     restart: unless-stopped
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN:-}
@@ -138,16 +139,13 @@ services:
     build:
       context: ./deploy/discord-bot
       dockerfile: Dockerfile
-    image: ${DISCORD_BOT_IMAGE:-signalforge-discord-bot:${DISCORD_BOT_TAG:-local}}
+    image: signalforge-discord-bot:local
     environment:
-      DISCORD_TOKEN:
-      DISCORD_CLIENT_ID:
-      DISCORD_GUILD_ID:
-      WELCOME_CHANNEL_ID:
-      DIRECTORY_FEED_URL:
-      HOSTED_HUB_URL:
-      SITE_URL:
-    command: ["node", "dist/register-commands.js"]
+      DISCORD_TOKEN: ${DISCORD_TOKEN:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      WELCOME_CHANNEL_ID: ${WELCOME_CHANNEL_ID:-}
+    entrypoint: ["node", "dist/register-commands.js"]
     restart: "no"
 
 volumes:
