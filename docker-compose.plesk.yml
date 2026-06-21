@@ -24,9 +24,8 @@
 # With mock radio sidecar (test/staging only):
 #   docker compose --env-file .env.production -f docker-compose.plesk.yml --profile mock up -d
 #
-# Optional Discord bot — enable with COMPOSE_PROFILES=discord when DISCORD_* secrets are set.
-# Image is built by CI and published to ghcr.io (same IMAGE_TAG as api/web).
-# One-time slash commands: COMPOSE_PROFILES=discord-register docker compose -f docker-compose.plesk.yml run --rm discord-register
+# Discord bot: separate Portainer stack — deploy/discord-bot/docker-compose.yml
+# (do not add to this file; Plesk/Portainer stack updates fail when bot services are embedded here)
 #
 # Call archive runs as a background job (no long HTTP hold). If you use sync mode or other
 # long admin requests through Plesk's reverse proxy, raise its read timeout above 120s.
@@ -158,30 +157,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
-
-  discord-bot:
-    profiles: ["discord"]
-    image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
-    restart: unless-stopped
-    environment:
-      DISCORD_TOKEN: ${DISCORD_TOKEN:-}
-      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
-      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
-      WELCOME_CHANNEL_ID: ${WELCOME_CHANNEL_ID:-}
-      DIRECTORY_FEED_URL: ${DIRECTORY_FEED_URL:-https://signalforge.org/directory/hubs.json}
-      HOSTED_HUB_URL: ${HOSTED_HUB_URL:-https://p7hub.projectseven.us}
-      SITE_URL: ${SITE_URL:-https://signalforge.org}
-
-  discord-register:
-    profiles: ["discord-register"]
-    image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
-    environment:
-      DISCORD_TOKEN: ${DISCORD_TOKEN:-}
-      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
-      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
-      WELCOME_CHANNEL_ID: ${WELCOME_CHANNEL_ID:-}
-    entrypoint: ["node", "dist/register-commands.js"]
-    restart: "no"
 
 volumes:
   postgres_data:
