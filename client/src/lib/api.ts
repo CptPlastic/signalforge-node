@@ -71,8 +71,76 @@ export type HubIdentity = {
   trustCertificate: string
   trustExpiresAt: number
   trustVerifiedAt: number
+  incidentManagementEnabled?: boolean
+  incidentHandlerHubId?: string
+  incidentAutoSuggest?: boolean
+  incidentAutoOpen?: boolean
+  incidentWatchAreas?: string[]
+  incidentWatchPointLat?: number
+  incidentWatchPointLon?: number
   createdAt: number
   updatedAt: number
+}
+
+export type IncidentTemplate = {
+  id: string
+  name: string
+  incidentType: string
+  selectionMode: RadioSetSelectionMode
+  talkgroups: number[]
+  talkgroupGroups: string[]
+  defaultExposure: string
+  defaultPriority: string
+  nwsEventPatterns: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+export type Incident = {
+  id: string
+  title: string
+  incidentType: string
+  status: string
+  priority: string
+  exposure: string
+  radioSetId?: string
+  templateId?: string
+  openedByUserId?: string
+  notes: string
+  openedAt: number
+  closedAt: number
+  archivedAt: number
+  createdAt: number
+  updatedAt: number
+}
+
+export type IncidentSignal = {
+  id: string
+  source: string
+  externalId: string
+  eventType: string
+  severity: string
+  title: string
+  detail: string
+  templateId?: string
+  incidentId?: string
+  receivedAt: number
+}
+
+export type IncidentSettings = {
+  incidentManagementEnabled: boolean
+  incidentHandlerHubId: string
+  incidentAutoSuggest: boolean
+  incidentAutoOpen: boolean
+  incidentWatchAreas: string[]
+  incidentWatchPointLat: number
+  incidentWatchPointLon: number
+}
+
+export type CreateIncidentResponse = {
+  incident: Incident
+  radioSet?: RadioSet
+  shareUrl?: string
 }
 
 export type HubInvite = {
@@ -397,6 +465,41 @@ export const api = {
     }),
   generateHubKeyPair: () => request<HubIdentity>('/api/v1/hub/identity/keypair', { method: 'POST' }),
   refreshHubDirectory: () => request<HubIdentity>('/api/v1/hub/directory/refresh', { method: 'POST' }),
+  incidentSettings: () => request<IncidentSettings>('/api/v1/hub/incidents/settings'),
+  updateIncidentSettings: (settings: IncidentSettings) =>
+    request<HubIdentity>('/api/v1/hub/incidents/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+  incidentTemplates: () => request<IncidentTemplate[]>('/api/v1/incident-templates'),
+  incidents: (archived = false) =>
+    request<Incident[]>(`/api/v1/incidents${archived ? '?archived=1' : ''}`),
+  createIncident: (payload: {
+    title: string
+    templateId?: string
+    type?: string
+    priority?: string
+    exposure?: string
+    notes?: string
+    activate?: boolean
+  }) =>
+    request<CreateIncidentResponse>('/api/v1/incidents', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  incidentSignals: () => request<IncidentSignal[]>('/api/v1/incidents/signals'),
+  pollIncidentSignals: () =>
+    request<{ processed: number }>('/api/v1/incidents/signals/poll', { method: 'POST' }),
+  promoteIncidentSignal: (id: string) =>
+    request<CreateIncidentResponse>(`/api/v1/incidents/signals/${encodeURIComponent(id)}/promote`, {
+      method: 'POST',
+    }),
+  activateIncident: (id: string) =>
+    request<Incident>(`/api/v1/incidents/${encodeURIComponent(id)}/activate`, { method: 'POST' }),
+  closeIncident: (id: string) =>
+    request<Incident>(`/api/v1/incidents/${encodeURIComponent(id)}/close`, { method: 'POST' }),
+  archiveIncident: (id: string) =>
+    request<Incident>(`/api/v1/incidents/${encodeURIComponent(id)}/archive`, { method: 'POST' }),
   hubInvites: () => request<HubInvite[]>('/api/v1/hub/invites'),
   createHubInvite: () => request<HubInvite>('/api/v1/hub/invites', { method: 'POST' }),
   revokeHubInvite: (id: string) => request<HubInvite>(`/api/v1/hub/invites/${encodeURIComponent(id)}`, { method: 'DELETE' }),

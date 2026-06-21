@@ -24,9 +24,10 @@
 # With mock radio sidecar (test/staging only):
 #   docker compose --env-file .env.production -f docker-compose.plesk.yml --profile mock up -d
 #
-# Optional SignalForge Discord bot (same stack — no extra ports):
-#   Set COMPOSE_PROFILES=discord (or append: mock,discord) and DISCORD_* env vars below.
-#   One time slash commands: COMPOSE_PROFILES=discord-register docker compose -f docker-compose.plesk.yml run --rm discord-register
+# Optional SignalForge Discord bot (same stack — no host ports, no COMPOSE_PROFILES needed).
+# Set DISCORD_TOKEN + DISCORD_CLIENT_ID + DISCORD_GUILD_ID + WELCOME_CHANNEL_ID.
+# Without DISCORD_TOKEN the bot container stays idle until you redeploy with secrets.
+# One-time slash commands: COMPOSE_PROFILES=discord-register docker compose -f docker-compose.plesk.yml run --rm discord-register
 #
 # Call archive runs as a background job (no long HTTP hold). If you use sync mode or other
 # long admin requests through Plesk's reverse proxy, raise its read timeout above 120s.
@@ -160,20 +161,19 @@ services:
         condition: service_healthy
 
   discord-bot:
-    profiles: ["discord"]
     build:
       context: ./deploy/discord-bot
       dockerfile: Dockerfile
     image: ${DISCORD_BOT_IMAGE:-signalforge-discord-bot:${DISCORD_BOT_TAG:-local}}
     restart: unless-stopped
     environment:
-      DISCORD_TOKEN:
-      DISCORD_CLIENT_ID:
-      DISCORD_GUILD_ID:
-      WELCOME_CHANNEL_ID:
-      DIRECTORY_FEED_URL:
-      HOSTED_HUB_URL:
-      SITE_URL:
+      DISCORD_TOKEN: ${DISCORD_TOKEN:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      WELCOME_CHANNEL_ID: ${WELCOME_CHANNEL_ID:-}
+      DIRECTORY_FEED_URL: ${DIRECTORY_FEED_URL:-https://signalforge.org/directory/hubs.json}
+      HOSTED_HUB_URL: ${HOSTED_HUB_URL:-https://p7hub.projectseven.us}
+      SITE_URL: ${SITE_URL:-https://signalforge.org}
 
   discord-register:
     profiles: ["discord-register"]

@@ -23,6 +23,7 @@ import { AppNav } from './components/AppNav'
 import { AuthenticatedView } from './components/ActiveView'
 import { AccountView } from './components/account/AccountView'
 import { HubRegisterPanel } from './components/hub/HubRegisterPanel'
+import { IncidentsPanel } from './components/hub/IncidentsPanel'
 import { CallRow } from './components/calls/CallRow'
 import { DispatcherView } from './components/radio-sets/DispatcherView'
 import { RadioSetPTTView } from './components/radio-sets/RadioSetPTTView'
@@ -2741,6 +2742,15 @@ function App() {
               hubLoading={hubLoading}
               onGenerateKey={generateHubKeyPair}
               onRefreshDirectory={refreshHubDirectory}
+              onNotify={setHubMessage}
+            />
+          )}
+
+          {(isAdmin || authUser?.dispatcherEnabled) && authUser && (
+            <IncidentsPanel
+              authUser={authUser}
+              isAdmin={isAdmin}
+              hubPeers={hubPeers}
               onNotify={setHubMessage}
             />
           )}
