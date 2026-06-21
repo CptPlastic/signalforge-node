@@ -4,6 +4,7 @@ import {
   type AuthUser,
   type HubPeer,
   type Incident,
+  type IncidentDiscordIntegration,
   type IncidentSettings,
   type IncidentSignal,
   type IncidentTemplate,
@@ -32,6 +33,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [archivedIncidents, setArchivedIncidents] = useState<Incident[]>([])
   const [signals, setSignals] = useState<IncidentSignal[]>([])
+  const [discordByIncident, setDiscordByIncident] = useState<Record<string, IncidentDiscordIntegration | null>>({})
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<IncidentTab>('active')
   const [templateId, setTemplateId] = useState('weather-severe')
@@ -57,6 +59,18 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
       setIncidents(all.filter((i) => i.status === 'active' || i.status === 'draft' || i.status === 'monitoring'))
       setArchivedIncidents(all.filter((i) => i.status === 'closed' || i.status === 'archived'))
       setSignals(sig)
+      const active = all.filter((i) => i.status === 'active' || i.status === 'monitoring')
+      const discordEntries = await Promise.all(
+        active.map(async (inc) => {
+          try {
+            const resp = await api.incidentDiscordIntegration(inc.id)
+            return [inc.id, resp.integration ?? null] as const
+          } catch {
+            return [inc.id, null] as const
+          }
+        }),
+      )
+      setDiscordByIncident(Object.fromEntries(discordEntries))
     } catch (err) {
       console.error(err)
       onNotify('Could not load incidents')
@@ -149,6 +163,16 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
 
   function renderIncidentRow(inc: Incident, actions: 'full' | 'archive-only') {
     const isActive = inc.status === 'active' || inc.status === 'draft' || inc.status === 'monitoring'
+    const discord = discordByIncident[inc.id]
+    const discordLabel = discord?.status === 'active'
+      ? 'DISCORD LIVE'
+      : discord?.status === 'pending'
+        ? 'DISCORD PENDING'
+        : discord?.status === 'stopping'
+          ? 'DISCORD STOPPING'
+          : discord?.status === 'failed'
+            ? 'DISCORD FAILED'
+            : 'DISCORD ROOMS'
     return (
       <div key={inc.id} className="border border-console-border rounded p-2 flex flex-col gap-2">
         <div className="flex justify-between gap-2 items-start">
@@ -157,6 +181,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
             <div className="text-console-muted text-[10px] uppercase">
               {inc.status} · {inc.priority} · {inc.exposure}
               {inc.openedAt ? ` · opened ${fmtDateTime(inc.openedAt)}` : ''}
+              {discord?.status ? ` · discord ${discord.status}` : ''}
             </div>
           </div>
           <div className="flex gap-1 shrink-0 flex-wrap justify-end">
@@ -242,6 +267,45 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
                 COPY LINK
               </button>
             </>
+          )}
+          {actions === 'full' && isActive && inc.exposure !== 'internal' && (
+            <>
+              {(discord?.status === 'active' || discord?.status === 'pending') ? (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => {
+                    setLoading(true)
+                    api.deleteIncidentDiscordIntegration(inc.id)
+                      .then(() => { onNotify('Discord rooms stopping'); return refresh() })
+                      .catch(() => onNotify('Stop Discord failed'))
+                      .finally(() => setLoading(false))
+                  }}
+                  className="px-2 py-0.5 border border-console-border rounded text-[10px] text-console-muted hover:text-console-error"
+                >
+                  STOP DISCORD
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => {
+                    setLoading(true)
+                    api.createIncidentDiscordIntegration(inc.id)
+                      .then(() => { onNotify('Discord rooms + voice stream requested'); return refresh() })
+                      .catch(() => onNotify('Discord request failed — is bot online?'))
+                      .finally(() => setLoading(false))
+                  }}
+                  className="px-2 py-0.5 border border-console-accent text-console-accent rounded text-[10px]"
+                  title="Creates voice + text channels; bot streams live audio to voice"
+                >
+                  {discordLabel}
+                </button>
+              )}
+            </>
+          )}
+          {discord?.config?.error && (
+            <span className="text-[10px] text-console-error">{discord.config.error}</span>
           )}
         </div>
       </div>

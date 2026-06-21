@@ -405,6 +405,9 @@ func (h *handler) handleCloseIncident(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	if err := h.db.MarkDiscordIntegrationsStopping(closed.ID); err != nil {
+		h.logger.Error("mark discord integrations stopping failed", "error", err, "incidentId", closed.ID)
+	}
 	if closed.RadioSetID != "" {
 		rs, found, rsErr := h.db.GetRadioSetForPTT(closed.RadioSetID)
 		if rsErr == nil && found {

@@ -115,6 +115,24 @@ export type Incident = {
   shareUrl?: string
 }
 
+export type IncidentDiscordIntegration = {
+  id: string
+  incidentId: string
+  kind: string
+  status: string
+  config?: {
+    incidentTitle?: string
+    exposure?: string
+    publicPlayerUrl?: string
+    voiceChannelId?: string
+    textChannelId?: string
+    categoryId?: string
+    error?: string
+  }
+  createdAt: number
+  updatedAt: number
+}
+
 export type IncidentSignal = {
   id: string
   source: string
@@ -517,6 +535,19 @@ export const api = {
     request<Incident>(`/api/v1/incidents/${encodeURIComponent(id)}/close`, { method: 'POST' }),
   archiveIncident: (id: string) =>
     request<Incident>(`/api/v1/incidents/${encodeURIComponent(id)}/archive`, { method: 'POST' }),
+  incidentDiscordIntegration: (id: string) =>
+    request<{ integration?: IncidentDiscordIntegration }>(
+      `/api/v1/incidents/${encodeURIComponent(id)}/integrations/discord`,
+    ),
+  createIncidentDiscordIntegration: (id: string) =>
+    request<{ integration?: IncidentDiscordIntegration }>(
+      `/api/v1/incidents/${encodeURIComponent(id)}/integrations/discord`,
+      { method: 'POST' },
+    ),
+  deleteIncidentDiscordIntegration: (id: string) =>
+    request<void>(`/api/v1/incidents/${encodeURIComponent(id)}/integrations/discord`, {
+      method: 'DELETE',
+    }),
   hubInvites: () => request<HubInvite[]>('/api/v1/hub/invites'),
   createHubInvite: () => request<HubInvite>('/api/v1/hub/invites', { method: 'POST' }),
   revokeHubInvite: (id: string) => request<HubInvite>(`/api/v1/hub/invites/${encodeURIComponent(id)}`, { method: 'DELETE' }),

@@ -322,6 +322,18 @@ func (d *DB) migrate() error {
 			welcome_enabled  BOOLEAN NOT NULL DEFAULT FALSE,
 			last_seen_at     BIGINT NOT NULL DEFAULT 0
 		);
+
+		CREATE TABLE IF NOT EXISTS incident_integrations (
+			id           TEXT PRIMARY KEY,
+			incident_id  TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+			kind         TEXT NOT NULL DEFAULT 'discord',
+			status       TEXT NOT NULL DEFAULT 'pending',
+			config       JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at   BIGINT NOT NULL,
+			updated_at   BIGINT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_incident_integrations_incident ON incident_integrations(incident_id);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_incident_integrations_incident_kind ON incident_integrations(incident_id, kind);
 	`)
 	return err
 }
