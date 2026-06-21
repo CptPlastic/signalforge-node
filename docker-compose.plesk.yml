@@ -180,6 +180,7 @@ services:
       HOSTED_HUB_URL: ${HOSTED_HUB_URL:-${APP_BASE_URL:-https://p7hub.projectseven.us}}
       SIGNALFORGE_API_URL: http://api:8080
       SITE_URL: ${SITE_URL:-https://signalforge.org}
+      DISCORD_INCIDENTS_CATEGORY: ${DISCORD_INCIDENTS_CATEGORY:-// INCIDENTS}
       DISCORD_BOT_WORKER_TOKEN:
     depends_on:
       api:

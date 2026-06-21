@@ -417,6 +417,15 @@ func (d *DB) SeedDefaultIncidentTemplates() error {
 	now := time.Now().Unix()
 	templates := []IncidentTemplate{
 		{
+			ID:              "general",
+			Name:            "General Incident",
+			IncidentType:    "custom",
+			SelectionMode:   "groups",
+			TalkgroupGroups: []string{"Fire", "EMS", "Police", "Public Works"},
+			DefaultExposure: "members",
+			DefaultPriority: "normal",
+		},
+		{
 			ID:               "weather-severe",
 			Name:             "Severe Weather",
 			IncidentType:     "weather",

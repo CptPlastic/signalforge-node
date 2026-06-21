@@ -206,6 +206,19 @@ func (h *handler) handleListIncidentTemplates(w http.ResponseWriter, r *http.Req
 		http.Error(w, "list incident templates", http.StatusInternalServerError)
 		return
 	}
+	if len(templates) == 0 {
+		if err := h.db.SeedDefaultIncidentTemplates(); err != nil {
+			h.logger.Error("seed incident templates failed", "error", err)
+			http.Error(w, "seed incident templates", http.StatusInternalServerError)
+			return
+		}
+		templates, err = h.db.ListIncidentTemplates()
+		if err != nil {
+			h.logger.Error("list incident templates after seed failed", "error", err)
+			http.Error(w, "list incident templates", http.StatusInternalServerError)
+			return
+		}
+	}
 	if templates == nil {
 		templates = []database.IncidentTemplate{}
 	}

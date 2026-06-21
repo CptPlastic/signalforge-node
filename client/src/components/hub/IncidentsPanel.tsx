@@ -36,7 +36,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
   const [discordByIncident, setDiscordByIncident] = useState<Record<string, IncidentDiscordIntegration | null>>({})
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<IncidentTab>('active')
-  const [templateId, setTemplateId] = useState('weather-severe')
+  const [templateId, setTemplateId] = useState('general')
   const [title, setTitle] = useState('')
   const [exposure, setExposure] = useState('members')
   const [priority, setPriority] = useState('normal')
@@ -48,13 +48,25 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
     setLoading(true)
     try {
       const [s, t, all, sig] = await Promise.all([
-        api.incidentSettings(),
-        api.incidentTemplates(),
-        api.incidents(true),
+        api.incidentSettings().catch((err) => {
+          console.error(err)
+          return null
+        }),
+        api.incidentTemplates().catch((err) => {
+          console.error(err)
+          onNotify('Could not load incident templates')
+          return [] as IncidentTemplate[]
+        }),
+        api.incidents(true).catch((err) => {
+          console.error(err)
+          return [] as Incident[]
+        }),
         api.incidentSignals().catch(() => [] as IncidentSignal[]),
       ])
-      setSettings(s)
-      setSettingsDraft(s)
+      if (s) {
+        setSettings(s)
+        setSettingsDraft(s)
+      }
       setTemplates(t)
       setIncidents(all.filter((i) => i.status === 'active' || i.status === 'draft' || i.status === 'monitoring'))
       setArchivedIncidents(all.filter((i) => i.status === 'closed' || i.status === 'archived'))
@@ -78,6 +90,13 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
       setLoading(false)
     }
   }, [canManage, onNotify])
+
+  useEffect(() => {
+    if (templates.length === 0) return
+    if (!templates.some((t) => t.id === templateId)) {
+      setTemplateId(templates[0].id)
+    }
+  }, [templates, templateId])
 
   useEffect(() => {
     void refresh()
@@ -406,9 +425,13 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
           onChange={(e) => setTemplateId(e.target.value)}
           className="w-full bg-console-bg border border-console-border rounded px-2 py-1"
         >
-          {templates.map((t) => (
-            <option key={t.id} value={t.id}>{t.name}</option>
-          ))}
+          {templates.length === 0 ? (
+            <option value="">No templates — click REFRESH</option>
+          ) : (
+            templates.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))
+          )}
         </select>
         <input
           value={title}
@@ -457,7 +480,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
         <button
           type="button"
           onClick={() => void createIncident()}
-          disabled={loading || !settings?.incidentManagementEnabled}
+          disabled={loading || !settings?.incidentManagementEnabled || templates.length === 0 || !templateId}
           className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
         >
           OPEN INCIDENT
