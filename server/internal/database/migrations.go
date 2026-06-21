@@ -312,6 +312,16 @@ func (d *DB) migrate() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_incident_signals_pending ON incident_signals(received_at DESC)
 			WHERE incident_id = '' OR incident_id IS NULL;
+
+		CREATE TABLE IF NOT EXISTS discord_bot_status (
+			id               TEXT PRIMARY KEY DEFAULT 'local',
+			bot_user_tag     TEXT NOT NULL DEFAULT '',
+			guild_id         TEXT NOT NULL DEFAULT '',
+			guild_name       TEXT NOT NULL DEFAULT '',
+			command_count    INT NOT NULL DEFAULT 0,
+			welcome_enabled  BOOLEAN NOT NULL DEFAULT FALSE,
+			last_seen_at     BIGINT NOT NULL DEFAULT 0
+		);
 	`)
 	return err
 }

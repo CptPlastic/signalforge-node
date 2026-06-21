@@ -127,6 +127,21 @@ export type IncidentSignal = {
   receivedAt: number
 }
 
+export type DiscordBotStatus = {
+  botUserTag: string
+  guildId: string
+  guildName: string
+  commandCount: number
+  welcomeEnabled: boolean
+  lastSeenAt: number
+}
+
+export type DiscordBotStatusResponse = {
+  configured: boolean
+  online: boolean
+  status?: DiscordBotStatus
+}
+
 export type IncidentSettings = {
   incidentManagementEnabled: boolean
   incidentHandlerHubId: string
@@ -465,6 +480,7 @@ export const api = {
     }),
   generateHubKeyPair: () => request<HubIdentity>('/api/v1/hub/identity/keypair', { method: 'POST' }),
   refreshHubDirectory: () => request<HubIdentity>('/api/v1/hub/directory/refresh', { method: 'POST' }),
+  discordStatus: () => request<DiscordBotStatusResponse>('/api/v1/discord/status'),
   incidentSettings: () => request<IncidentSettings>('/api/v1/hub/incidents/settings'),
   updateIncidentSettings: (settings: IncidentSettings) =>
     request<HubIdentity>('/api/v1/hub/incidents/settings', {

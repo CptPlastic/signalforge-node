@@ -23,6 +23,7 @@ import { AppNav } from './components/AppNav'
 import { AuthenticatedView } from './components/ActiveView'
 import { AccountView } from './components/account/AccountView'
 import { HubRegisterPanel } from './components/hub/HubRegisterPanel'
+import { DiscordBotPanel } from './components/hub/DiscordBotPanel'
 import { IncidentsPanel } from './components/hub/IncidentsPanel'
 import { CallRow } from './components/calls/CallRow'
 import { DispatcherView } from './components/radio-sets/DispatcherView'
@@ -2745,6 +2746,8 @@ function App() {
               onNotify={setHubMessage}
             />
           )}
+
+          {isAdmin && <DiscordBotPanel onNotify={setHubMessage} />}
 
           {(isAdmin || authUser?.dispatcherEnabled) && authUser && (
             <IncidentsPanel

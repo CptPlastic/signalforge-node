@@ -88,6 +88,8 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Post("/internal/transcription/jobs/{id}/complete", handle.handleCompleteTranscriptionJob)
 		r.Post("/internal/transcription/jobs/{id}/skip", handle.handleSkipTranscriptionJob)
 		r.Post("/internal/transcription/jobs/{id}/fail", handle.handleFailTranscriptionJob)
+		r.Post("/internal/discord/heartbeat", handle.handleDiscordHeartbeat)
+		r.Get("/api/v1/discord/status", handle.handleGetDiscordStatus)
 		r.Get("/api/v1/talkgroups/distinct", handle.handleListDistinctTalkgroups)
 		r.Get("/api/v1/talkgroups/settings", handle.handleListTalkgroupSettings)
 		r.Put("/api/v1/talkgroups/{talkgroup}/settings", handle.handleUpsertTalkgroupSettings)

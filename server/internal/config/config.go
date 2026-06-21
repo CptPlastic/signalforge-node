@@ -31,6 +31,7 @@ type Config struct {
 	UpdateCheckURL           string
 	TranscriptionWorkerToken string
 	TranscriptionMinDuration float64
+	DiscordBotWorkerToken    string
 	AuthBootstrapEmail       string
 	AuthBootstrapPassword    string
 	AuthAutoApproveUsers     bool
@@ -70,6 +71,7 @@ func Load() (Config, error) {
 		UpdateCheckURL:           strings.TrimSpace(getEnv("UPDATE_CHECK_URL", "https://signalforge.org/p7-scanner-update.json")),
 		TranscriptionWorkerToken: strings.TrimSpace(getEnv("TRANSCRIPTION_WORKER_TOKEN", "")),
 		TranscriptionMinDuration: getFloat64Env("TRANSCRIPTION_MIN_DURATION_SECONDS", 0.75),
+		DiscordBotWorkerToken:    strings.TrimSpace(getEnv("DISCORD_BOT_WORKER_TOKEN", "")),
 		AuthBootstrapEmail:       strings.ToLower(strings.TrimSpace(getEnv("AUTH_BOOTSTRAP_EMAIL", ""))),
 		AuthBootstrapPassword:    getEnv("AUTH_BOOTSTRAP_PASSWORD", ""),
 		AuthAutoApproveUsers:     getBoolEnv("AUTH_AUTO_APPROVE_USERS", false),
