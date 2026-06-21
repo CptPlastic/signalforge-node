@@ -118,6 +118,18 @@ services:
       api:
         condition: service_healthy
 
+  discord-bot:
+    image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      WELCOME_CHANNEL_ID: ${WELCOME_CHANNEL_ID:-}
+      DIRECTORY_FEED_URL: ${DIRECTORY_FEED_URL:-https://signalforge.org/directory/hubs.json}
+      HOSTED_HUB_URL: ${HOSTED_HUB_URL:-}
+      SITE_URL: ${SITE_URL:-https://signalforge.org}
+
 volumes:
   postgres_data:
   transcriber_models:

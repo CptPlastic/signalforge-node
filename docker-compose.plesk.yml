@@ -24,8 +24,8 @@
 # With mock radio sidecar (test/staging only):
 #   docker compose --env-file .env.production -f docker-compose.plesk.yml --profile mock up -d
 #
-# Discord bot: separate Portainer stack — deploy/discord-bot/docker-compose.yml
-# (do not add to this file; Plesk/Portainer stack updates fail when bot services are embedded here)
+# Discord bot: set DISCORD_TOKEN + DISCORD_CLIENT_ID + DISCORD_GUILD_ID + WELCOME_CHANNEL_ID.
+# Without DISCORD_TOKEN the container idles. Image: ghcr.io/signalforge-org/signalforge-discord-bot
 #
 # Call archive runs as a background job (no long HTTP hold). If you use sync mode or other
 # long admin requests through Plesk's reverse proxy, raise its read timeout above 120s.
@@ -157,6 +157,18 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+  discord-bot:
+    image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      WELCOME_CHANNEL_ID: ${WELCOME_CHANNEL_ID:-}
+      DIRECTORY_FEED_URL: ${DIRECTORY_FEED_URL:-https://signalforge.org/directory/hubs.json}
+      HOSTED_HUB_URL: ${HOSTED_HUB_URL:-https://p7hub.projectseven.us}
+      SITE_URL: ${SITE_URL:-https://signalforge.org}
 
 volumes:
   postgres_data:
