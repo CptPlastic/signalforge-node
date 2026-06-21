@@ -26,6 +26,7 @@
 #
 # Discord bot: set DISCORD_TOKEN + DISCORD_CLIENT_ID + DISCORD_GUILD_ID.
 # Set DISCORD_BOT_WORKER_TOKEN once in stack Environment variables (api + discord-bot share it).
+# Bot worker calls use HUB_API_URL=http://api:8080 (internal); HOSTED_HUB_URL is public links/stream only.
 # Slash commands register automatically on startup. Optional: WELCOME_CHANNEL_ID (needs Server Members Intent).
 # Image: ghcr.io/signalforge-org/signalforge-discord-bot
 #
@@ -177,8 +178,12 @@ services:
       WELCOME_CHANNEL_ID: ${WELCOME_CHANNEL_ID:-}
       DIRECTORY_FEED_URL: ${DIRECTORY_FEED_URL:-https://signalforge.org/directory/hubs.json}
       HOSTED_HUB_URL: ${HOSTED_HUB_URL:-${APP_BASE_URL:-https://p7hub.projectseven.us}}
+      HUB_API_URL: http://api:8080
       SITE_URL: ${SITE_URL:-https://signalforge.org}
       DISCORD_BOT_WORKER_TOKEN:
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   postgres_data:
