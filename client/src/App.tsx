@@ -1844,7 +1844,12 @@ function App() {
         updateTitle={updateTitle}
       />
 
-      <AppNav activeView={activeView} authUser={authUser} onViewChange={setActiveView} />
+      <AppNav
+        activeView={activeView}
+        authUser={authUser}
+        onViewChange={setActiveView}
+        showIncidentsTab={isAdmin || !!authUser?.dispatcherEnabled}
+      />
 
     {sessionWarning && (
     <div className="console-panel border border-console-error text-console-error text-xs px-3 py-2">
@@ -2594,6 +2599,28 @@ function App() {
         </main>
       </AuthenticatedView>
 
+      <AuthenticatedView activeView={activeView} authUser={authUser} view="incidents">
+        {(isAdmin || authUser?.dispatcherEnabled) && authUser ? (
+          <main className="console-panel">
+            <IncidentsPanel
+              authUser={authUser}
+              isAdmin={isAdmin}
+              hubPeers={hubPeers}
+              onNotify={setHubMessage}
+              onOpenRadioSet={(radioSetId) => {
+                setSelectedSetID(radioSetId)
+                setRsPlayingID(radioSetId)
+                setActiveView('radio-sets')
+              }}
+            />
+          </main>
+        ) : (
+          <main className="console-panel text-xs text-console-muted">
+            Incident management requires admin or dispatcher role.
+          </main>
+        )}
+      </AuthenticatedView>
+
       <AuthenticatedView activeView={activeView} authUser={authUser} view="hub">
         <main className="console-panel flex flex-col gap-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -2747,21 +2774,7 @@ function App() {
             />
           )}
 
-          {isAdmin && <DiscordBotPanel onNotify={setHubMessage} />}
-
-          {(isAdmin || authUser?.dispatcherEnabled) && authUser && (
-            <IncidentsPanel
-              authUser={authUser}
-              isAdmin={isAdmin}
-              hubPeers={hubPeers}
-              onNotify={setHubMessage}
-              onOpenRadioSet={(radioSetId) => {
-                setSelectedSetID(radioSetId)
-                setRsPlayingID(radioSetId)
-                setActiveView('radio-sets')
-              }}
-            />
-          )}
+          {isAdmin && <DiscordBotPanel onNotify={setHubMessage} onOpenIncidents={() => setActiveView('incidents')} />}
 
           {isAdmin && (
             <div className="border border-console-border rounded p-3 flex flex-col gap-3">

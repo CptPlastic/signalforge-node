@@ -4,9 +4,10 @@ import { fmtDateTime } from '../../lib/format'
 
 type Props = Readonly<{
   onNotify: (message: string) => void
+  onOpenIncidents?: () => void
 }>
 
-export function DiscordBotPanel({ onNotify }: Props) {
+export function DiscordBotPanel({ onNotify, onOpenIncidents }: Props) {
   const [status, setStatus] = useState<DiscordBotStatusResponse | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -170,7 +171,15 @@ export function DiscordBotPanel({ onNotify }: Props) {
           </li>
           <li>Bot polls every ~15s — channels appear shortly after queue</li>
           <li>Internal exposure incidents skip Discord</li>
-          <li>Use <strong>DISCORD ROOMS</strong> on a card to re-queue if needed</li>
+          <li>Use <strong>RETRY DISCORD</strong> on a running incident in the{' '}
+            {onOpenIncidents ? (
+              <button type="button" onClick={onOpenIncidents} className="text-console-accent underline">
+                INCIDENTS tab
+              </button>
+            ) : (
+              <strong>INCIDENTS</strong>
+            )}{' '}
+            , or <strong>SYNC ACTIVE INCIDENTS → DISCORD</strong> below</li>
         </ul>
         <p className="text-console-text font-bold mt-2">Bot role permissions (Server Settings → Roles)</p>
         <ul className="list-disc list-inside space-y-0.5">

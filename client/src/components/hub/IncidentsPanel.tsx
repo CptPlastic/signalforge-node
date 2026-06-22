@@ -42,12 +42,16 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
   const [priority, setPriority] = useState('normal')
   const [notes, setNotes] = useState('')
   const [activate, setActivate] = useState(true)
+  const [showSignals, setShowSignals] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
   const refresh = useCallback(async () => {
     if (!canManage) return
     setLoading(true)
+    setLoadError('')
     try {
-      const [s, t, all, sig] = await Promise.all([
+      const [s, t, sig] = await Promise.all([
         api.incidentSettings().catch((err) => {
           console.error(err)
           return null
@@ -57,23 +61,33 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
           onNotify('Could not load incident templates')
           return [] as IncidentTemplate[]
         }),
-        api.incidents(true).catch((err) => {
-          console.error(err)
-          return [] as Incident[]
-        }),
         api.incidentSignals().catch(() => [] as IncidentSignal[]),
       ])
+
+      let all: Incident[] = []
+      try {
+        all = await api.incidents(true)
+      } catch (err) {
+        console.error(err)
+        setLoadError('Could not load incidents from the hub API. Check login and that incident management is enabled.')
+        all = []
+      }
+
       if (s) {
         setSettings(s)
         setSettingsDraft(s)
       }
       setTemplates(t)
-      setIncidents(all.filter((i) => i.status === 'active' || i.status === 'draft' || i.status === 'monitoring'))
+      const activeList = all.filter((i) => i.status === 'active' || i.status === 'draft' || i.status === 'monitoring')
+      setIncidents(activeList)
       setArchivedIncidents(all.filter((i) => i.status === 'closed' || i.status === 'archived'))
       setSignals(sig)
-      const active = all.filter((i) => i.status === 'active' || i.status === 'monitoring')
+      if (activeList.length === 0 && sig.length > 0) {
+        setShowSignals(true)
+      }
+      const monitoring = all.filter((i) => i.status === 'active' || i.status === 'monitoring')
       const discordEntries = await Promise.all(
-        active.map(async (inc) => {
+        monitoring.map(async (inc) => {
           try {
             const resp = await api.incidentDiscordIntegration(inc.id)
             return [inc.id, resp.integration ?? null] as const
@@ -160,6 +174,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
       }
       setTitle('')
       setNotes('')
+      setShowCreate(false)
       await refresh()
     } catch (err) {
       console.error(err)
@@ -174,6 +189,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
     try {
       const { processed } = await api.pollIncidentSignals()
       onNotify(`Polled NWS/IEM — ${processed} new signal(s)`)
+      setShowSignals(true)
       await refresh()
     } catch (err) {
       console.error(err)
@@ -190,8 +206,19 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
     )
   }
 
+  function endIncident(inc: Incident) {
+    if (!globalThis.confirm(`End incident "${inc.title}"?\n\nThis closes the incident, stops Discord rooms, and revokes the public player link.`)) {
+      return
+    }
+    setLoading(true)
+    api.closeIncident(inc.id)
+      .then(() => { onNotify('Incident ended'); return refresh() })
+      .catch(() => onNotify('End failed'))
+      .finally(() => setLoading(false))
+  }
+
   function renderIncidentRow(inc: Incident, actions: 'full' | 'archive-only') {
-    const isActive = inc.status === 'active' || inc.status === 'draft' || inc.status === 'monitoring'
+    const canEnd = actions === 'full' && (inc.status === 'active' || inc.status === 'draft' || inc.status === 'monitoring')
     const discord = discordByIncident[inc.id]
     const discordLabel = discord?.status === 'active'
       ? 'DISCORD LIVE'
@@ -200,29 +227,42 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
         : discord?.status === 'stopping'
           ? 'DISCORD STOPPING'
           : discord?.status === 'failed'
-            ? 'DISCORD FAILED'
+            ? 'RETRY DISCORD'
             : 'DISCORD ROOMS'
     const monitorLabel =
       inc.radioSet?.selectionMode === 'groups'
         ? (inc.radioSet.talkgroupGroups ?? []).join(', ') || 'no groups'
         : (inc.radioSet?.talkgroups ?? []).map((tg) => String(tg)).join(', ') || 'no talkgroups'
+
     return (
-      <div key={inc.id} className="border border-console-border rounded p-2 flex flex-col gap-2">
-        <div className="flex justify-between gap-2 items-start">
-          <div>
-            <div className="text-console-text">{inc.title}</div>
-            <div className="text-console-muted text-[10px] uppercase">
-              {inc.status} · {inc.priority} · {inc.exposure}
+      <div
+        key={inc.id}
+        className={`border rounded p-3 flex flex-col gap-2 ${
+          inc.status === 'active' || inc.status === 'monitoring'
+            ? 'border-console-accent/60 bg-console-accent/5'
+            : 'border-console-border'
+        }`}
+      >
+        <div className="flex justify-between gap-2 items-start flex-wrap">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-console-text font-semibold text-sm">{inc.title}</span>
+              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded border border-console-border text-console-muted">
+                {inc.status}
+              </span>
+            </div>
+            <div className="text-console-muted text-[10px] uppercase mt-1">
+              {inc.priority} · {inc.exposure}
               {inc.openedAt ? ` · opened ${fmtDateTime(inc.openedAt)}` : ''}
               {discord?.status ? ` · discord ${discord.status}` : ''}
-              {discord?.config?.error ? ` · ${discord.config.error}` : ''}
             </div>
-            {inc.radioSet && isActive && (
-              <div className="text-console-muted text-[10px]">
-                Stream: {inc.radioSet.name} ·{' '}
-                {inc.radioSet.selectionMode === 'groups' ? 'groups' : 'talkgroups'}: {monitorLabel}
-                {discord?.status === 'active' ? ' · Discord voice uses this same feed' : ''}
+            {inc.radioSet && canEnd && (
+              <div className="text-console-muted text-[10px] mt-1">
+                Radio set: {inc.radioSet.name} · {inc.radioSet.selectionMode === 'groups' ? 'groups' : 'TGs'}: {monitorLabel}
               </div>
+            )}
+            {discord?.config?.error && (
+              <div className="text-[10px] text-console-error mt-1">{discord.config.error}</div>
             )}
           </div>
           <div className="flex gap-1 shrink-0 flex-wrap justify-end">
@@ -243,25 +283,19 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
                     .catch(() => onNotify('Activate failed'))
                     .finally(() => setLoading(false))
                 }}
-                className="px-2 py-0.5 border border-console-accent text-console-accent rounded text-[10px]"
+                className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px]"
               >
                 ACTIVATE
               </button>
             )}
-            {actions === 'full' && isActive && (
+            {canEnd && (
               <button
                 type="button"
                 disabled={loading}
-                onClick={() => {
-                  setLoading(true)
-                  api.closeIncident(inc.id)
-                    .then(() => { onNotify('Incident closed'); return refresh() })
-                    .catch(() => onNotify('Close failed'))
-                    .finally(() => setLoading(false))
-                }}
-                className="px-2 py-0.5 border border-console-error text-console-error rounded text-[10px]"
+                onClick={() => endIncident(inc)}
+                className="px-3 py-1 border border-console-error text-console-error rounded text-[10px] font-semibold hover:bg-console-error/10"
               >
-                CLOSE
+                END INCIDENT
               </button>
             )}
             {inc.status === 'closed' && (
@@ -275,7 +309,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
                     .catch(() => onNotify('Archive failed'))
                     .finally(() => setLoading(false))
                 }}
-                className="px-2 py-0.5 border border-console-border rounded text-[10px]"
+                className="px-2 py-1 border border-console-border rounded text-[10px]"
               >
                 ARCHIVE
               </button>
@@ -283,7 +317,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {inc.radioSetId && onOpenRadioSet && isActive && (
+          {inc.radioSetId && onOpenRadioSet && canEnd && (
             <button
               type="button"
               onClick={() => onOpenRadioSet(inc.radioSetId!)}
@@ -335,25 +369,21 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
                   onClick={() => {
                     setLoading(true)
                     api.createIncidentDiscordIntegration(inc.id)
-                      .then(() => { onNotify('Discord rooms + voice stream requested'); return refresh() })
+                      .then(() => { onNotify('Discord rooms requested'); return refresh() })
                       .catch(async (err) => {
                         const msg = err instanceof Error ? err.message : 'Discord request failed'
                         onNotify(msg.includes('503') || msg.includes('not configured')
-                          ? 'Discord not linked — set DISCORD_BOT_WORKER_TOKEN on api + discord-bot'
+                          ? 'Discord not linked — set DISCORD_BOT_WORKER_TOKEN in stack env'
                           : msg)
                       })
                       .finally(() => setLoading(false))
                   }}
                   className="px-2 py-0.5 border border-console-accent text-console-accent rounded text-[10px]"
-                  title="Creates voice + text channels; bot streams live audio to voice"
                 >
                   {discordLabel}
                 </button>
               )}
             </>
-          )}
-          {discord?.config?.error && (
-            <span className="text-[10px] text-console-error">{discord.config.error}</span>
           )}
         </div>
       </div>
@@ -363,226 +393,274 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
   const visibleIncidents = tab === 'active' ? incidents : archivedIncidents
 
   return (
-    <div className="border border-console-border rounded p-3 flex flex-col gap-3">
+    <div className="border border-console-border rounded p-3 flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <p className="console-label text-xs">// INCIDENTS</p>
-          <p className="text-[11px] text-console-muted">Discord voice mirrors the incident radio set — no manual share needed. Use LISTEN or PUBLIC PLAYER to test audio first.</p>
+          <p className="text-[11px] text-console-muted">
+            Top nav → <strong>INCIDENTS</strong>. Weather alerts are suggestions only — not running incidents until you OPEN one.
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          disabled={loading}
-          className="px-2 py-1 border border-console-border text-console-muted rounded text-xs hover:border-console-accent disabled:opacity-50"
-        >
-          REFRESH
-        </button>
-      </div>
-
-      {isAdmin && settingsDraft && (
-        <div className="border border-console-border rounded p-2 flex flex-col gap-2 text-xs">
-          <p className="console-label text-[10px]">SETTINGS (ADMIN)</p>
-          <label className="flex items-center gap-2 text-console-muted">
-            <input
-              type="checkbox"
-              checked={settingsDraft.incidentManagementEnabled}
-              onChange={(e) => setSettingsDraft({ ...settingsDraft, incidentManagementEnabled: e.target.checked })}
-            />
-            Incident management enabled
-          </label>
-          <label className="flex items-center gap-2 text-console-muted">
-            <input
-              type="checkbox"
-              checked={settingsDraft.incidentAutoSuggest}
-              onChange={(e) => setSettingsDraft({ ...settingsDraft, incidentAutoSuggest: e.target.checked })}
-            />
-            Auto-suggest from NWS/IEM (draft signals)
-          </label>
-          <label className="flex items-center gap-2 text-console-muted">
-            <input
-              type="checkbox"
-              checked={settingsDraft.incidentAutoOpen}
-              onChange={(e) => setSettingsDraft({ ...settingsDraft, incidentAutoOpen: e.target.checked })}
-            />
-            Auto-open tornado warnings
-          </label>
-          <div>
-            <p className="text-console-muted mb-1">Watch areas (state codes)</p>
-            <input
-              value={(settingsDraft.incidentWatchAreas ?? []).join(', ')}
-              onChange={(e) =>
-                setSettingsDraft({
-                  ...settingsDraft,
-                  incidentWatchAreas: e.target.value.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),
-                })
-              }
-              className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent"
-              placeholder="OK"
-            />
-          </div>
-          <div>
-            <p className="text-console-muted mb-1">Handler hub (optional)</p>
-            <select
-              value={settingsDraft.incidentHandlerHubId ?? ''}
-              onChange={(e) => setSettingsDraft({ ...settingsDraft, incidentHandlerHubId: e.target.value })}
-              className="w-full bg-console-bg border border-console-border rounded px-2 py-1"
-            >
-              <option value="">Standalone (no handler)</option>
-              {hubPeers.filter((p) => p.status === 'connected').map((p) => (
-                <option key={p.id} value={p.hubId}>{p.name || p.hubId}</option>
-              ))}
-            </select>
-          </div>
+        <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => void saveSettings()}
-            disabled={loading}
-            className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+            onClick={() => setShowCreate((v) => !v)}
+            className="px-2 py-1 border border-console-border text-console-muted rounded text-xs hover:border-console-accent hover:text-console-accent"
           >
-            SAVE SETTINGS
+            {showCreate ? 'HIDE FORM' : 'NEW INCIDENT'}
           </button>
-          {!settings?.incidentManagementEnabled && (
-            <p className="text-console-error text-[11px]">Enable incident management and save to activate.</p>
-          )}
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={loading}
+            className="px-2 py-1 border border-console-border text-console-muted rounded text-xs hover:border-console-accent disabled:opacity-50"
+          >
+            REFRESH
+          </button>
         </div>
+      </div>
+
+      {!settings?.incidentManagementEnabled && (
+        <p className="text-console-error text-[11px] border border-console-error/40 rounded p-2">
+          Incident management is disabled. Admin: open <strong>INCIDENT SETTINGS</strong> at the bottom, enable it, and save.
+        </p>
       )}
 
-      <div className="border border-console-border rounded p-2 flex flex-col gap-2 text-xs">
-        <p className="console-label text-[10px]">OPEN INCIDENT</p>
-        <select
-          value={templateId}
-          onChange={(e) => setTemplateId(e.target.value)}
-          className="w-full bg-console-bg border border-console-border rounded px-2 py-1"
-        >
-          {templates.length === 0 ? (
-            <option value="">No templates — click REFRESH</option>
-          ) : (
-            templates.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))
-          )}
-        </select>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Severe Weather — Yukon"
-          className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent"
-        />
-        <div className="grid gap-2 md:grid-cols-2">
-          <div>
-            <p className="text-console-muted mb-1">Exposure</p>
-            <select
-              value={exposure}
-              onChange={(e) => setExposure(e.target.value)}
-              className="w-full bg-console-bg border border-console-border rounded px-2 py-1"
-            >
-              {EXPOSURES.map((e) => (
-                <option key={e} value={e}>{e}</option>
-              ))}
-            </select>
-            <p className="text-[10px] text-console-muted mt-0.5">community = public player link</p>
-          </div>
-          <div>
-            <p className="text-console-muted mb-1">Priority</p>
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-              className="w-full bg-console-bg border border-console-border rounded px-2 py-1"
-            >
-              {PRIORITIES.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Operator notes (optional)"
-          rows={2}
-          className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent resize-y"
-        />
-        <label className="flex items-center gap-2 text-console-muted">
-          <input type="checkbox" checked={activate} onChange={(e) => setActivate(e.target.checked)} />
-          Activate immediately
-        </label>
-        <button
-          type="button"
-          onClick={() => void createIncident()}
-          disabled={loading || !settings?.incidentManagementEnabled || templates.length === 0 || !templateId}
-          className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
-        >
-          OPEN INCIDENT
-        </button>
-      </div>
+      {loadError && (
+        <p className="text-console-error text-[11px] border border-console-error/40 rounded p-2">
+          {loadError}
+        </p>
+      )}
 
-      <div className="flex flex-col gap-1 text-xs">
-        <div className="flex items-center justify-between gap-2">
-          <p className="console-label text-[10px]">WEATHER SIGNALS</p>
+      {/* ── ACTIVE / CLOSED LIST (top) ── */}
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2 text-[10px] items-center flex-wrap">
           <button
             type="button"
-            onClick={() => void pollSignals()}
-            disabled={loading || !settings?.incidentManagementEnabled}
-            className="text-[10px] text-console-muted hover:text-console-accent disabled:opacity-50"
+            onClick={() => setTab('active')}
+            className={`px-2 py-1 border rounded font-semibold ${tab === 'active' ? 'border-console-accent text-console-accent bg-console-accent/10' : 'border-console-border text-console-muted'}`}
           >
-            POLL NWS/IEM
+            RUNNING ({incidents.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('archive')}
+            className={`px-2 py-1 border rounded ${tab === 'archive' ? 'border-console-accent text-console-accent' : 'border-console-border text-console-muted'}`}
+          >
+            ENDED ({archivedIncidents.length})
           </button>
         </div>
-        {signals.length === 0 ? (
-          <p className="text-console-muted text-[10px]">No pending signals — poll or wait for auto-suggest.</p>
+
+        {visibleIncidents.length === 0 ? (
+          <div className="border border-dashed border-console-border rounded p-4 text-center text-[11px] text-console-muted">
+            {tab === 'active'
+              ? 'No running incidents. Open one from weather signals or use NEW INCIDENT.'
+              : 'No ended incidents yet.'}
+          </div>
         ) : (
-          signals.slice(0, 8).map((sig) => (
-            <div key={sig.id} className="border border-console-border rounded p-2 flex justify-between gap-2">
-              <div>
-                <div className="text-console-text">{sig.title || sig.eventType}</div>
-                <div className="text-console-muted text-[10px]">{sig.source} · {sig.severity} · {fmtDateTime(sig.receivedAt)}</div>
-              </div>
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => {
-                  setLoading(true)
-                  api.promoteIncidentSignal(sig.id)
-                    .then((r) => {
-                      if (r.discordQueued) onNotify('Incident opened — Discord rooms queued')
-                      else if (r.discordSkipReason) onNotify(`Discord not queued: ${r.discordSkipReason}`)
-                      else if (r.shareUrl) copyShareUrl(r.shareUrl)
-                      else onNotify('Incident opened from signal')
-                      return refresh()
-                    })
-                    .catch(() => onNotify('Promote failed'))
-                    .finally(() => setLoading(false))
-                }}
-                className="shrink-0 px-2 py-0.5 border border-console-accent text-console-accent rounded text-[10px]"
-              >
-                OPEN
-              </button>
-            </div>
-          ))
+          visibleIncidents.map((inc) => renderIncidentRow(inc, tab === 'active' ? 'full' : 'archive-only'))
         )}
       </div>
 
-      <div className="flex gap-2 text-[10px]">
+      {/* ── WEATHER SIGNALS (suggestions only) ── */}
+      <div className="border border-console-border rounded p-2 flex flex-col gap-2">
         <button
           type="button"
-          onClick={() => setTab('active')}
-          className={`px-2 py-0.5 border rounded ${tab === 'active' ? 'border-console-accent text-console-accent' : 'border-console-border text-console-muted'}`}
+          onClick={() => setShowSignals((v) => !v)}
+          className="flex items-center justify-between gap-2 text-left w-full"
         >
-          ACTIVE ({incidents.length})
+          <div>
+            <p className="console-label text-[10px]">WEATHER ALERTS (not incidents yet)</p>
+            <p className="text-[10px] text-console-muted">
+              {signals.length} pending · OPEN creates a running incident
+            </p>
+          </div>
+          <span className="text-console-muted text-[10px]">{showSignals ? '▲' : '▼'}</span>
         </button>
-        <button
-          type="button"
-          onClick={() => setTab('archive')}
-          className={`px-2 py-0.5 border rounded ${tab === 'archive' ? 'border-console-accent text-console-accent' : 'border-console-border text-console-muted'}`}
-        >
-          CLOSED / ARCHIVE ({archivedIncidents.length})
-        </button>
+        {showSignals && (
+          <>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => void pollSignals()}
+                disabled={loading || !settings?.incidentManagementEnabled}
+                className="text-[10px] text-console-muted hover:text-console-accent disabled:opacity-50"
+              >
+                POLL NWS/IEM
+              </button>
+            </div>
+            {signals.length === 0 ? (
+              <p className="text-console-muted text-[10px]">No pending weather alerts.</p>
+            ) : (
+              signals.slice(0, 8).map((sig) => (
+                <div key={sig.id} className="border border-console-border/70 rounded p-2 flex justify-between gap-2 bg-console-bg/30">
+                  <div>
+                    <div className="text-console-text text-xs">{sig.title || sig.eventType}</div>
+                    <div className="text-console-muted text-[10px]">{sig.source} · {sig.severity} · {fmtDateTime(sig.receivedAt)}</div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => {
+                      setLoading(true)
+                      api.promoteIncidentSignal(sig.id)
+                        .then((r) => {
+                          if (r.discordQueued) onNotify('Incident opened — Discord rooms queued')
+                          else if (r.discordSkipReason) onNotify(`Discord not queued: ${r.discordSkipReason}`)
+                          else if (r.shareUrl) copyShareUrl(r.shareUrl)
+                          else onNotify('Incident opened from weather alert')
+                          return refresh()
+                        })
+                        .catch(() => onNotify('Open failed'))
+                        .finally(() => setLoading(false))
+                    }}
+                    className="shrink-0 px-2 py-1 border border-console-accent text-console-accent rounded text-[10px]"
+                  >
+                    OPEN INCIDENT
+                  </button>
+                </div>
+              ))
+            )}
+          </>
+        )}
       </div>
 
-      {visibleIncidents.length === 0 ? (
-        <p className="text-console-muted text-[11px]">No incidents in this view.</p>
-      ) : (
-        visibleIncidents.map((inc) => renderIncidentRow(inc, tab === 'active' ? 'full' : 'archive-only'))
+      {/* ── NEW INCIDENT FORM (collapsed by default) ── */}
+      {showCreate && (
+        <div className="border border-console-border rounded p-2 flex flex-col gap-2 text-xs">
+          <p className="console-label text-[10px]">NEW INCIDENT (manual)</p>
+          <select
+            value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
+            className="w-full bg-console-bg border border-console-border rounded px-2 py-1"
+          >
+            {templates.length === 0 ? (
+              <option value="">No templates — click REFRESH</option>
+            ) : (
+              templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))
+            )}
+          </select>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Severe Weather — Yukon"
+            className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent"
+          />
+          <div className="grid gap-2 md:grid-cols-2">
+            <div>
+              <p className="text-console-muted mb-1">Exposure</p>
+              <select
+                value={exposure}
+                onChange={(e) => setExposure(e.target.value)}
+                className="w-full bg-console-bg border border-console-border rounded px-2 py-1"
+              >
+                {EXPOSURES.map((e) => (
+                  <option key={e} value={e}>{e}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <p className="text-console-muted mb-1">Priority</p>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+                className="w-full bg-console-bg border border-console-border rounded px-2 py-1"
+              >
+                {PRIORITIES.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Operator notes (optional)"
+            rows={2}
+            className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent resize-y"
+          />
+          <label className="flex items-center gap-2 text-console-muted">
+            <input type="checkbox" checked={activate} onChange={(e) => setActivate(e.target.checked)} />
+            Activate immediately
+          </label>
+          <button
+            type="button"
+            onClick={() => void createIncident()}
+            disabled={loading || !settings?.incidentManagementEnabled || templates.length === 0 || !templateId}
+            className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+          >
+            OPEN INCIDENT
+          </button>
+        </div>
+      )}
+
+      {isAdmin && settingsDraft && (
+        <details className="border border-console-border rounded p-2 text-xs">
+          <summary className="console-label text-[10px] cursor-pointer">INCIDENT SETTINGS (admin)</summary>
+          <div className="mt-2 flex flex-col gap-2">
+            <label className="flex items-center gap-2 text-console-muted">
+              <input
+                type="checkbox"
+                checked={settingsDraft.incidentManagementEnabled}
+                onChange={(e) => setSettingsDraft({ ...settingsDraft, incidentManagementEnabled: e.target.checked })}
+              />
+              Incident management enabled
+            </label>
+            <label className="flex items-center gap-2 text-console-muted">
+              <input
+                type="checkbox"
+                checked={settingsDraft.incidentAutoSuggest}
+                onChange={(e) => setSettingsDraft({ ...settingsDraft, incidentAutoSuggest: e.target.checked })}
+              />
+              Auto-suggest from NWS/IEM (draft signals)
+            </label>
+            <label className="flex items-center gap-2 text-console-muted">
+              <input
+                type="checkbox"
+                checked={settingsDraft.incidentAutoOpen}
+                onChange={(e) => setSettingsDraft({ ...settingsDraft, incidentAutoOpen: e.target.checked })}
+              />
+              Auto-open tornado warnings
+            </label>
+            <div>
+              <p className="text-console-muted mb-1">Watch areas (state codes)</p>
+              <input
+                value={(settingsDraft.incidentWatchAreas ?? []).join(', ')}
+                onChange={(e) =>
+                  setSettingsDraft({
+                    ...settingsDraft,
+                    incidentWatchAreas: e.target.value.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),
+                  })
+                }
+                className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent"
+                placeholder="OK"
+              />
+            </div>
+            <div>
+              <p className="text-console-muted mb-1">Handler hub (optional)</p>
+              <select
+                value={settingsDraft.incidentHandlerHubId ?? ''}
+                onChange={(e) => setSettingsDraft({ ...settingsDraft, incidentHandlerHubId: e.target.value })}
+                className="w-full bg-console-bg border border-console-border rounded px-2 py-1"
+              >
+                <option value="">Standalone (no handler)</option>
+                {hubPeers.filter((p) => p.status === 'connected').map((p) => (
+                  <option key={p.id} value={p.hubId}>{p.name || p.hubId}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={() => void saveSettings()}
+              disabled={loading}
+              className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+            >
+              SAVE SETTINGS
+            </button>
+          </div>
+        </details>
       )}
     </div>
   )

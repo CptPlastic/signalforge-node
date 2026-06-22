@@ -1,13 +1,14 @@
 import type { AuthUser } from '../lib/api'
 import type { AppView } from '../types/app'
 
-const APP_VIEWS: AppView[] = ['monitor', 'radio-sets', 'integrations', 'talkgroups', 'hub', 'account']
+const APP_VIEWS: AppView[] = ['monitor', 'radio-sets', 'integrations', 'talkgroups', 'incidents', 'hub', 'account']
 
 const VIEW_LABELS: Record<AppView, string> = {
   monitor: 'CALL LOG',
   'radio-sets': 'RADIO SETS',
   integrations: 'INTEGRATIONS',
   talkgroups: 'TALKGROUPS',
+  incidents: 'INCIDENTS',
   hub: 'HUB',
   account: 'ACCOUNT',
 }
@@ -21,6 +22,7 @@ type AppNavProps = Readonly<{
   activeView: AppView
   authUser: AuthUser | null
   onViewChange: (view: AppView) => void
+  showIncidentsTab?: boolean
 }>
 
 function getViewButtonClass(activeView: AppView, view: AppView, authUser: AuthUser | null): string {
@@ -42,10 +44,11 @@ function getViewButtonClass(activeView: AppView, view: AppView, authUser: AuthUs
   return 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
 }
 
-export function AppNav({ activeView, authUser, onViewChange }: AppNavProps) {
+export function AppNav({ activeView, authUser, onViewChange, showIncidentsTab = false }: AppNavProps) {
+  const views = showIncidentsTab ? APP_VIEWS : APP_VIEWS.filter((v) => v !== 'incidents')
   return (
     <div className="console-panel grid grid-cols-2 gap-2 text-xs sm:flex sm:items-center sm:flex-wrap">
-      {APP_VIEWS.map((view) => {
+      {views.map((view) => {
         const isAvailable = Boolean(authUser) || view === 'account'
         return (
           <button

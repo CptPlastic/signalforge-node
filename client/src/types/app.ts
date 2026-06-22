@@ -1,6 +1,6 @@
-export type AppView = 'monitor' | 'radio-sets' | 'integrations' | 'talkgroups' | 'hub' | 'account'
+export type AppView = 'monitor' | 'radio-sets' | 'integrations' | 'talkgroups' | 'incidents' | 'hub' | 'account'
 
-const APP_VIEWS: AppView[] = ['monitor', 'radio-sets', 'integrations', 'talkgroups', 'hub', 'account']
+const APP_VIEWS: AppView[] = ['monitor', 'radio-sets', 'integrations', 'talkgroups', 'incidents', 'hub', 'account']
 
 export function parseAppViewParam(value: string | null): AppView | null {
   if (!value) return null
