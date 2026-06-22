@@ -273,6 +273,50 @@ func (d *DB) ActivateIncident(id string) (Incident, error) {
 	return scanIncident(row)
 }
 
+// GetIncidentByRadioSetID returns the incident linked to a radio set, if any.
+func (d *DB) GetIncidentByRadioSetID(radioSetID string) (Incident, bool, error) {
+	row := d.db.QueryRow(incidentSelect+` WHERE radio_set_id = $1 ORDER BY updated_at DESC LIMIT 1`, radioSetID)
+	incident, err := scanIncident(row)
+	if err == sql.ErrNoRows {
+		return Incident{}, false, nil
+	}
+	if err != nil {
+		return Incident{}, false, err
+	}
+	return incident, true, nil
+}
+
+// ListOpenIncidentsByRadioSetIDs maps radio set IDs to non-closed incidents.
+func (d *DB) ListOpenIncidentsByRadioSetIDs(radioSetIDs []string) (map[string]Incident, error) {
+	out := make(map[string]Incident)
+	if len(radioSetIDs) == 0 {
+		return out, nil
+	}
+	ph := make([]string, len(radioSetIDs))
+	args := make([]any, len(radioSetIDs))
+	for i, id := range radioSetIDs {
+		ph[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	q := fmt.Sprintf(`%s WHERE radio_set_id IN (%s) AND status IN ('active','draft','monitoring')
+		ORDER BY updated_at DESC`, incidentSelect, strings.Join(ph, ","))
+	rows, err := d.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		incident, err := scanIncident(rows)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := out[incident.RadioSetID]; !exists {
+			out[incident.RadioSetID] = incident
+		}
+	}
+	return out, rows.Err()
+}
+
 // CloseIncident closes an open incident.
 func (d *DB) CloseIncident(id string) (Incident, error) {
 	now := time.Now().Unix()

@@ -380,6 +380,42 @@ export type RadioSet = {
   pttTalkgroup?: number
   createdAt: number
   updatedAt: number
+  incidentId?: string
+  incidentStatus?: string
+  incidentTitle?: string
+}
+
+function normalizeIncidentListItem(item: unknown): Incident | null {
+  if (!item || typeof item !== 'object') return null
+  const row = item as Record<string, unknown>
+  const nested = row.incident
+  if (nested && typeof nested === 'object') {
+    const inc = nested as Incident
+    return {
+      ...inc,
+      shareUrl: typeof row.shareUrl === 'string' ? row.shareUrl : inc.shareUrl,
+      radioSet:
+        row.radioSet && typeof row.radioSet === 'object'
+          ? (row.radioSet as Incident['radioSet'])
+          : inc.radioSet,
+    }
+  }
+  if (typeof row.id === 'string' && typeof row.title === 'string') {
+    return row as unknown as Incident
+  }
+  return null
+}
+
+export function parseIncidentsList(body: unknown): Incident[] {
+  const raw: unknown[] = []
+  if (Array.isArray(body)) {
+    raw.push(...body)
+  } else if (body && typeof body === 'object') {
+    const wrapped = body as { incidents?: unknown; data?: unknown }
+    if (Array.isArray(wrapped.incidents)) raw.push(...wrapped.incidents)
+    else if (Array.isArray(wrapped.data)) raw.push(...wrapped.data)
+  }
+  return raw.map(normalizeIncidentListItem).filter((inc): inc is Incident => inc !== null)
 }
 
 export type AuthCapabilities = {
@@ -527,8 +563,10 @@ export const api = {
       body: JSON.stringify(settings),
     }),
   incidentTemplates: () => request<IncidentTemplate[]>('/api/v1/incident-templates'),
-  incidents: (archived = false) =>
-    request<Incident[]>(`/api/v1/incidents${archived ? '?archived=1' : ''}`),
+  incidents: async (archived = false) => {
+    const body = await request<unknown>(`/api/v1/incidents${archived ? '?archived=1' : ''}`)
+    return parseIncidentsList(body)
+  },
   createIncident: (payload: {
     title: string
     templateId?: string
@@ -553,6 +591,8 @@ export const api = {
     request<CreateIncidentResponse>(`/api/v1/incidents/${encodeURIComponent(id)}/activate`, { method: 'POST' }),
   closeIncident: (id: string) =>
     request<Incident>(`/api/v1/incidents/${encodeURIComponent(id)}/close`, { method: 'POST' }),
+  closeIncidentByRadioSet: (radioSetId: string) =>
+    request<Incident>(`/api/v1/radio-sets/${encodeURIComponent(radioSetId)}/close-incident`, { method: 'POST' }),
   archiveIncident: (id: string) =>
     request<Incident>(`/api/v1/incidents/${encodeURIComponent(id)}/archive`, { method: 'POST' }),
   incidentDiscordIntegration: (id: string) =>

@@ -47,7 +47,16 @@ type RadioSetsViewProps = Readonly<{
   setSelectedSetID: Dispatch<SetStateAction<string>>
   onOpenPTTMode: (radioSetId: string) => void
   onOpenDispatcher: () => void
+  onNotify?: (message: string) => void
 }>
+
+function isOpenIncidentRadioSet(radioSet: RadioSet): boolean {
+  if (radioSet.incidentId) {
+    const status = radioSet.incidentStatus ?? 'active'
+    return status === 'active' || status === 'draft' || status === 'monitoring'
+  }
+  return radioSet.name.startsWith('INC ·')
+}
 
 function radioSetSubmitLabel(rsLoading: boolean, rsEditID: string | null): string {
   if (rsLoading) return 'SAVING...'
@@ -167,6 +176,7 @@ export function RadioSetsView({
   setSelectedSetID,
   onOpenPTTMode,
   onOpenDispatcher,
+  onNotify,
 }: RadioSetsViewProps) {
   const filteredTalkgroups = useMemo(() => {
     const query = rsTGSearch.trim().toLowerCase()
@@ -198,6 +208,38 @@ export function RadioSetsView({
     setRsEditTGs([])
     setRsEditGroups([])
     setRsEditMode('talkgroups')
+  }
+
+  const refreshRadioSets = async () => {
+    try {
+      const sets = await api.radioSets()
+      setRadioSets(sets)
+    } catch {
+      setRsError('Could not refresh radio sets')
+    }
+  }
+
+  const endIncidentForRadioSet = async (radioSet: RadioSet) => {
+    const label = radioSet.incidentTitle ?? radioSet.name
+    if (
+      !globalThis.confirm(
+        `End incident "${label}"?\n\nCloses the incident, stops Discord rooms, and revokes the public player link.`,
+      )
+    ) {
+      return
+    }
+    setRsLoading(true)
+    setRsError('')
+    try {
+      await api.closeIncidentByRadioSet(radioSet.id)
+      onNotify?.('Incident ended')
+      await refreshRadioSets()
+    } catch {
+      setRsError('Could not end incident — are you admin/dispatcher with incident management enabled?')
+      onNotify?.('End incident failed')
+    } finally {
+      setRsLoading(false)
+    }
   }
 
   const submitRadioSet = async () => {
@@ -431,12 +473,24 @@ export function RadioSetsView({
           {radioSets.map((radioSet) => {
             const canManageRadioSet =
               radioSet.userId === authUser?.id || authUser?.role === 'admin'
+            const canEndIncident =
+              (authUser?.role === 'admin' || authUser?.dispatcherEnabled) && isOpenIncidentRadioSet(radioSet)
             const isScanning = rsPlayingID === radioSet.id
             return (
-              <div key={radioSet.id} className="border border-console-border rounded p-2.5 flex flex-col gap-2">
+              <div
+                key={radioSet.id}
+                className={`border rounded p-2.5 flex flex-col gap-2 ${
+                  canEndIncident ? 'border-console-accent/50 bg-console-accent/5' : 'border-console-border'
+                }`}
+              >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-col gap-0.5 min-w-0">
                     <span className="text-xs font-semibold">{radioSet.name}</span>
+                    {canEndIncident && (
+                      <span className="text-[10px] text-console-accent uppercase tracking-wider">
+                        open incident · {radioSet.incidentStatus ?? 'active'}
+                      </span>
+                    )}
                     <span className="text-[10px] text-console-muted">{radioSetMembershipLabel(radioSet)}</span>
                     {authUser?.role === 'admin' && (
                       <span className="text-[10px] text-console-muted">
@@ -497,6 +551,16 @@ export function RadioSetsView({
                           KEY
                         </button>
                       </>
+                    )}
+                    {canEndIncident && (
+                      <button
+                        type="button"
+                        onClick={() => void endIncidentForRadioSet(radioSet)}
+                        disabled={rsLoading}
+                        className="col-span-2 px-2 py-1 sm:py-0.5 border border-console-error text-console-error rounded text-[10px] font-semibold hover:bg-console-error/10 disabled:opacity-50"
+                      >
+                        END INCIDENT
+                      </button>
                     )}
                     <button
                       onClick={() => generateShareLink(radioSet.id)}

@@ -103,6 +103,9 @@ func (h *handler) incidentManagementAvailable(identity *database.HubIdentity) bo
 	if handlerID == "" {
 		return true
 	}
+	if handlerID == strings.TrimSpace(identity.HubID) {
+		return true
+	}
 	peers, err := h.db.ListHubPeers()
 	if err != nil {
 		h.logger.Error("list peers for incident management check failed", "error", err)
@@ -236,9 +239,11 @@ func (h *handler) handleListIncidentTemplates(w http.ResponseWriter, r *http.Req
 }
 
 func (h *handler) handleListIncidents(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.requireAuthenticated(w, r); !ok {
+	user, _, ok := h.requireIncidentManager(w, r)
+	if !ok {
 		return
 	}
+	_ = user
 	includeArchived := r.URL.Query().Get("archived") == "1"
 	incidents, err := h.db.ListIncidents(includeArchived)
 	if err != nil {
@@ -263,10 +268,17 @@ func (h *handler) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 					Talkgroups:      rs.Talkgroups,
 					TalkgroupGroups: rs.TalkgroupGroups,
 				}
+				if item.ShareURL == "" && rs.ShareToken != nil && *rs.ShareToken != "" {
+					base := strings.TrimRight(h.cfg.HubPublicURL, "/")
+					if base != "" {
+						item.ShareURL = base + "/public/player/" + *rs.ShareToken
+					}
+				}
 			}
 		}
 		items = append(items, item)
 	}
+	h.logger.Info("listed incidents", "count", len(items), "includeArchived", includeArchived)
 	writeJSON(w, http.StatusOK, items)
 }
 
@@ -451,6 +463,40 @@ func (h *handler) handleCloseIncident(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = h.db.AppendAuditLog(user.ID, "incident.closed", "incident", closed.ID, nil)
+	writeJSON(w, http.StatusOK, closed)
+}
+
+func (h *handler) handleCloseIncidentByRadioSet(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := h.requireIncidentManager(w, r)
+	if !ok {
+		return
+	}
+	radioSetID := chi.URLParam(r, "id")
+	incident, found, err := h.db.GetIncidentByRadioSetID(radioSetID)
+	if err != nil {
+		h.logger.Error("lookup incident by radio set failed", "error", err, "radioSetId", radioSetID)
+		http.Error(w, "lookup incident", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "no incident for this radio set", http.StatusNotFound)
+		return
+	}
+	closed, err := h.db.CloseIncident(incident.ID)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := h.db.MarkDiscordIntegrationsStopping(closed.ID); err != nil {
+		h.logger.Error("mark discord integrations stopping failed", "error", err, "incidentId", closed.ID)
+	}
+	if closed.RadioSetID != "" {
+		rs, found, rsErr := h.db.GetRadioSetForPTT(closed.RadioSetID)
+		if rsErr == nil && found {
+			_ = h.db.ClearRadioSetShareToken(rs.ID, rs.UserID)
+		}
+	}
+	_ = h.db.AppendAuditLog(user.ID, "incident.closed", "incident", closed.ID, map[string]any{"via": "radio_set", "radioSetId": radioSetID})
 	writeJSON(w, http.StatusOK, closed)
 }
 

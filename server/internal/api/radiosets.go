@@ -77,6 +77,38 @@ func (h *handler) resolveRadioSet(id string, user authUser) (database.RadioSet, 
 	return h.db.GetRadioSet(id, user.ID)
 }
 
+type radioSetListItem struct {
+	database.RadioSet
+	IncidentID     string `json:"incidentId,omitempty"`
+	IncidentStatus string `json:"incidentStatus,omitempty"`
+	IncidentTitle  string `json:"incidentTitle,omitempty"`
+}
+
+func (h *handler) attachRadioSetIncidents(sets []database.RadioSet) []radioSetListItem {
+	ids := make([]string, 0, len(sets))
+	for _, rs := range sets {
+		if rs.ID != "" {
+			ids = append(ids, rs.ID)
+		}
+	}
+	bySet, err := h.db.ListOpenIncidentsByRadioSetIDs(ids)
+	if err != nil {
+		h.logger.Warn("attach radio set incidents failed", "error", err)
+		bySet = map[string]database.Incident{}
+	}
+	out := make([]radioSetListItem, 0, len(sets))
+	for _, rs := range sets {
+		item := radioSetListItem{RadioSet: rs}
+		if inc, ok := bySet[rs.ID]; ok {
+			item.IncidentID = inc.ID
+			item.IncidentStatus = inc.Status
+			item.IncidentTitle = inc.Title
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
 func (h *handler) handleListRadioSets(w http.ResponseWriter, r *http.Request) {
 	user, ok := h.requireAuthenticated(w, r)
 	if !ok {
@@ -101,7 +133,7 @@ func (h *handler) handleListRadioSets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, sets)
+	writeJSON(w, http.StatusOK, h.attachRadioSetIncidents(sets))
 }
 
 func (h *handler) handleCreateRadioSet(w http.ResponseWriter, r *http.Request) {

@@ -2240,6 +2240,7 @@ function App() {
               setSelectedSetID={setSelectedSetID}
               onOpenPTTMode={setPTTSetID}
               onOpenDispatcher={() => setDispatcherActive(true)}
+              onNotify={setHubMessage}
             />
           )
         })()}

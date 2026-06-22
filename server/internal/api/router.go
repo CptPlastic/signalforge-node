@@ -117,6 +117,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Post("/api/v1/incidents/signals/{id}/promote", handle.handlePromoteIncidentSignal)
 		r.Post("/api/v1/incidents/{id}/activate", handle.handleActivateIncident)
 		r.Post("/api/v1/incidents/{id}/close", handle.handleCloseIncident)
+		r.Post("/api/v1/radio-sets/{id}/close-incident", handle.handleCloseIncidentByRadioSet)
 		r.Post("/api/v1/incidents/{id}/archive", handle.handleArchiveIncident)
 		r.Get("/api/v1/incidents/{id}/integrations/discord", handle.handleGetIncidentDiscordIntegration)
 		r.Post("/api/v1/incidents/{id}/integrations/discord", handle.handleCreateIncidentDiscordIntegration)

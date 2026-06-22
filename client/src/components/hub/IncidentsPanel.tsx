@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   api,
+  ApiError,
   type AuthUser,
   type HubPeer,
   type Incident,
@@ -8,6 +9,8 @@ import {
   type IncidentSettings,
   type IncidentSignal,
   type IncidentTemplate,
+  type CreateIncidentResponse,
+  type RadioSet,
 } from '../../lib/api'
 import { fmtDateTime } from '../../lib/format'
 
@@ -23,6 +26,72 @@ type IncidentTab = 'active' | 'archive'
 
 const EXPOSURES = ['members', 'community', 'internal'] as const
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
+
+function incidentFromCreateResponse(resp: CreateIncidentResponse): Incident {
+  return {
+    ...resp.incident,
+    shareUrl: resp.shareUrl,
+    radioSet: resp.radioSet
+      ? {
+          name: resp.radioSet.name,
+          selectionMode: resp.radioSet.selectionMode ?? 'groups',
+          talkgroups: resp.radioSet.talkgroups,
+          talkgroupGroups: resp.radioSet.talkgroupGroups,
+        }
+      : undefined,
+  }
+}
+
+function mergeRunningIncident(list: Incident[], inc: Incident): Incident[] {
+  const rest = list.filter((i) => i.id !== inc.id)
+  if (inc.status === 'active' || inc.status === 'draft' || inc.status === 'monitoring') {
+    return [inc, ...rest]
+  }
+  return rest
+}
+
+function incidentsFromRadioSets(sets: RadioSet[]): Incident[] {
+  const out: Incident[] = []
+  for (const rs of sets) {
+    if (!rs.incidentId) continue
+    const status = rs.incidentStatus ?? ''
+    if (status !== 'active' && status !== 'draft' && status !== 'monitoring') continue
+    out.push({
+      id: rs.incidentId,
+      title: rs.incidentTitle ?? rs.name.replace(/^INC ·\s*/, ''),
+      incidentType: 'custom',
+      status,
+      priority: 'normal',
+      exposure: 'members',
+      radioSetId: rs.id,
+      notes: '',
+      openedAt: rs.updatedAt,
+      closedAt: 0,
+      archivedAt: 0,
+      createdAt: rs.createdAt,
+      updatedAt: rs.updatedAt,
+      radioSet: {
+        name: rs.name,
+        selectionMode: rs.selectionMode ?? 'groups',
+        talkgroups: rs.talkgroups,
+        talkgroupGroups: rs.talkgroupGroups,
+      },
+    })
+  }
+  return out
+}
+
+function mergeIncidentLists(primary: Incident[], fallback: Incident[]): Incident[] {
+  const seen = new Set(primary.map((i) => i.id))
+  const merged = [...primary]
+  for (const inc of fallback) {
+    if (!seen.has(inc.id)) {
+      seen.add(inc.id)
+      merged.push(inc)
+    }
+  }
+  return merged
+}
 
 export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRadioSet }: Props) {
   const canManage = isAdmin || !!authUser.dispatcherEnabled
@@ -45,6 +114,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
   const [showSignals, setShowSignals] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [apiTotal, setApiTotal] = useState<number | null>(null)
 
   const refresh = useCallback(async () => {
     if (!canManage) return
@@ -65,27 +135,50 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
       ])
 
       let all: Incident[] = []
+      let listLoadError = ''
       try {
         all = await api.incidents(true)
+        setApiTotal(all.length)
       } catch (err) {
         console.error(err)
-        setLoadError('Could not load incidents from the hub API. Check login and that incident management is enabled.')
+        setApiTotal(null)
+        if (err instanceof ApiError) {
+          if (err.status === 403) {
+            listLoadError =
+              'Incidents API returned 403. Enable Incident management in INCIDENT SETTINGS (bottom), clear Incident handler hub ID unless a remote handler is online, and SAVE.'
+          } else {
+            listLoadError = `Incidents API error ${err.status}. Open browser devtools → Network → GET /api/v1/incidents`
+          }
+        } else {
+          listLoadError = 'Could not load incidents from the hub API.'
+        }
         all = []
       }
+      setLoadError(listLoadError)
 
       if (s) {
         setSettings(s)
         setSettingsDraft(s)
       }
       setTemplates(t)
-      const activeList = all.filter((i) => i.status === 'active' || i.status === 'draft' || i.status === 'monitoring')
+      let activeList = all.filter((i) => i.status === 'active' || i.status === 'draft' || i.status === 'monitoring')
+      if (activeList.length === 0 && !listLoadError) {
+        const sets = await api.radioSets().catch(() => [] as RadioSet[])
+        const fromSets = incidentsFromRadioSets(sets)
+        if (fromSets.length > 0) {
+          activeList = mergeIncidentLists(activeList, fromSets)
+          setLoadError(
+            'Incident list API returned empty but open incidents exist on radio sets — showing those. Redeploy api + web after updating.',
+          )
+        }
+      }
       setIncidents(activeList)
       setArchivedIncidents(all.filter((i) => i.status === 'closed' || i.status === 'archived'))
       setSignals(sig)
       if (activeList.length === 0 && sig.length > 0) {
         setShowSignals(true)
       }
-      const monitoring = all.filter((i) => i.status === 'active' || i.status === 'monitoring')
+      const monitoring = activeList.filter((i) => i.status === 'active' || i.status === 'monitoring')
       const discordEntries = await Promise.all(
         monitoring.map(async (inc) => {
           try {
@@ -172,10 +265,13 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
       } else {
         onNotify('Incident created (draft — activate to open Discord rooms)')
       }
+      const created = incidentFromCreateResponse(resp)
+      setIncidents((prev) => mergeRunningIncident(prev, created))
+      setApiTotal((n) => (n ?? 0) + 1)
       setTitle('')
       setNotes('')
       setShowCreate(false)
-      await refresh()
+      void refresh()
     } catch (err) {
       console.error(err)
       onNotify('Create failed — is incident management enabled?')
@@ -432,6 +528,12 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
         </p>
       )}
 
+      {apiTotal !== null && !loadError && (
+        <p className="text-[10px] text-console-muted">
+          API returned {apiTotal} incident record(s) · showing {incidents.length} running
+        </p>
+      )}
+
       {/* ── ACTIVE / CLOSED LIST (top) ── */}
       <div className="flex flex-col gap-2">
         <div className="flex gap-2 text-[10px] items-center flex-wrap">
@@ -505,7 +607,9 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
                       setLoading(true)
                       api.promoteIncidentSignal(sig.id)
                         .then((r) => {
-                          if (r.discordQueued) onNotify('Incident opened — Discord rooms queued')
+                          const created = incidentFromCreateResponse(r)
+                      setIncidents((prev) => mergeRunningIncident(prev, created))
+                      if (r.discordQueued) onNotify('Incident opened — Discord rooms queued')
                           else if (r.discordSkipReason) onNotify(`Discord not queued: ${r.discordSkipReason}`)
                           else if (r.shareUrl) copyShareUrl(r.shareUrl)
                           else onNotify('Incident opened from weather alert')
