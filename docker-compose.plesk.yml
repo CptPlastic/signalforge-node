@@ -24,9 +24,8 @@
 # With mock radio sidecar (test/staging only):
 #   docker compose --env-file .env.production -f docker-compose.plesk.yml --profile mock up -d
 #
-# Discord bot: set DISCORD_TOKEN + DISCORD_CLIENT_ID + DISCORD_GUILD_ID.
-# Set DISCORD_BOT_WORKER_TOKEN in Portainer stack Environment variables (same value on api + discord-bot).
-# Do not leave an empty DISCORD_BOT_WORKER_TOKEN= line in .env.production — it can override the stack value.
+# Discord bot: set DISCORD_TOKEN + DISCORD_CLIENT_ID + DISCORD_GUILD_ID in stack env.
+# One stack env var DISCORD_BOT_WORKER_TOKEN is forwarded to both api and discord-bot below.
 # Bot worker calls use SIGNALFORGE_API_URL=http://api:8080 (same as transcriber); HOSTED_HUB_URL is public only.
 # Slash commands register automatically on startup. Optional: WELCOME_CHANNEL_ID (needs Server Members Intent).
 # Image: ghcr.io/signalforge-org/signalforge-discord-bot
@@ -87,8 +86,7 @@ services:
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
       TRANSCRIPTION_WORKER_TOKEN: ${TRANSCRIPTION_WORKER_TOKEN:-}
       TRANSCRIPTION_MIN_DURATION_SECONDS: ${TRANSCRIPTION_MIN_DURATION_SECONDS:-0.75}
-      # Pass-through (no ${}) — same pattern as AUTH_*; avoids empty override wiping env_file.
-      DISCORD_BOT_WORKER_TOKEN:
+      DISCORD_BOT_WORKER_TOKEN: ${DISCORD_BOT_WORKER_TOKEN}
       # Pass-through from stack Environment variables (no ${} — avoids wiping values and
       # avoids compose re-parsing $ characters inside passwords).
       AUTH_BOOTSTRAP_EMAIL:
@@ -182,7 +180,7 @@ services:
       SIGNALFORGE_API_URL: http://api:8080
       SITE_URL: ${SITE_URL:-https://signalforge.org}
       DISCORD_INCIDENTS_CATEGORY: ${DISCORD_INCIDENTS_CATEGORY:-// INCIDENTS}
-      DISCORD_BOT_WORKER_TOKEN:
+      DISCORD_BOT_WORKER_TOKEN: ${DISCORD_BOT_WORKER_TOKEN}
     depends_on:
       api:
         condition: service_healthy

@@ -101,7 +101,14 @@ export function DiscordBotPanel({ onNotify }: Props) {
                   )
                   return refresh()
                 })
-                .catch(() => onNotify('Discord reconcile failed — is worker token set?'))
+                .catch((err) => {
+                  const msg = err instanceof Error ? err.message : ''
+                  onNotify(
+                    msg.includes('503')
+                      ? 'Discord not linked — add DISCORD_BOT_WORKER_TOKEN to stack env, then Update stack (recreate)'
+                      : 'Discord reconcile failed',
+                  )
+                })
                 .finally(() => setLoading(false))
             }}
             className="px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
