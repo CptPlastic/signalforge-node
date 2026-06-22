@@ -247,7 +247,7 @@ func (h *handler) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	includeArchived := r.URL.Query().Get("archived") == "1"
 	incidents, err := h.db.ListIncidents(includeArchived)
 	if err != nil {
-		h.logger.Error("list incidents failed", "error", err)
+		h.logger.Error("list incidents failed", "error", err, "includeArchived", includeArchived)
 		http.Error(w, "list incidents", http.StatusInternalServerError)
 		return
 	}

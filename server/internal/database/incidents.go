@@ -134,6 +134,7 @@ func normalizeIncidentPriority(priority string) string {
 func scanIncident(row scanner) (Incident, error) {
 	var incident Incident
 	var metadata []byte
+	var radioSetID, templateID, openedByUserID sql.NullString
 	if err := row.Scan(
 		&incident.ID,
 		&incident.Title,
@@ -141,9 +142,9 @@ func scanIncident(row scanner) (Incident, error) {
 		&incident.Status,
 		&incident.Priority,
 		&incident.Exposure,
-		&incident.RadioSetID,
-		&incident.TemplateID,
-		&incident.OpenedByUserID,
+		&radioSetID,
+		&templateID,
+		&openedByUserID,
 		&incident.HandlerIncidentID,
 		&incident.Notes,
 		&metadata,
@@ -154,6 +155,15 @@ func scanIncident(row scanner) (Incident, error) {
 		&incident.UpdatedAt,
 	); err != nil {
 		return Incident{}, err
+	}
+	if radioSetID.Valid {
+		incident.RadioSetID = radioSetID.String
+	}
+	if templateID.Valid {
+		incident.TemplateID = templateID.String
+	}
+	if openedByUserID.Valid {
+		incident.OpenedByUserID = openedByUserID.String
 	}
 	if len(metadata) > 0 {
 		incident.Metadata = metadata
