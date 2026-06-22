@@ -70,6 +70,67 @@ func (h *handler) ensureIncidentStreamToken(incident database.Incident) (string,
 	return token, nil
 }
 
+func (h *handler) upsertDiscordIntegration(incident database.Incident, existing database.IncidentIntegration, hasExisting bool) (database.IncidentIntegration, error) {
+	config, err := h.buildIncidentDiscordConfig(incident)
+	if err != nil {
+		return database.IncidentIntegration{}, err
+	}
+	integration := database.IncidentIntegration{
+		ID:         existing.ID,
+		IncidentID: incident.ID,
+		Kind:       "discord",
+		Status:     "pending",
+		Config:     config,
+	}
+	if hasExisting && existing.Status == "failed" {
+		integration.ID = existing.ID
+	}
+	return h.db.UpsertIncidentIntegration(integration)
+}
+
+func (h *handler) shouldAutoQueueDiscord(incident database.Incident) bool {
+	if strings.TrimSpace(h.cfg.DiscordBotWorkerToken) == "" {
+		return false
+	}
+	if incident.Exposure == "internal" {
+		return false
+	}
+	if incident.Status != "active" && incident.Status != "monitoring" {
+		return false
+	}
+	return true
+}
+
+func (h *handler) queueDiscordIntegrationForIncident(incidentID, userID string) bool {
+	incident, found, err := h.db.GetIncident(incidentID)
+	if err != nil || !found || !h.shouldAutoQueueDiscord(incident) {
+		return false
+	}
+	existing, hasExisting, err := h.db.GetIncidentIntegration(incidentID, "discord")
+	if err != nil {
+		h.logger.Error("load discord integration for auto queue failed", "error", err, "incidentId", incidentID)
+		return false
+	}
+	if hasExisting {
+		switch existing.Status {
+		case "active", "pending", "stopping":
+			return existing.Status == "pending" || existing.Status == "active"
+		}
+	}
+	saved, err := h.upsertDiscordIntegration(incident, existing, hasExisting)
+	if err != nil {
+		h.logger.Error("auto queue discord integration failed", "error", err, "incidentId", incidentID)
+		return false
+	}
+	if userID != "" {
+		_ = h.db.AppendAuditLog(userID, "incident.discord_integration_auto_queued", "incident", incidentID, map[string]any{
+			"integrationId": saved.ID,
+		})
+	}
+	h.logger.Info("discord integration queued", "incidentId", incidentID, "integrationId", saved.ID)
+	return true
+}
+
 func (h *handler) handleGetIncidentDiscordIntegration(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAuthenticated(w, r); !ok {
 		return
@@ -130,21 +191,7 @@ func (h *handler) handleCreateIncidentDiscordIntegration(w http.ResponseWriter, 
 		}
 	}
 
-	config, err := h.buildIncidentDiscordConfig(incident)
-	if err != nil {
-		h.logger.Error("build discord integration config failed", "error", err)
-		http.Error(w, "build integration config", http.StatusInternalServerError)
-		return
-	}
-
-	integration := database.IncidentIntegration{
-		ID:         existing.ID,
-		IncidentID: incidentID,
-		Kind:       "discord",
-		Status:     "pending",
-		Config:     config,
-	}
-	saved, err := h.db.UpsertIncidentIntegration(integration)
+	saved, err := h.upsertDiscordIntegration(incident, existing, hasExisting)
 	if err != nil {
 		h.logger.Error("save discord integration failed", "error", err)
 		http.Error(w, "save integration", http.StatusInternalServerError)

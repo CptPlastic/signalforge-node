@@ -117,6 +117,23 @@ export function DiscordBotPanel({ onNotify }: Props) {
           Open Discord Developer Portal →
         </a>
       </div>
+
+      <div className="text-[11px] text-console-muted border border-console-border rounded p-2 space-y-1">
+        <p className="text-console-text font-bold">Incident rooms (auto-sync)</p>
+        <p>
+          When an incident is <strong className="text-console-text">active</strong> (manual create, weather signal OPEN, or activate),
+          the hub queues Discord voice + text channels under <code className="text-console-accent">// INCIDENTS</code>.
+        </p>
+        <ul className="list-disc list-inside space-y-0.5">
+          <li>
+            <code className="text-console-accent">DISCORD_BOT_WORKER_TOKEN</code> must match on <strong>api</strong> and{' '}
+            <strong>discord-bot</strong>
+          </li>
+          <li>Bot polls every ~15s — channels appear shortly after queue</li>
+          <li>Internal exposure incidents skip Discord</li>
+          <li>Use <strong>DISCORD ROOMS</strong> on a card to re-queue if needed</li>
+        </ul>
+      </div>
     </div>
   )
 }

@@ -147,7 +147,15 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
         notes: notes.trim(),
         activate,
       })
-      onNotify(resp.shareUrl ? `Incident active — player link ready` : 'Incident created')
+      if (resp.discordQueued) {
+        onNotify('Incident active — Discord rooms queued (bot creates channels within ~15s)')
+      } else if (resp.shareUrl) {
+        onNotify('Incident active — player link ready')
+      } else if (activate) {
+        onNotify('Incident active — enable DISCORD_BOT_WORKER_TOKEN + online bot for auto Discord rooms')
+      } else {
+        onNotify('Incident created (draft — activate to open Discord rooms)')
+      }
       setTitle('')
       setNotes('')
       await refresh()
@@ -212,7 +220,8 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
                   setLoading(true)
                   api.activateIncident(inc.id)
                     .then((r) => {
-                      if (r.shareUrl) copyShareUrl(r.shareUrl)
+                      if (r.discordQueued) onNotify('Incident activated — Discord rooms queued')
+                      else if (r.shareUrl) copyShareUrl(r.shareUrl)
                       else onNotify('Incident activated')
                       return refresh()
                     })
@@ -338,7 +347,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <p className="console-label text-xs">// INCIDENTS</p>
-          <p className="text-[11px] text-console-muted">Open incident → radio set → listen or share.</p>
+          <p className="text-[11px] text-console-muted">Open incident → radio set → Discord rooms auto-queue when bot is linked.</p>
         </div>
         <button
           type="button"
@@ -515,7 +524,8 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
                   setLoading(true)
                   api.promoteIncidentSignal(sig.id)
                     .then((r) => {
-                      if (r.shareUrl) copyShareUrl(r.shareUrl)
+                      if (r.discordQueued) onNotify('Incident opened — Discord rooms queued')
+                      else if (r.shareUrl) copyShareUrl(r.shareUrl)
                       else onNotify('Incident opened from signal')
                       return refresh()
                     })

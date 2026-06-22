@@ -175,6 +175,7 @@ export type CreateIncidentResponse = {
   incident: Incident
   radioSet?: RadioSet
   shareUrl?: string
+  discordQueued?: boolean
 }
 
 export type HubInvite = {

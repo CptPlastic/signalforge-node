@@ -31,9 +31,10 @@ type createIncidentRequest struct {
 }
 
 type incidentResponse struct {
-	Incident  database.Incident   `json:"incident"`
-	RadioSet  *database.RadioSet  `json:"radioSet,omitempty"`
-	ShareURL  string              `json:"shareUrl,omitempty"`
+	Incident       database.Incident  `json:"incident"`
+	RadioSet       *database.RadioSet `json:"radioSet,omitempty"`
+	ShareURL       string             `json:"shareUrl,omitempty"`
+	DiscordQueued  bool               `json:"discordQueued,omitempty"`
 }
 
 type incidentListItem struct {
@@ -346,6 +347,7 @@ func (h *handler) createIncidentFromTemplate(user authUser, req createIncidentRe
 				}
 			}
 		}
+		resp.DiscordQueued = h.queueDiscordIntegrationForIncident(activated.ID, user.ID)
 	}
 	return resp, nil
 }
@@ -403,6 +405,7 @@ func (h *handler) handleActivateIncident(w http.ResponseWriter, r *http.Request)
 			resp.RadioSet = &rs
 		}
 	}
+	resp.DiscordQueued = h.queueDiscordIntegrationForIncident(activated.ID, user.ID)
 	_ = h.db.AppendAuditLog(user.ID, "incident.activated", "incident", activated.ID, nil)
 	writeJSON(w, http.StatusOK, resp)
 }

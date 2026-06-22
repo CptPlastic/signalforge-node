@@ -302,13 +302,15 @@ func (h *handler) maybeAutoCreateIncidentFromSignal(identity *database.HubIdenti
 		return err
 	}
 	if activate {
-		if _, err := h.db.ActivateIncident(incident.ID); err != nil {
+		activated, err := h.db.ActivateIncident(incident.ID)
+		if err != nil {
 			return err
 		}
 		if exposure == "community" {
 			token := database.NewShareToken()
 			_ = h.db.SetRadioSetShareToken(rs.ID, adminID, token)
 		}
+		h.queueDiscordIntegrationForIncident(activated.ID, adminID)
 	}
 	return h.db.LinkIncidentSignal(signal.ID, incident.ID)
 }
