@@ -38,9 +38,17 @@ type incidentResponse struct {
 	DiscordSkipReason string             `json:"discordSkipReason,omitempty"`
 }
 
+type incidentRadioSetSummary struct {
+	Name            string   `json:"name"`
+	SelectionMode   string   `json:"selectionMode"`
+	Talkgroups      []int    `json:"talkgroups,omitempty"`
+	TalkgroupGroups []string `json:"talkgroupGroups,omitempty"`
+}
+
 type incidentListItem struct {
 	database.Incident
-	ShareURL string `json:"shareUrl,omitempty"`
+	ShareURL  string                   `json:"shareUrl,omitempty"`
+	RadioSet  *incidentRadioSetSummary `json:"radioSet,omitempty"`
 }
 
 func (h *handler) incidentPublicPlayerURL(incident database.Incident) string {
@@ -243,10 +251,21 @@ func (h *handler) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]incidentListItem, 0, len(incidents))
 	for _, inc := range incidents {
-		items = append(items, incidentListItem{
+		item := incidentListItem{
 			Incident: inc,
 			ShareURL: h.incidentPublicPlayerURL(inc),
-		})
+		}
+		if inc.RadioSetID != "" {
+			if rs, found, rsErr := h.db.GetRadioSetForPTT(inc.RadioSetID); rsErr == nil && found {
+				item.RadioSet = &incidentRadioSetSummary{
+					Name:            rs.Name,
+					SelectionMode:   rs.SelectionMode,
+					Talkgroups:      rs.Talkgroups,
+					TalkgroupGroups: rs.TalkgroupGroups,
+				}
+			}
+		}
+		items = append(items, item)
 	}
 	writeJSON(w, http.StatusOK, items)
 }

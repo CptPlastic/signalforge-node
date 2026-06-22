@@ -202,6 +202,10 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
           : discord?.status === 'failed'
             ? 'DISCORD FAILED'
             : 'DISCORD ROOMS'
+    const monitorLabel =
+      inc.radioSet?.selectionMode === 'groups'
+        ? (inc.radioSet.talkgroupGroups ?? []).join(', ') || 'no groups'
+        : (inc.radioSet?.talkgroups ?? []).map((tg) => String(tg)).join(', ') || 'no talkgroups'
     return (
       <div key={inc.id} className="border border-console-border rounded p-2 flex flex-col gap-2">
         <div className="flex justify-between gap-2 items-start">
@@ -213,6 +217,13 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
               {discord?.status ? ` · discord ${discord.status}` : ''}
               {discord?.config?.error ? ` · ${discord.config.error}` : ''}
             </div>
+            {inc.radioSet && isActive && (
+              <div className="text-console-muted text-[10px]">
+                Stream: {inc.radioSet.name} ·{' '}
+                {inc.radioSet.selectionMode === 'groups' ? 'groups' : 'talkgroups'}: {monitorLabel}
+                {discord?.status === 'active' ? ' · Discord voice uses this same feed' : ''}
+              </div>
+            )}
           </div>
           <div className="flex gap-1 shrink-0 flex-wrap justify-end">
             {actions === 'full' && inc.status === 'draft' && (
@@ -356,7 +367,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <p className="console-label text-xs">// INCIDENTS</p>
-          <p className="text-[11px] text-console-muted">Open incident → radio set → Discord rooms auto-queue when bot is linked.</p>
+          <p className="text-[11px] text-console-muted">Discord voice mirrors the incident radio set — no manual share needed. Use LISTEN or PUBLIC PLAYER to test audio first.</p>
         </div>
         <button
           type="button"

@@ -2757,7 +2757,8 @@ function App() {
               onNotify={setHubMessage}
               onOpenRadioSet={(radioSetId) => {
                 setSelectedSetID(radioSetId)
-                setActiveView('monitor')
+                setRsPlayingID(radioSetId)
+                setActiveView('radio-sets')
               }}
             />
           )}

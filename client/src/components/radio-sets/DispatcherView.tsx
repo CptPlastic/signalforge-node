@@ -125,7 +125,11 @@ export function DispatcherView({
   const resolveAudibleSetName = useCallback((call: Call): string | null => {
     for (const rs of radioSetsRef.current) {
       if (!selectedIdsRef.current.has(rs.id)) continue
-      if (rs.talkgroups.includes(call.talkgroup) || rs.pttTalkgroup === call.talkgroup) {
+      const groupMatch =
+        rs.selectionMode === 'groups' &&
+        Boolean(call.talkgroupGroup) &&
+        (rs.talkgroupGroups ?? []).some((g) => g.toLowerCase() === call.talkgroupGroup!.toLowerCase())
+      if (rs.talkgroups.includes(call.talkgroup) || rs.pttTalkgroup === call.talkgroup || groupMatch) {
         return rs.name
       }
     }

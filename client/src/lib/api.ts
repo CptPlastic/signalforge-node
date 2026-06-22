@@ -113,6 +113,12 @@ export type Incident = {
   createdAt: number
   updatedAt: number
   shareUrl?: string
+  radioSet?: {
+    name: string
+    selectionMode: string
+    talkgroups?: number[]
+    talkgroupGroups?: string[]
+  }
 }
 
 export type IncidentDiscordIntegration = {

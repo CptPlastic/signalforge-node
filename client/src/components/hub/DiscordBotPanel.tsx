@@ -166,13 +166,22 @@ export function DiscordBotPanel({ onNotify }: Props) {
         </p>
         <ul className="list-disc list-inside space-y-0.5">
           <li>
-            <code className="text-console-accent">DISCORD_BOT_WORKER_TOKEN</code> must match on <strong>api</strong> and{' '}
-            <strong>discord-bot</strong>
+            <code className="text-console-accent">DISCORD_BOT_WORKER_TOKEN</code> — one stack env var (compose forwards to api + discord-bot)
           </li>
           <li>Bot polls every ~15s — channels appear shortly after queue</li>
           <li>Internal exposure incidents skip Discord</li>
           <li>Use <strong>DISCORD ROOMS</strong> on a card to re-queue if needed</li>
         </ul>
+        <p className="text-console-text font-bold mt-2">Bot role permissions (Server Settings → Roles)</p>
+        <ul className="list-disc list-inside space-y-0.5">
+          <li><strong>Manage Channels</strong> — required to create // INCIDENTS category + voice/text rooms</li>
+          <li><strong>View Channels</strong>, <strong>Connect</strong>, <strong>Speak</strong> — voice stream</li>
+          <li><strong>Send Messages</strong> — ops text channel welcome post</li>
+          <li>Drag the bot role <strong>above</strong> roles/channels that deny those permissions</li>
+        </ul>
+        <p className="text-[10px] mt-1">
+          Or create category <code className="text-console-accent">// INCIDENTS</code> manually and give the bot full access on that category.
+        </p>
       </div>
     </div>
   )

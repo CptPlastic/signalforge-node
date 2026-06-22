@@ -25,7 +25,9 @@ export function maybePlayActiveRadioSetCall({
           activeSet?.pttTalkgroup === call.talkgroup ||
           (activeSet?.selectionMode === 'groups' &&
             Boolean(call.talkgroupGroup) &&
-            (activeSet.talkgroupGroups ?? []).includes(call.talkgroupGroup))
+            (activeSet.talkgroupGroups ?? []).some(
+              (g) => g.toLowerCase() === call.talkgroupGroup!.toLowerCase(),
+            ))
         if (matchesSet) {
           setPlayingId((currentPlaying) => {
             if (!currentPlaying) {

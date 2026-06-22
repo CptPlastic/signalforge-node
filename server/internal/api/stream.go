@@ -65,6 +65,10 @@ func isPTTCall(call *database.Call) bool {
 	return call.Talkgroup >= pttTalkgroupMin && call.Talkgroup <= pttTalkgroupMax
 }
 
+func normalizeTalkgroupGroup(group string) string {
+	return strings.ToLower(strings.TrimSpace(group))
+}
+
 func publicStreamSubscription(rs *database.RadioSet) (talkgroups []int, groups []string) {
 	if rs.IsGroupsMode() {
 		groups = append(groups, rs.TalkgroupGroups...)
@@ -152,7 +156,7 @@ func (l *streamListener) matchesTalkgroup(call *database.Call) bool {
 	if group == "" {
 		return false
 	}
-	_, ok := l.talkgroupGroups[group]
+	_, ok := l.talkgroupGroups[normalizeTalkgroupGroup(group)]
 	return ok
 }
 
@@ -182,7 +186,7 @@ func (sh *streamHub) subscribe(ownerUserID string, talkgroups []int, talkgroupGr
 	for _, group := range talkgroupGroups {
 		group = strings.TrimSpace(group)
 		if group != "" {
-			groupSet[group] = struct{}{}
+			groupSet[normalizeTalkgroupGroup(group)] = struct{}{}
 		}
 	}
 	sourceIDSet := make(map[string]struct{}, len(sourceIDs))
