@@ -170,8 +170,8 @@ func (d *DB) ListActiveIncidentsMissingDiscord(limit int) ([]Incident, error) {
 	}
 	rows, err := d.db.Query(`
 		SELECT i.id, i.title, i.incident_type, i.status, i.priority, i.exposure,
-			i.radio_set_id, i.template_id, i.opened_by_user_id, i.notes,
-			i.opened_at, i.closed_at, i.archived_at, i.created_at, i.updated_at
+			i.radio_set_id, i.template_id, i.opened_by_user_id, i.handler_incident_id,
+			i.notes, i.metadata, i.opened_at, i.closed_at, i.archived_at, i.created_at, i.updated_at
 		FROM incidents i
 		LEFT JOIN incident_integrations ii
 			ON ii.incident_id = i.id AND ii.kind = 'discord' AND ii.status IN ('pending', 'active', 'stopping')
@@ -186,15 +186,11 @@ func (d *DB) ListActiveIncidentsMissingDiscord(limit int) ([]Incident, error) {
 	defer rows.Close()
 	out := make([]Incident, 0)
 	for rows.Next() {
-		var item Incident
-		if err := rows.Scan(
-			&item.ID, &item.Title, &item.IncidentType, &item.Status, &item.Priority, &item.Exposure,
-			&item.RadioSetID, &item.TemplateID, &item.OpenedByUserID, &item.Notes,
-			&item.OpenedAt, &item.ClosedAt, &item.ArchivedAt, &item.CreatedAt, &item.UpdatedAt,
-		); err != nil {
+		incident, err := scanIncident(rows)
+		if err != nil {
 			return nil, err
 		}
-		out = append(out, item)
+		out = append(out, incident)
 	}
 	return out, rows.Err()
 }

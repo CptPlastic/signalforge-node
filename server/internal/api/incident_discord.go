@@ -273,7 +273,27 @@ func (h *handler) handleListActiveDiscordVoiceBridges(w http.ResponseWriter, r *
 		if len(item.Config) > 0 {
 			_ = json.Unmarshal(item.Config, &cfg)
 		}
-		if cfg.VoiceChannelID == "" || cfg.StreamToken == "" {
+		if cfg.StreamToken == "" && item.IncidentID != "" {
+			incident, found, incErr := h.db.GetIncident(item.IncidentID)
+			if incErr == nil && found {
+				token, tokenErr := h.ensureIncidentStreamToken(incident)
+				if tokenErr != nil {
+					h.logger.Warn("ensure stream token for voice bridge failed", "error", tokenErr, "incidentId", item.IncidentID)
+				} else if token != "" {
+					cfg.StreamToken = token
+					raw, _ := json.Marshal(cfg)
+					if _, updErr := h.db.UpdateIncidentIntegrationStatus(item.ID, item.Status, raw); updErr != nil {
+						h.logger.Warn("persist stream token on integration failed", "error", updErr, "integrationId", item.ID)
+					}
+				}
+			}
+		}
+		if cfg.VoiceChannelID == "" {
+			h.logger.Warn("discord voice bridge skipped — no voice channel", "integrationId", item.ID, "incidentId", item.IncidentID)
+			continue
+		}
+		if cfg.StreamToken == "" {
+			h.logger.Warn("discord voice bridge skipped — no stream token", "integrationId", item.ID, "incidentId", item.IncidentID)
 			continue
 		}
 		bridges = append(bridges, map[string]string{
@@ -311,6 +331,17 @@ func (h *handler) handleCompleteDiscordIncidentTask(w http.ResponseWriter, r *ht
 	cfg.TextChannelID = strings.TrimSpace(req.TextChannelID)
 	cfg.CategoryID = strings.TrimSpace(req.CategoryID)
 	cfg.Error = ""
+	if cfg.StreamToken == "" && existing.IncidentID != "" {
+		incident, found, incErr := h.db.GetIncident(existing.IncidentID)
+		if incErr == nil && found {
+			token, tokenErr := h.ensureIncidentStreamToken(incident)
+			if tokenErr != nil {
+				h.logger.Error("ensure stream token on discord complete failed", "error", tokenErr, "incidentId", existing.IncidentID)
+			} else {
+				cfg.StreamToken = token
+			}
+		}
+	}
 	raw, _ := json.Marshal(cfg)
 
 	updated, err := h.db.UpdateIncidentIntegrationStatus(taskID, "active", raw)
