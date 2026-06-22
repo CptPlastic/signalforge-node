@@ -86,7 +86,8 @@ services:
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
       TRANSCRIPTION_WORKER_TOKEN: ${TRANSCRIPTION_WORKER_TOKEN:-}
       TRANSCRIPTION_MIN_DURATION_SECONDS: ${TRANSCRIPTION_MIN_DURATION_SECONDS:-0.75}
-      DISCORD_BOT_WORKER_TOKEN: ${DISCORD_BOT_WORKER_TOKEN}
+      # Pass-through (no ${}) — Portainer stack env; avoids empty interpolation wiping env_file.
+      DISCORD_BOT_WORKER_TOKEN:
       # Pass-through from stack Environment variables (no ${} — avoids wiping values and
       # avoids compose re-parsing $ characters inside passwords).
       AUTH_BOOTSTRAP_EMAIL:
@@ -180,7 +181,7 @@ services:
       SIGNALFORGE_API_URL: http://api:8080
       SITE_URL: ${SITE_URL:-https://signalforge.org}
       DISCORD_INCIDENTS_CATEGORY: ${DISCORD_INCIDENTS_CATEGORY:-// INCIDENTS}
-      DISCORD_BOT_WORKER_TOKEN: ${DISCORD_BOT_WORKER_TOKEN}
+      DISCORD_BOT_WORKER_TOKEN:
     depends_on:
       api:
         condition: service_healthy
