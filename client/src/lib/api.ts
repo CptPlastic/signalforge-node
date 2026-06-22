@@ -159,6 +159,9 @@ export type DiscordBotStatusResponse = {
   configured: boolean
   online: boolean
   status?: DiscordBotStatus
+  pendingTasks?: number
+  activeTasks?: number
+  failedTasks?: number
 }
 
 export type IncidentSettings = {
@@ -176,6 +179,7 @@ export type CreateIncidentResponse = {
   radioSet?: RadioSet
   shareUrl?: string
   discordQueued?: boolean
+  discordSkipReason?: string
 }
 
 export type HubInvite = {
@@ -501,6 +505,15 @@ export const api = {
   generateHubKeyPair: () => request<HubIdentity>('/api/v1/hub/identity/keypair', { method: 'POST' }),
   refreshHubDirectory: () => request<HubIdentity>('/api/v1/hub/directory/refresh', { method: 'POST' }),
   discordStatus: () => request<DiscordBotStatusResponse>('/api/v1/discord/status'),
+  reconcileDiscordIncidents: () =>
+    request<{
+      queued: number
+      retried: number
+      skipped: number
+      pendingTasks: number
+      activeTasks: number
+      failedTasks: number
+    }>('/api/v1/discord/reconcile-incidents', { method: 'POST' }),
   incidentSettings: () => request<IncidentSettings>('/api/v1/hub/incidents/settings'),
   updateIncidentSettings: (settings: IncidentSettings) =>
     request<HubIdentity>('/api/v1/hub/incidents/settings', {

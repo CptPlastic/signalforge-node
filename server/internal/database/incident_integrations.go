@@ -131,6 +131,74 @@ func (d *DB) UpdateIncidentIntegrationStatus(id, status string, config json.RawM
 	return scanIncidentIntegrationRow(row)
 }
 
+func (d *DB) ListFailedDiscordIntegrations(limit int) ([]IncidentIntegration, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := d.db.Query(`
+		SELECT id, incident_id, kind, status, config, created_at, updated_at
+		FROM incident_integrations
+		WHERE kind = 'discord' AND status = 'failed'
+		ORDER BY updated_at DESC
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]IncidentIntegration, 0)
+	for rows.Next() {
+		item, _, err := scanIncidentIntegration(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (d *DB) CountDiscordIntegrationsByStatus(status string) (int, error) {
+	var count int
+	err := d.db.QueryRow(`
+		SELECT COUNT(*) FROM incident_integrations
+		WHERE kind = 'discord' AND status = $1`, status).Scan(&count)
+	return count, err
+}
+
+func (d *DB) ListActiveIncidentsMissingDiscord(limit int) ([]Incident, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := d.db.Query(`
+		SELECT i.id, i.title, i.incident_type, i.status, i.priority, i.exposure,
+			i.radio_set_id, i.template_id, i.opened_by_user_id, i.notes,
+			i.opened_at, i.closed_at, i.archived_at, i.created_at, i.updated_at
+		FROM incidents i
+		LEFT JOIN incident_integrations ii
+			ON ii.incident_id = i.id AND ii.kind = 'discord' AND ii.status IN ('pending', 'active', 'stopping')
+		WHERE i.status IN ('active', 'monitoring')
+			AND i.exposure <> 'internal'
+			AND ii.id IS NULL
+		ORDER BY i.updated_at DESC
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Incident, 0)
+	for rows.Next() {
+		var item Incident
+		if err := rows.Scan(
+			&item.ID, &item.Title, &item.IncidentType, &item.Status, &item.Priority, &item.Exposure,
+			&item.RadioSetID, &item.TemplateID, &item.OpenedByUserID, &item.Notes,
+			&item.OpenedAt, &item.ClosedAt, &item.ArchivedAt, &item.CreatedAt, &item.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
 func (d *DB) MarkDiscordIntegrationsStopping(incidentID string) error {
 	now := time.Now().Unix()
 	_, err := d.db.Exec(`

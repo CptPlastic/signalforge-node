@@ -88,39 +88,47 @@ func (h *handler) upsertDiscordIntegration(incident database.Incident, existing 
 	return h.db.UpsertIncidentIntegration(integration)
 }
 
-func (h *handler) shouldAutoQueueDiscord(incident database.Incident) bool {
+func (h *handler) discordQueueSkipReason(incident database.Incident) string {
 	if strings.TrimSpace(h.cfg.DiscordBotWorkerToken) == "" {
-		return false
+		return "DISCORD_BOT_WORKER_TOKEN not set on api — add same secret to api + discord-bot in Portainer, then redeploy"
 	}
 	if incident.Exposure == "internal" {
-		return false
+		return "internal incidents skip Discord"
 	}
 	if incident.Status != "active" && incident.Status != "monitoring" {
-		return false
+		return "incident must be active before Discord rooms can sync"
 	}
-	return true
+	return ""
 }
 
-func (h *handler) queueDiscordIntegrationForIncident(incidentID, userID string) bool {
+func (h *handler) shouldAutoQueueDiscord(incident database.Incident) bool {
+	return h.discordQueueSkipReason(incident) == ""
+}
+
+func (h *handler) queueDiscordIntegrationForIncident(incidentID, userID string) (bool, string) {
 	incident, found, err := h.db.GetIncident(incidentID)
-	if err != nil || !found || !h.shouldAutoQueueDiscord(incident) {
-		return false
+	if err != nil || !found {
+		return false, "incident not found"
+	}
+	if reason := h.discordQueueSkipReason(incident); reason != "" {
+		h.logger.Debug("discord integration not queued", "incidentId", incidentID, "reason", reason)
+		return false, reason
 	}
 	existing, hasExisting, err := h.db.GetIncidentIntegration(incidentID, "discord")
 	if err != nil {
 		h.logger.Error("load discord integration for auto queue failed", "error", err, "incidentId", incidentID)
-		return false
+		return false, "could not load discord integration"
 	}
 	if hasExisting {
 		switch existing.Status {
 		case "active", "pending", "stopping":
-			return existing.Status == "pending" || existing.Status == "active"
+			return existing.Status == "pending" || existing.Status == "active", ""
 		}
 	}
 	saved, err := h.upsertDiscordIntegration(incident, existing, hasExisting)
 	if err != nil {
 		h.logger.Error("auto queue discord integration failed", "error", err, "incidentId", incidentID)
-		return false
+		return false, "could not save discord integration"
 	}
 	if userID != "" {
 		_ = h.db.AppendAuditLog(userID, "incident.discord_integration_auto_queued", "incident", incidentID, map[string]any{
@@ -128,7 +136,7 @@ func (h *handler) queueDiscordIntegrationForIncident(incidentID, userID string) 
 		})
 	}
 	h.logger.Info("discord integration queued", "incidentId", incidentID, "integrationId", saved.ID)
-	return true
+	return true, ""
 }
 
 func (h *handler) handleGetIncidentDiscordIntegration(w http.ResponseWriter, r *http.Request) {
@@ -362,4 +370,68 @@ func (h *handler) handleStopDiscordIncidentTask(w http.ResponseWriter, r *http.R
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)
+}
+
+func (h *handler) handleReconcileDiscordIncidents(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := h.requireIncidentManager(w, r)
+	if !ok {
+		return
+	}
+	if strings.TrimSpace(h.cfg.DiscordBotWorkerToken) == "" {
+		http.Error(w, "discord bot worker not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	missing, err := h.db.ListActiveIncidentsMissingDiscord(100)
+	if err != nil {
+		h.logger.Error("list incidents missing discord failed", "error", err)
+		http.Error(w, "list incidents", http.StatusInternalServerError)
+		return
+	}
+
+	queued := 0
+	skipped := 0
+	for _, incident := range missing {
+		ok, _ := h.queueDiscordIntegrationForIncident(incident.ID, user.ID)
+		if ok {
+			queued++
+		} else {
+			skipped++
+		}
+	}
+
+	retried := 0
+	failedItems, err := h.db.ListFailedDiscordIntegrations(100)
+	if err != nil {
+		h.logger.Error("list failed discord integrations failed", "error", err)
+	} else {
+		for _, item := range failedItems {
+			incident, found, incErr := h.db.GetIncident(item.IncidentID)
+			if incErr != nil || !found {
+				continue
+			}
+			if ok, _ := h.queueDiscordIntegrationForIncident(incident.ID, user.ID); ok {
+				retried++
+			}
+		}
+	}
+
+	pending, _ := h.db.CountDiscordIntegrationsByStatus("pending")
+	failed, _ := h.db.CountDiscordIntegrationsByStatus("failed")
+	active, _ := h.db.CountDiscordIntegrationsByStatus("active")
+
+	_ = h.db.AppendAuditLog(user.ID, "incident.discord_reconcile", "hub", "", map[string]any{
+		"queued":  queued,
+		"retried": retried,
+		"skipped": skipped,
+	})
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"queued":       queued,
+		"retried":      retried,
+		"skipped":      skipped,
+		"pendingTasks": pending,
+		"activeTasks":  active,
+		"failedTasks":  failed,
+	})
 }

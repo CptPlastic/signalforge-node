@@ -25,7 +25,8 @@
 #   docker compose --env-file .env.production -f docker-compose.plesk.yml --profile mock up -d
 #
 # Discord bot: set DISCORD_TOKEN + DISCORD_CLIENT_ID + DISCORD_GUILD_ID.
-# Set DISCORD_BOT_WORKER_TOKEN once in stack Environment variables (api + discord-bot share it).
+# Set DISCORD_BOT_WORKER_TOKEN in Portainer stack Environment variables (same value on api + discord-bot).
+# Do not leave an empty DISCORD_BOT_WORKER_TOKEN= line in .env.production — it can override the stack value.
 # Bot worker calls use SIGNALFORGE_API_URL=http://api:8080 (same as transcriber); HOSTED_HUB_URL is public only.
 # Slash commands register automatically on startup. Optional: WELCOME_CHANNEL_ID (needs Server Members Intent).
 # Image: ghcr.io/signalforge-org/signalforge-discord-bot

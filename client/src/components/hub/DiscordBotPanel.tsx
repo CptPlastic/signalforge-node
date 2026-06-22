@@ -76,7 +76,40 @@ export function DiscordBotPanel({ onNotify }: Props) {
             {bot?.lastSeenAt ? fmtDateTime(bot.lastSeenAt) : '—'}
           </span>
         </div>
+        <div>
+          <span className="text-console-muted">Discord rooms: </span>
+          <span className="text-console-text">
+            {status?.activeTasks ?? 0} live · {status?.pendingTasks ?? 0} pending
+            {(status?.failedTasks ?? 0) > 0 ? (
+              <span className="text-console-error"> · {status?.failedTasks} failed</span>
+            ) : null}
+          </span>
+        </div>
       </div>
+
+      {status?.configured && (
+        <div className="flex gap-2 flex-wrap">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => {
+              setLoading(true)
+              api.reconcileDiscordIncidents()
+                .then((r) => {
+                  onNotify(
+                    `Discord sync: ${r.queued} queued, ${r.retried} retried — ${r.pendingTasks} pending for bot`,
+                  )
+                  return refresh()
+                })
+                .catch(() => onNotify('Discord reconcile failed — is worker token set?'))
+                .finally(() => setLoading(false))
+            }}
+            className="px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+          >
+            SYNC ACTIVE INCIDENTS → DISCORD
+          </button>
+        </div>
+      )}
 
       {!status?.configured && (
         <div className="text-[11px] text-console-muted border border-console-border rounded p-2 space-y-1">

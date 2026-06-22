@@ -21,9 +21,12 @@ type discordHeartbeatRequest struct {
 }
 
 type discordStatusResponse struct {
-	Configured bool                      `json:"configured"`
-	Online     bool                      `json:"online"`
-	Status     *database.DiscordBotStatus `json:"status,omitempty"`
+	Configured   bool                      `json:"configured"`
+	Online       bool                      `json:"online"`
+	Status       *database.DiscordBotStatus `json:"status,omitempty"`
+	PendingTasks int                       `json:"pendingTasks"`
+	ActiveTasks  int                       `json:"activeTasks"`
+	FailedTasks  int                       `json:"failedTasks"`
 }
 
 func (h *handler) requireDiscordBotWorker(w http.ResponseWriter, r *http.Request) bool {
@@ -75,6 +78,9 @@ func (h *handler) handleGetDiscordStatus(w http.ResponseWriter, r *http.Request)
 	resp := discordStatusResponse{
 		Configured: strings.TrimSpace(h.cfg.DiscordBotWorkerToken) != "",
 	}
+	resp.PendingTasks, _ = h.db.CountDiscordIntegrationsByStatus("pending")
+	resp.ActiveTasks, _ = h.db.CountDiscordIntegrationsByStatus("active")
+	resp.FailedTasks, _ = h.db.CountDiscordIntegrationsByStatus("failed")
 	status, err := h.db.GetDiscordBotStatus()
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

@@ -95,6 +95,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Post("/internal/discord/incident-tasks/{id}/fail", handle.handleFailDiscordIncidentTask)
 		r.Post("/internal/discord/incident-tasks/{id}/stop", handle.handleStopDiscordIncidentTask)
 		r.Get("/api/v1/discord/status", handle.handleGetDiscordStatus)
+		r.Post("/api/v1/discord/reconcile-incidents", handle.handleReconcileDiscordIncidents)
 		r.Get("/api/v1/talkgroups/distinct", handle.handleListDistinctTalkgroups)
 		r.Get("/api/v1/talkgroups/settings", handle.handleListTalkgroupSettings)
 		r.Put("/api/v1/talkgroups/{talkgroup}/settings", handle.handleUpsertTalkgroupSettings)

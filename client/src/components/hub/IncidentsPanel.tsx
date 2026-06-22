@@ -149,6 +149,8 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
       })
       if (resp.discordQueued) {
         onNotify('Incident active — Discord rooms queued (bot creates channels within ~15s)')
+      } else if (resp.discordSkipReason) {
+        onNotify(`Incident active — Discord not queued: ${resp.discordSkipReason}`)
       } else if (resp.shareUrl) {
         onNotify('Incident active — player link ready')
       } else if (activate) {
@@ -209,6 +211,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
               {inc.status} · {inc.priority} · {inc.exposure}
               {inc.openedAt ? ` · opened ${fmtDateTime(inc.openedAt)}` : ''}
               {discord?.status ? ` · discord ${discord.status}` : ''}
+              {discord?.config?.error ? ` · ${discord.config.error}` : ''}
             </div>
           </div>
           <div className="flex gap-1 shrink-0 flex-wrap justify-end">
@@ -221,6 +224,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
                   api.activateIncident(inc.id)
                     .then((r) => {
                       if (r.discordQueued) onNotify('Incident activated — Discord rooms queued')
+                      else if (r.discordSkipReason) onNotify(`Discord not queued: ${r.discordSkipReason}`)
                       else if (r.shareUrl) copyShareUrl(r.shareUrl)
                       else onNotify('Incident activated')
                       return refresh()
@@ -296,7 +300,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
               </button>
             </>
           )}
-          {actions === 'full' && isActive && inc.exposure !== 'internal' && (
+          {actions === 'full' && (inc.status === 'active' || inc.status === 'monitoring') && inc.exposure !== 'internal' && (
             <>
               {(discord?.status === 'active' || discord?.status === 'pending') ? (
                 <button
@@ -321,7 +325,12 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
                     setLoading(true)
                     api.createIncidentDiscordIntegration(inc.id)
                       .then(() => { onNotify('Discord rooms + voice stream requested'); return refresh() })
-                      .catch(() => onNotify('Discord request failed — is bot online?'))
+                      .catch(async (err) => {
+                        const msg = err instanceof Error ? err.message : 'Discord request failed'
+                        onNotify(msg.includes('503') || msg.includes('not configured')
+                          ? 'Discord not linked — set DISCORD_BOT_WORKER_TOKEN on api + discord-bot'
+                          : msg)
+                      })
                       .finally(() => setLoading(false))
                   }}
                   className="px-2 py-0.5 border border-console-accent text-console-accent rounded text-[10px]"
@@ -525,6 +534,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
                   api.promoteIncidentSignal(sig.id)
                     .then((r) => {
                       if (r.discordQueued) onNotify('Incident opened — Discord rooms queued')
+                      else if (r.discordSkipReason) onNotify(`Discord not queued: ${r.discordSkipReason}`)
                       else if (r.shareUrl) copyShareUrl(r.shareUrl)
                       else onNotify('Incident opened from signal')
                       return refresh()
