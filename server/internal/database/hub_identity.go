@@ -23,7 +23,7 @@ func (d *DB) GetHubIdentity() (*HubIdentity, bool, error) {
 		       trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
 		       incident_management_enabled, incident_handler_hub_id, incident_auto_suggest,
 		       incident_auto_open, incident_watch_areas, incident_watch_point_lat,
-		       incident_watch_point_lon, created_at, updated_at
+		       incident_watch_point_lon, incident_watch_radius_km, created_at, updated_at
 		FROM hub_identity
 		WHERE id = 'local'`)
 
@@ -80,8 +80,7 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 		          trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
 		          incident_management_enabled, incident_handler_hub_id, incident_auto_suggest,
 		          incident_auto_open, incident_watch_areas, incident_watch_point_lat,
-		          incident_watch_point_lon, created_at, updated_at`,
-		identity.HubID,
+		          incident_watch_point_lon, incident_watch_radius_km, created_at, updated_at`,
 		identity.Name,
 		identity.PublicURL,
 		identity.Region,
@@ -113,7 +112,7 @@ func (d *DB) SetHubIdentityKeyPair(publicKey, privateKey string) (*HubIdentity, 
 		          trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
 		          incident_management_enabled, incident_handler_hub_id, incident_auto_suggest,
 		          incident_auto_open, incident_watch_areas, incident_watch_point_lat,
-		          incident_watch_point_lon, created_at, updated_at`, publicKey, privateKey, now)
+		          incident_watch_point_lon, incident_watch_radius_km, created_at, updated_at`, publicKey, privateKey, now)
 
 	return scanHubIdentityIncidentFields(row)
 }

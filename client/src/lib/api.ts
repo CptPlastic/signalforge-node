@@ -178,6 +178,7 @@ export type IncidentSettings = {
   incidentWatchAreas: string[]
   incidentWatchPointLat: number
   incidentWatchPointLon: number
+  incidentWatchRadiusKm: number
 }
 
 export type CreateIncidentResponse = {

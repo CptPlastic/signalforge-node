@@ -18,6 +18,7 @@ type incidentSettingsRequest struct {
 	IncidentWatchAreas        []string `json:"incidentWatchAreas"`
 	IncidentWatchPointLat     float64  `json:"incidentWatchPointLat"`
 	IncidentWatchPointLon     float64  `json:"incidentWatchPointLon"`
+	IncidentWatchRadiusKm     float64  `json:"incidentWatchRadiusKm"`
 }
 
 type createIncidentRequest struct {
@@ -159,6 +160,7 @@ func (h *handler) handleGetIncidentSettings(w http.ResponseWriter, r *http.Reque
 		"incidentWatchAreas":        identity.IncidentWatchAreas,
 		"incidentWatchPointLat":     identity.IncidentWatchPointLat,
 		"incidentWatchPointLon":     identity.IncidentWatchPointLon,
+		"incidentWatchRadiusKm":     identity.IncidentWatchRadiusKm,
 	})
 }
 
@@ -193,6 +195,9 @@ func (h *handler) handleUpdateIncidentSettings(w http.ResponseWriter, r *http.Re
 	}
 	if req.IncidentWatchPointLon != 0 {
 		updated.IncidentWatchPointLon = req.IncidentWatchPointLon
+	}
+	if req.IncidentWatchRadiusKm > 0 {
+		updated.IncidentWatchRadiusKm = req.IncidentWatchRadiusKm
 	}
 
 	saved, err := h.db.UpdateHubIncidentSettings(updated)

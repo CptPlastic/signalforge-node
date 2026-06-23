@@ -33,6 +33,7 @@ func scanHubIdentityIncidentFields(row scanner) (*HubIdentity, error) {
 		&watchAreasJSON,
 		&identity.IncidentWatchPointLat,
 		&identity.IncidentWatchPointLon,
+		&identity.IncidentWatchRadiusKm,
 		&identity.CreatedAt,
 		&identity.UpdatedAt,
 	); err != nil {
@@ -84,14 +85,15 @@ func (d *DB) UpdateHubIncidentSettings(settings HubIdentity) (*HubIdentity, erro
 			incident_watch_areas = $5::jsonb,
 			incident_watch_point_lat = $6,
 			incident_watch_point_lon = $7,
-			updated_at = $8
+			incident_watch_radius_km = $8,
+			updated_at = $9
 		WHERE id = 'local'
 		RETURNING hub_id, name, public_url, region, contact, public_key, private_key,
 		          federation_enabled, directory_validation_status, trust_level,
 		          trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
 		          incident_management_enabled, incident_handler_hub_id, incident_auto_suggest,
 		          incident_auto_open, incident_watch_areas, incident_watch_point_lat,
-		          incident_watch_point_lon, created_at, updated_at`,
+		          incident_watch_point_lon, incident_watch_radius_km, created_at, updated_at`,
 		settings.IncidentManagementEnabled,
 		strings.TrimSpace(settings.IncidentHandlerHubID),
 		settings.IncidentAutoSuggest,
@@ -99,6 +101,7 @@ func (d *DB) UpdateHubIncidentSettings(settings HubIdentity) (*HubIdentity, erro
 		watchAreasJSON,
 		settings.IncidentWatchPointLat,
 		settings.IncidentWatchPointLon,
+		settings.IncidentWatchRadiusKm,
 		now,
 	)
 	return scanHubIdentityIncidentFields(row)
@@ -598,4 +601,38 @@ func (d *DB) MatchIncidentTemplateByNWSEvent(event string) (IncidentTemplate, bo
 		}
 	}
 	return IncidentTemplate{}, false, nil
+}
+
+// ListActiveWeatherIncidents returns active incidents of type "weather" that have a radio set.
+func (d *DB) ListActiveWeatherIncidents() ([]Incident, error) {
+	rows, err := d.db.Query(incidentSelect+` WHERE status = 'active' AND incident_type = 'weather' AND radio_set_id IS NOT NULL ORDER BY updated_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Incident, 0)
+	for rows.Next() {
+		inc, err := scanIncident(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, inc)
+	}
+	return out, rows.Err()
+}
+
+// GetNWSSignalExternalIDForIncident returns the NWS external_id for a linked incident signal.
+func (d *DB) GetNWSSignalExternalIDForIncident(incidentID string) (string, bool, error) {
+	var externalID string
+	err := d.db.QueryRow(`
+		SELECT external_id FROM incident_signals
+		WHERE incident_id = $1 AND source = 'nws'
+		LIMIT 1`, incidentID).Scan(&externalID)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return externalID, true, nil
 }

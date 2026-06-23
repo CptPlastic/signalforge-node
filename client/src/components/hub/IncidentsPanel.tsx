@@ -743,6 +743,47 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
               />
             </div>
             <div>
+              <p className="text-console-muted mb-1">Watch radius (km, 0 = unlimited)</p>
+              <input
+                type="number"
+                min={0}
+                value={settingsDraft.incidentWatchRadiusKm ?? 200}
+                onChange={(e) =>
+                  setSettingsDraft({ ...settingsDraft, incidentWatchRadiusKm: parseFloat(e.target.value) || 0 })
+                }
+                className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent"
+                placeholder="200"
+              />
+            </div>
+            <div className="grid gap-2 md:grid-cols-2">
+              <div>
+                <p className="text-console-muted mb-1">Watch point latitude</p>
+                <input
+                  type="number"
+                  step="any"
+                  value={settingsDraft.incidentWatchPointLat ?? 35.5067}
+                  onChange={(e) =>
+                    setSettingsDraft({ ...settingsDraft, incidentWatchPointLat: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent"
+                  placeholder="35.5067"
+                />
+              </div>
+              <div>
+                <p className="text-console-muted mb-1">Watch point longitude</p>
+                <input
+                  type="number"
+                  step="any"
+                  value={settingsDraft.incidentWatchPointLon ?? -97.7625}
+                  onChange={(e) =>
+                    setSettingsDraft({ ...settingsDraft, incidentWatchPointLon: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent"
+                  placeholder="-97.7625"
+                />
+              </div>
+            </div>
+            <div>
               <p className="text-console-muted mb-1">Handler hub (optional)</p>
               <select
                 value={settingsDraft.incidentHandlerHubId ?? ''}
