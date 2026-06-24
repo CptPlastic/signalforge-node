@@ -32,6 +32,7 @@ type Config struct {
 	TranscriptionWorkerToken string
 	TranscriptionMinDuration float64
 	DiscordBotWorkerToken    string
+	DiscordBotInstances      []string
 	AuthBootstrapEmail       string
 	AuthBootstrapPassword    string
 	AuthAutoApproveUsers     bool
@@ -72,6 +73,7 @@ func Load() (Config, error) {
 		TranscriptionWorkerToken: strings.TrimSpace(getEnv("TRANSCRIPTION_WORKER_TOKEN", "")),
 		TranscriptionMinDuration: getFloat64Env("TRANSCRIPTION_MIN_DURATION_SECONDS", 0.75),
 		DiscordBotWorkerToken:    strings.TrimSpace(getEnv("DISCORD_BOT_WORKER_TOKEN", "")),
+		DiscordBotInstances:      parseCommaList(getEnv("DISCORD_BOT_INSTANCES", "signal1")),
 		AuthBootstrapEmail:       strings.ToLower(strings.TrimSpace(getEnv("AUTH_BOOTSTRAP_EMAIL", ""))),
 		AuthBootstrapPassword:    getEnv("AUTH_BOOTSTRAP_PASSWORD", ""),
 		AuthAutoApproveUsers:     getBoolEnv("AUTH_AUTO_APPROVE_USERS", false),
@@ -164,6 +166,21 @@ func getFloat64Env(key string, fallback float64) float64 {
 		return fallback
 	}
 	return parsed
+}
+
+func parseCommaList(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	if len(out) == 0 {
+		return []string{"signal1"}
+	}
+	return out
 }
 
 func normalizeHubTrustLevel(value string) string {

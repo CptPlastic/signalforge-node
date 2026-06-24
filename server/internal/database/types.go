@@ -257,13 +257,14 @@ type Incident struct {
 
 // IncidentIntegration links an incident to Discord or other external surfaces.
 type IncidentIntegration struct {
-	ID         string          `json:"id"`
-	IncidentID string          `json:"incidentId"`
-	Kind       string          `json:"kind"`
-	Status     string          `json:"status"`
-	Config     json.RawMessage `json:"config,omitempty"`
-	CreatedAt  int64           `json:"createdAt"`
-	UpdatedAt  int64           `json:"updatedAt"`
+	ID            string          `json:"id"`
+	IncidentID    string          `json:"incidentId"`
+	Kind          string          `json:"kind"`
+	Status        string          `json:"status"`
+	BotInstanceID string          `json:"botInstanceId,omitempty"`
+	Config        json.RawMessage `json:"config,omitempty"`
+	CreatedAt     int64           `json:"createdAt"`
+	UpdatedAt     int64           `json:"updatedAt"`
 }
 
 // IncidentSignal is an external or automated hint (NWS, IEM LSR, etc.).

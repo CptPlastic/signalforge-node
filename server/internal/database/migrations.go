@@ -335,6 +335,8 @@ func (d *DB) migrate() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_incident_integrations_incident ON incident_integrations(incident_id);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_incident_integrations_incident_kind ON incident_integrations(incident_id, kind);
+		ALTER TABLE incident_integrations ADD COLUMN IF NOT EXISTS bot_instance_id TEXT NOT NULL DEFAULT '';
+		CREATE INDEX IF NOT EXISTS idx_incident_integrations_bot_instance ON incident_integrations(bot_instance_id);
 	`)
 	return err
 }

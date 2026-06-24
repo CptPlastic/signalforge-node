@@ -20,7 +20,7 @@ type IncidentIntegrationConfig struct {
 
 func (d *DB) GetIncidentIntegration(incidentID, kind string) (IncidentIntegration, bool, error) {
 	row := d.db.QueryRow(`
-		SELECT id, incident_id, kind, status, config, created_at, updated_at
+		SELECT id, incident_id, kind, status, bot_instance_id, config, created_at, updated_at
 		FROM incident_integrations WHERE incident_id = $1 AND kind = $2`,
 		incidentID, kind,
 	)
@@ -29,7 +29,7 @@ func (d *DB) GetIncidentIntegration(incidentID, kind string) (IncidentIntegratio
 
 func (d *DB) GetIncidentIntegrationByID(id string) (IncidentIntegration, bool, error) {
 	row := d.db.QueryRow(`
-		SELECT id, incident_id, kind, status, config, created_at, updated_at
+		SELECT id, incident_id, kind, status, bot_instance_id, config, created_at, updated_at
 		FROM incident_integrations WHERE id = $1`, id,
 	)
 	return scanIncidentIntegration(row)
@@ -45,34 +45,38 @@ func (d *DB) UpsertIncidentIntegration(integration IncidentIntegration) (Inciden
 	if len(config) == 0 {
 		config = json.RawMessage(`{}`)
 	}
+	botInstanceID := strings.TrimSpace(integration.BotInstanceID)
 	row := d.db.QueryRow(`
-		INSERT INTO incident_integrations (id, incident_id, kind, status, config, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $6)
+		INSERT INTO incident_integrations (id, incident_id, kind, status, bot_instance_id, config, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
 		ON CONFLICT (incident_id, kind) DO UPDATE SET
 			status = EXCLUDED.status,
+			bot_instance_id = EXCLUDED.bot_instance_id,
 			config = EXCLUDED.config,
 			updated_at = EXCLUDED.updated_at
-		RETURNING id, incident_id, kind, status, config, created_at, updated_at`,
+		RETURNING id, incident_id, kind, status, bot_instance_id, config, created_at, updated_at`,
 		id,
 		integration.IncidentID,
 		strings.TrimSpace(integration.Kind),
 		strings.TrimSpace(integration.Status),
+		botInstanceID,
 		config,
 		now,
 	)
 	return scanIncidentIntegrationRow(row)
 }
 
-func (d *DB) ListPendingDiscordIntegrationTasks(limit int) ([]IncidentIntegration, error) {
+func (d *DB) ListPendingDiscordIntegrationTasks(botInstanceID string, limit int) ([]IncidentIntegration, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	rows, err := d.db.Query(`
-		SELECT id, incident_id, kind, status, config, created_at, updated_at
+		SELECT id, incident_id, kind, status, bot_instance_id, config, created_at, updated_at
 		FROM incident_integrations
 		WHERE kind = 'discord' AND status IN ('pending', 'stopping')
+		  AND ($1 = '' OR bot_instance_id = $1)
 		ORDER BY updated_at ASC
-		LIMIT $1`, limit)
+		LIMIT $2`, botInstanceID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -88,16 +92,17 @@ func (d *DB) ListPendingDiscordIntegrationTasks(limit int) ([]IncidentIntegratio
 	return out, rows.Err()
 }
 
-func (d *DB) ListActiveDiscordIntegrations(limit int) ([]IncidentIntegration, error) {
+func (d *DB) ListActiveDiscordIntegrations(botInstanceID string, limit int) ([]IncidentIntegration, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	rows, err := d.db.Query(`
-		SELECT id, incident_id, kind, status, config, created_at, updated_at
+		SELECT id, incident_id, kind, status, bot_instance_id, config, created_at, updated_at
 		FROM incident_integrations
 		WHERE kind = 'discord' AND status = 'active'
+		  AND ($1 = '' OR bot_instance_id = $1)
 		ORDER BY updated_at DESC
-		LIMIT $1`, limit)
+		LIMIT $2`, botInstanceID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -118,14 +123,14 @@ func (d *DB) UpdateIncidentIntegrationStatus(id, status string, config json.RawM
 	if len(config) == 0 {
 		row := d.db.QueryRow(`
 			UPDATE incident_integrations SET status = $2, updated_at = $3 WHERE id = $1
-			RETURNING id, incident_id, kind, status, config, created_at, updated_at`,
+			RETURNING id, incident_id, kind, status, bot_instance_id, config, created_at, updated_at`,
 			id, status, now,
 		)
 		return scanIncidentIntegrationRow(row)
 	}
 	row := d.db.QueryRow(`
 		UPDATE incident_integrations SET status = $2, config = $3, updated_at = $4 WHERE id = $1
-		RETURNING id, incident_id, kind, status, config, created_at, updated_at`,
+		RETURNING id, incident_id, kind, status, bot_instance_id, config, created_at, updated_at`,
 		id, status, config, now,
 	)
 	return scanIncidentIntegrationRow(row)
@@ -136,7 +141,7 @@ func (d *DB) ListFailedDiscordIntegrations(limit int) ([]IncidentIntegration, er
 		limit = 50
 	}
 	rows, err := d.db.Query(`
-		SELECT id, incident_id, kind, status, config, created_at, updated_at
+		SELECT id, incident_id, kind, status, bot_instance_id, config, created_at, updated_at
 		FROM incident_integrations
 		WHERE kind = 'discord' AND status = 'failed'
 		ORDER BY updated_at DESC
@@ -219,7 +224,7 @@ func scanIncidentIntegration(row scanner) (IncidentIntegration, bool, error) {
 func scanIncidentIntegrationRow(row scanner) (IncidentIntegration, error) {
 	var item IncidentIntegration
 	var config []byte
-	if err := row.Scan(&item.ID, &item.IncidentID, &item.Kind, &item.Status, &config, &item.CreatedAt, &item.UpdatedAt); err != nil {
+	if err := row.Scan(&item.ID, &item.IncidentID, &item.Kind, &item.Status, &item.BotInstanceID, &config, &item.CreatedAt, &item.UpdatedAt); err != nil {
 		return IncidentIntegration{}, err
 	}
 	if len(config) > 0 {

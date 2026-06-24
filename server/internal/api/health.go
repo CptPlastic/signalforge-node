@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/projectseven-co-ltd/p7-scanner/server/internal/config"
@@ -20,11 +21,12 @@ var (
 )
 
 type handler struct {
-	cfg       config.Config
-	db        *database.DB
-	hub       *hub
-	streamHub *streamHub
-	logger    *slog.Logger
+	cfg                config.Config
+	db                 *database.DB
+	hub                *hub
+	streamHub          *streamHub
+	logger             *slog.Logger
+	discordBotCounter  atomic.Int64
 }
 
 type updateManifest struct {

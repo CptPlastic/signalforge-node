@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/projectseven-co-ltd/p7-scanner/server/internal/database"
 )
+
+const stalePendingTaskSeconds = 300
 
 type incidentDiscordIntegrationResponse struct {
 	Integration *database.IncidentIntegration `json:"integration"`
@@ -70,17 +73,27 @@ func (h *handler) ensureIncidentStreamToken(incident database.Incident) (string,
 	return token, nil
 }
 
-func (h *handler) upsertDiscordIntegration(incident database.Incident, existing database.IncidentIntegration, hasExisting bool) (database.IncidentIntegration, error) {
+func (h *handler) nextDiscordBotInstance() string {
+	instances := h.cfg.DiscordBotInstances
+	if len(instances) == 0 {
+		return "signal1"
+	}
+	n := h.discordBotCounter.Add(1) - 1
+	return instances[n%int64(len(instances))]
+}
+
+func (h *handler) upsertDiscordIntegration(incident database.Incident, existing database.IncidentIntegration, hasExisting bool, botInstanceID string) (database.IncidentIntegration, error) {
 	config, err := h.buildIncidentDiscordConfig(incident)
 	if err != nil {
 		return database.IncidentIntegration{}, err
 	}
 	integration := database.IncidentIntegration{
-		ID:         existing.ID,
-		IncidentID: incident.ID,
-		Kind:       "discord",
-		Status:     "pending",
-		Config:     config,
+		ID:            existing.ID,
+		IncidentID:    incident.ID,
+		Kind:          "discord",
+		Status:        "pending",
+		BotInstanceID: botInstanceID,
+		Config:        config,
 	}
 	if hasExisting && existing.Status == "failed" {
 		integration.ID = existing.ID
@@ -121,11 +134,24 @@ func (h *handler) queueDiscordIntegrationForIncident(incidentID, userID string) 
 	}
 	if hasExisting {
 		switch existing.Status {
-		case "active", "pending", "stopping":
-			return existing.Status == "pending" || existing.Status == "active", ""
+		case "active":
+			return true, ""
+		case "stopping":
+			return false, ""
+		case "pending":
+			staleCutoff := time.Now().Unix() - stalePendingTaskSeconds
+			if existing.UpdatedAt > staleCutoff {
+				// Still fresh — another bot should pick it up.
+				return true, ""
+			}
+			// Stale pending — bot may be down; fall through to reassign.
+			h.logger.Info("reassigning stale pending discord integration",
+				"incidentId", incidentID, "integrationId", existing.ID,
+				"updatedAt", existing.UpdatedAt, "botInstanceId", existing.BotInstanceID)
 		}
 	}
-	saved, err := h.upsertDiscordIntegration(incident, existing, hasExisting)
+	botInstanceID := h.nextDiscordBotInstance()
+	saved, err := h.upsertDiscordIntegration(incident, existing, hasExisting, botInstanceID)
 	if err != nil {
 		h.logger.Error("auto queue discord integration failed", "error", err, "incidentId", incidentID)
 		return false, "could not save discord integration"
@@ -190,16 +216,26 @@ func (h *handler) handleCreateIncidentDiscordIntegration(w http.ResponseWriter, 
 	}
 	if hasExisting {
 		switch existing.Status {
-		case "active", "pending":
+		case "active":
 			writeJSON(w, http.StatusOK, incidentDiscordIntegrationResponse{Integration: &existing})
 			return
 		case "stopping":
 			http.Error(w, "discord integration is stopping", http.StatusConflict)
 			return
+		case "pending":
+			staleCutoff := time.Now().Unix() - stalePendingTaskSeconds
+			if existing.UpdatedAt > staleCutoff {
+				writeJSON(w, http.StatusOK, incidentDiscordIntegrationResponse{Integration: &existing})
+				return
+			}
+			h.logger.Info("reassigning stale pending discord integration on user request",
+				"incidentId", incidentID, "integrationId", existing.ID,
+				"updatedAt", existing.UpdatedAt, "botInstanceId", existing.BotInstanceID)
 		}
 	}
 
-	saved, err := h.upsertDiscordIntegration(incident, existing, hasExisting)
+	botInstanceID := h.nextDiscordBotInstance()
+	saved, err := h.upsertDiscordIntegration(incident, existing, hasExisting, botInstanceID)
 	if err != nil {
 		h.logger.Error("save discord integration failed", "error", err)
 		http.Error(w, "save integration", http.StatusInternalServerError)
@@ -245,7 +281,8 @@ func (h *handler) handleListDiscordIncidentTasks(w http.ResponseWriter, r *http.
 	if !h.requireDiscordBotWorker(w, r) {
 		return
 	}
-	tasks, err := h.db.ListPendingDiscordIntegrationTasks(20)
+	botInstanceID := strings.TrimSpace(r.URL.Query().Get("bot_instance_id"))
+	tasks, err := h.db.ListPendingDiscordIntegrationTasks(botInstanceID, 20)
 	if err != nil {
 		h.logger.Error("list discord incident tasks failed", "error", err)
 		http.Error(w, "list tasks", http.StatusInternalServerError)
@@ -261,7 +298,8 @@ func (h *handler) handleListActiveDiscordVoiceBridges(w http.ResponseWriter, r *
 	if !h.requireDiscordBotWorker(w, r) {
 		return
 	}
-	integrations, err := h.db.ListActiveDiscordIntegrations(50)
+	botInstanceID := strings.TrimSpace(r.URL.Query().Get("bot_instance_id"))
+	integrations, err := h.db.ListActiveDiscordIntegrations(botInstanceID, 50)
 	if err != nil {
 		h.logger.Error("list active discord integrations failed", "error", err)
 		http.Error(w, "list bridges", http.StatusInternalServerError)

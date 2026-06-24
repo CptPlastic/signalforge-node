@@ -24,8 +24,9 @@
 # With mock radio sidecar (test/staging only):
 #   docker compose --env-file .env.production -f docker-compose.plesk.yml --profile mock up -d
 #
-# Discord bot: set DISCORD_TOKEN + DISCORD_CLIENT_ID + DISCORD_GUILD_ID in stack env.
-# One stack env var DISCORD_BOT_WORKER_TOKEN is forwarded to both api and discord-bot below.
+# Discord bots (multi-instance): each bot is a separate Discord Application.
+# Create 5 apps at https://discord.com/developers/applications, get each token + client ID.
+# Set DISCORD_BOT_WORKER_TOKEN (shared, same as api) and BOT[1-5]_TOKEN / BOT[1-5]_CLIENT_ID in stack env.
 # Bot worker calls use SIGNALFORGE_API_URL=http://api:8080 (same as transcriber); HOSTED_HUB_URL is public only.
 # Slash commands register automatically on startup. Optional: WELCOME_CHANNEL_ID (needs Server Members Intent).
 # Image: ghcr.io/signalforge-org/signalforge-discord-bot
@@ -86,6 +87,8 @@ services:
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
       TRANSCRIPTION_WORKER_TOKEN: ${TRANSCRIPTION_WORKER_TOKEN:-}
       TRANSCRIPTION_MIN_DURATION_SECONDS: ${TRANSCRIPTION_MIN_DURATION_SECONDS:-0.75}
+      # Multi-bot instances for round-robin assignment (5 bots).
+      DISCORD_BOT_INSTANCES: signal1,signal2,signal3,signal4,signal5
       # Pass-through (no ${}) — Portainer stack env; avoids empty interpolation wiping env_file.
       DISCORD_BOT_WORKER_TOKEN:
       # Pass-through from stack Environment variables (no ${} — avoids wiping values and
@@ -163,25 +166,77 @@ services:
       api:
         condition: service_healthy
 
-  discord-bot:
+  bot-signal1:
     image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
     restart: unless-stopped
-    env_file:
-      - path: .env.production
-        required: false
-      - path: .env
-        required: false
     environment:
-      DISCORD_TOKEN: ${DISCORD_TOKEN:-}
-      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
-      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
-      WELCOME_CHANNEL_ID: ${WELCOME_CHANNEL_ID:-}
-      DIRECTORY_FEED_URL: ${DIRECTORY_FEED_URL:-https://signalforge.org/directory/hubs.json}
-      HOSTED_HUB_URL: ${HOSTED_HUB_URL:-${APP_BASE_URL:-https://p7hub.projectseven.us}}
-      SIGNALFORGE_API_URL: http://api:8080
-      SITE_URL: ${SITE_URL:-https://signalforge.org}
-      DISCORD_INCIDENTS_CATEGORY: ${DISCORD_INCIDENTS_CATEGORY:-// INCIDENTS}
+      DISCORD_TOKEN: ${BOT1_TOKEN:?signal1 token required}
+      DISCORD_CLIENT_ID: ${BOT1_CLIENT_ID:?signal1 client ID required}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?guild ID required}
+      DISCORD_BOT_INSTANCE_ID: signal
       DISCORD_BOT_WORKER_TOKEN:
+      SIGNALFORGE_API_URL: http://api:8080
+      HOSTED_HUB_URL: ${HOSTED_HUB_URL:-${APP_BASE_URL:-https://p7hub.projectseven.us}}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  bot-signal2:
+    image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    environment:
+      DISCORD_TOKEN: ${BOT2_TOKEN:?signal2 token required}
+      DISCORD_CLIENT_ID: ${BOT2_CLIENT_ID:?signal2 client ID required}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?guild ID required}
+      DISCORD_BOT_INSTANCE_ID: signal2
+      DISCORD_BOT_WORKER_TOKEN:
+      SIGNALFORGE_API_URL: http://api:8080
+      HOSTED_HUB_URL: ${HOSTED_HUB_URL:-${APP_BASE_URL:-https://p7hub.projectseven.us}}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  bot-signal3:
+    image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    environment:
+      DISCORD_TOKEN: ${BOT3_TOKEN:?signal3 token required}
+      DISCORD_CLIENT_ID: ${BOT3_CLIENT_ID:?signal3 client ID required}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?guild ID required}
+      DISCORD_BOT_INSTANCE_ID: signal3
+      DISCORD_BOT_WORKER_TOKEN:
+      SIGNALFORGE_API_URL: http://api:8080
+      HOSTED_HUB_URL: ${HOSTED_HUB_URL:-${APP_BASE_URL:-https://p7hub.projectseven.us}}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  bot-signal4:
+    image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    environment:
+      DISCORD_TOKEN: ${BOT4_TOKEN:?signal4 token required}
+      DISCORD_CLIENT_ID: ${BOT4_CLIENT_ID:?signal4 client ID required}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?guild ID required}
+      DISCORD_BOT_INSTANCE_ID: signal4
+      DISCORD_BOT_WORKER_TOKEN:
+      SIGNALFORGE_API_URL: http://api:8080
+      HOSTED_HUB_URL: ${HOSTED_HUB_URL:-${APP_BASE_URL:-https://p7hub.projectseven.us}}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  bot-signal5:
+    image: ${DISCORD_BOT_IMAGE:-${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-signalforge-org}/signalforge-discord-bot:${IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    environment:
+      DISCORD_TOKEN: ${BOT5_TOKEN:?signal5 token required}
+      DISCORD_CLIENT_ID: ${BOT5_CLIENT_ID:?signal5 client ID required}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?guild ID required}
+      DISCORD_BOT_INSTANCE_ID: signal5
+      DISCORD_BOT_WORKER_TOKEN:
+      SIGNALFORGE_API_URL: http://api:8080
+      HOSTED_HUB_URL: ${HOSTED_HUB_URL:-${APP_BASE_URL:-https://p7hub.projectseven.us}}
     depends_on:
       api:
         condition: service_healthy
