@@ -576,6 +576,8 @@ export const api = {
     exposure?: string
     notes?: string
     activate?: boolean
+    talkgroups?: number[]
+    talkgroupGroups?: string[]
   }) =>
     request<CreateIncidentResponse>('/api/v1/incidents', {
       method: 'POST',

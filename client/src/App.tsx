@@ -2613,6 +2613,7 @@ function App() {
                 setRsPlayingID(radioSetId)
                 setActiveView('radio-sets')
               }}
+              onRefreshRadioSets={() => api.radioSets().then(setRadioSets).catch(console.error)}
             />
           </main>
         ) : (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   api,
   ApiError,
@@ -11,6 +11,8 @@ import {
   type IncidentTemplate,
   type CreateIncidentResponse,
   type RadioSet,
+  type TalkgroupInfo,
+  type RadioSetSelectionMode,
 } from '../../lib/api'
 import { fmtDateTime } from '../../lib/format'
 
@@ -20,6 +22,7 @@ type Props = Readonly<{
   hubPeers: HubPeer[]
   onNotify: (message: string) => void
   onOpenRadioSet?: (radioSetId: string) => void
+  onRefreshRadioSets?: () => void
 }>
 
 type IncidentTab = 'active' | 'archive'
@@ -93,7 +96,7 @@ function mergeIncidentLists(primary: Incident[], fallback: Incident[]): Incident
   return merged
 }
 
-export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRadioSet }: Props) {
+export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRadioSet, onRefreshRadioSets }: Props) {
   const canManage = isAdmin || !!authUser.dispatcherEnabled
 
   const [settings, setSettings] = useState<IncidentSettings | null>(null)
@@ -113,6 +116,13 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
   const [activate, setActivate] = useState(true)
   const [showSignals, setShowSignals] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
+  const [incTGMode, setIncTGMode] = useState<RadioSetSelectionMode>('talkgroups')
+  const [incTalkgroupsData, setIncTalkgroupsData] = useState<TalkgroupInfo[]>([])
+  const [incAllGroups, setIncAllGroups] = useState<string[]>([])
+  const [incSelectedTGs, setIncSelectedTGs] = useState<number[]>([])
+  const [incSelectedGroups, setIncSelectedGroups] = useState<string[]>([])
+  const [incTGSearch, setIncTGSearch] = useState('')
+  const [incGroupSearch, setIncGroupSearch] = useState('')
   const [loadError, setLoadError] = useState('')
   const [apiTotal, setApiTotal] = useState<number | null>(null)
 
@@ -216,6 +226,34 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
     setPriority(tmpl.defaultPriority || 'normal')
   }, [templateId, templates])
 
+  useEffect(() => {
+    if (!showCreate) return
+    void api.distinctTalkgroups().then(setIncTalkgroupsData).catch(() => {})
+    void api.callGroups().then(setIncAllGroups).catch(() => {})
+    setIncTGMode('talkgroups')
+    setIncSelectedTGs([])
+    setIncSelectedGroups([])
+    setIncTGSearch('')
+    setIncGroupSearch('')
+  }, [showCreate])
+
+  const filteredIncTGs = useMemo(() => {
+    const q = incTGSearch.trim().toLowerCase()
+    if (!q) return incTalkgroupsData
+    return incTalkgroupsData.filter((tg) =>
+      [String(tg.talkgroup), tg.talkgroupLabel, tg.talkgroupGroup]
+        .join(' ')
+        .toLowerCase()
+        .includes(q),
+    )
+  }, [incTalkgroupsData, incTGSearch])
+
+  const filteredIncGroups = useMemo(() => {
+    const q = incGroupSearch.trim().toLowerCase()
+    if (!q) return incAllGroups
+    return incAllGroups.filter((g) => g.toLowerCase().includes(q))
+  }, [incAllGroups, incGroupSearch])
+
   if (!canManage) {
     return (
       <div className="border border-console-border rounded p-3 text-xs text-console-muted">
@@ -246,6 +284,16 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
     }
     setLoading(true)
     try {
+      const tgPayload: {
+        talkgroups?: number[]
+        talkgroupGroups?: string[]
+      } = {}
+      if (incTGMode === 'talkgroups' && incSelectedTGs.length > 0) {
+        tgPayload.talkgroups = incSelectedTGs
+      }
+      if (incTGMode === 'groups' && incSelectedGroups.length > 0) {
+        tgPayload.talkgroupGroups = incSelectedGroups
+      }
       const resp = await api.createIncident({
         title: title.trim(),
         templateId,
@@ -253,6 +301,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
         priority,
         notes: notes.trim(),
         activate,
+        ...tgPayload,
       })
       if (resp.discordQueued) {
         onNotify('Incident active — Discord rooms queued (bot creates channels within ~15s)')
@@ -271,7 +320,12 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
       setTitle('')
       setNotes('')
       setShowCreate(false)
+      setIncSelectedTGs([])
+      setIncSelectedGroups([])
       void refresh()
+      if (activate && onRefreshRadioSets) {
+        onRefreshRadioSets()
+      }
     } catch (err) {
       console.error(err)
       onNotify('Create failed — is incident management enabled?')
@@ -685,6 +739,111 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
             rows={2}
             className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent resize-y"
           />
+
+          <details className="border border-console-border rounded p-1.5 text-[10px]">
+            <summary className="cursor-pointer text-console-muted hover:text-console-accent">
+              Talkgroups (optional)
+            </summary>
+            <div className="mt-1.5 flex flex-col gap-1">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIncTGMode('talkgroups')}
+                  className={`px-2 py-0.5 border rounded text-[10px] uppercase tracking-wider ${
+                    incTGMode === 'talkgroups'
+                      ? 'border-console-accent text-console-accent bg-console-accent/10'
+                      : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
+                  }`}
+                >
+                  Talkgroups
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIncTGMode('groups')}
+                  className={`px-2 py-0.5 border rounded text-[10px] uppercase tracking-wider ${
+                    incTGMode === 'groups'
+                      ? 'border-console-accent text-console-accent bg-console-accent/10'
+                      : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
+                  }`}
+                >
+                  Groups
+                </button>
+              </div>
+              {incTGMode === 'talkgroups' ? (
+                <div className="flex flex-col gap-1">
+                  <input
+                    value={incTGSearch}
+                    onChange={(e) => setIncTGSearch(e.target.value)}
+                    placeholder="Filter..."
+                    className="bg-console-bg border border-console-border rounded px-2 py-0.5 text-[10px] outline-none focus:border-console-accent"
+                  />
+                  <div className="max-h-36 overflow-y-auto border border-console-border rounded divide-y divide-console-border/50">
+                    {filteredIncTGs.map((tg) => {
+                      const checked = incSelectedTGs.includes(tg.talkgroup)
+                      return (
+                        <label key={tg.talkgroup} className="flex items-center gap-2 px-2 py-0.5 cursor-pointer hover:bg-console-surface text-[10px]">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setIncSelectedTGs(
+                                checked
+                                  ? incSelectedTGs.filter((t) => t !== tg.talkgroup)
+                                  : [...incSelectedTGs, tg.talkgroup],
+                              )
+                            }
+                          />
+                          <span className="text-console-accent tabular-nums">{tg.talkgroup}</span>
+                          {tg.talkgroupLabel && <span>{tg.talkgroupLabel}</span>}
+                          {tg.talkgroupGroup && <span className="text-console-muted">{tg.talkgroupGroup}</span>}
+                        </label>
+                      )
+                    })}
+                    {incTalkgroupsData.length === 0 && (
+                      <p className="text-[10px] text-console-muted px-2 py-1">No talkgroups seen yet</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  <input
+                    value={incGroupSearch}
+                    onChange={(e) => setIncGroupSearch(e.target.value)}
+                    placeholder="Filter..."
+                    className="bg-console-bg border border-console-border rounded px-2 py-0.5 text-[10px] outline-none focus:border-console-accent"
+                  />
+                  <p className="text-[10px] text-console-muted">
+                    Dynamic playset — new talkgroups in these groups are included automatically.
+                  </p>
+                  <div className="max-h-36 overflow-y-auto border border-console-border rounded divide-y divide-console-border/50">
+                    {filteredIncGroups.map((group) => {
+                      const checked = incSelectedGroups.includes(group)
+                      return (
+                        <label key={group} className="flex items-center gap-2 px-2 py-0.5 cursor-pointer hover:bg-console-surface text-[10px]">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setIncSelectedGroups(
+                                checked
+                                  ? incSelectedGroups.filter((g) => g !== group)
+                                  : [...incSelectedGroups, group],
+                              )
+                            }
+                          />
+                          <span>{group}</span>
+                        </label>
+                      )
+                    })}
+                    {incAllGroups.length === 0 && (
+                      <p className="text-[10px] text-console-muted px-2 py-1">No groups seen yet</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </details>
+
           <label className="flex items-center gap-2 text-console-muted">
             <input type="checkbox" checked={activate} onChange={(e) => setActivate(e.target.checked)} />
             Activate immediately

@@ -23,13 +23,15 @@ type incidentSettingsRequest struct {
 }
 
 type createIncidentRequest struct {
-	Title      string `json:"title"`
-	TemplateID string `json:"templateId"`
-	Type       string `json:"type"`
-	Priority   string `json:"priority"`
-	Exposure   string `json:"exposure"`
-	Notes      string `json:"notes"`
-	Activate   bool   `json:"activate"`
+	Title           string   `json:"title"`
+	TemplateID      string   `json:"templateId"`
+	Type            string   `json:"type"`
+	Priority        string   `json:"priority"`
+	Exposure        string   `json:"exposure"`
+	Notes           string   `json:"notes"`
+	Activate        bool     `json:"activate"`
+	Talkgroups      []int    `json:"talkgroups,omitempty"`
+	TalkgroupGroups []string `json:"talkgroupGroups,omitempty"`
 }
 
 type incidentResponse struct {
@@ -346,11 +348,21 @@ func (h *handler) createIncidentFromTemplate(user authUser, req createIncidentRe
 	if len(setName) > 120 {
 		setName = setName[:120]
 	}
+	talkgroups := tmpl.Talkgroups
+	talkgroupGroups := tmpl.TalkgroupGroups
 	selectionMode := tmpl.SelectionMode
+	if len(req.Talkgroups) > 0 {
+		talkgroups = req.Talkgroups
+		selectionMode = "talkgroups"
+	}
+	if len(req.TalkgroupGroups) > 0 {
+		talkgroupGroups = req.TalkgroupGroups
+		selectionMode = "groups"
+	}
 	if selectionMode == "" {
 		selectionMode = "groups"
 	}
-	rs, err := h.db.CreateRadioSet(user.ID, setName, selectionMode, tmpl.Talkgroups, tmpl.TalkgroupGroups)
+	rs, err := h.db.CreateRadioSet(user.ID, setName, selectionMode, talkgroups, talkgroupGroups)
 	if err != nil {
 		return incidentResponse{}, err
 	}
