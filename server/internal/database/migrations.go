@@ -259,6 +259,7 @@ func (d *DB) migrate() error {
 		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS incident_watch_point_lat DOUBLE PRECISION NOT NULL DEFAULT 35.5067;
 		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS incident_watch_point_lon DOUBLE PRECISION NOT NULL DEFAULT -97.7625;
 		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS incident_watch_radius_km DOUBLE PRECISION NOT NULL DEFAULT 200;
+		ALTER TABLE hub_identity ADD COLUMN IF NOT EXISTS incident_system_labels JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 		CREATE TABLE IF NOT EXISTS incident_templates (
 			id                  TEXT PRIMARY KEY,

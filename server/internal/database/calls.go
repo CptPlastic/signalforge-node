@@ -252,8 +252,45 @@ func (d *DB) ListCalls(params ListCallsParams) ([]Call, error) {
 	return calls, rows.Err()
 }
 
-// GetRecentCallsForTalkgroupGroups returns call metadata for recent calls whose
-// talkgroup_group is in groups, oldest-first, for public player seeding.
+func (d *DB) ListDistinctTalkgroupsForGroups(groups []string, systemLabels []string) ([]int, error) {
+	if len(groups) == 0 {
+		return nil, nil
+	}
+	args := make([]any, 0, len(groups)+len(systemLabels))
+	ph := make([]string, len(groups))
+	for i, g := range groups {
+		ph[i] = fmt.Sprintf("$%d", i+1)
+		args = append(args, g)
+	}
+	q := fmt.Sprintf(
+		`SELECT DISTINCT talkgroup FROM calls WHERE talkgroup_group IN (%s)`,
+		strings.Join(ph, ","),
+	)
+	if len(systemLabels) > 0 {
+		slPh := make([]string, len(systemLabels))
+		for i, sl := range systemLabels {
+			slPh[i] = fmt.Sprintf("$%d", len(groups)+i+1)
+			args = append(args, sl)
+		}
+		q += fmt.Sprintf(` AND system_label IN (%s)`, strings.Join(slPh, ","))
+	}
+	q += ` ORDER BY talkgroup`
+	rows, err := d.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := make([]int, 0)
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (d *DB) GetRecentCallsForTalkgroupGroups(userID string, groups []string, limit int) ([]Call, error) {
 	if len(groups) == 0 {
 		return nil, nil

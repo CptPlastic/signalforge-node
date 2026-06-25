@@ -11,6 +11,7 @@ import (
 func scanHubIdentityIncidentFields(row scanner) (*HubIdentity, error) {
 	var identity HubIdentity
 	var watchAreasJSON []byte
+	var systemLabelsJSON []byte
 	if err := row.Scan(
 		&identity.HubID,
 		&identity.Name,
@@ -34,12 +35,14 @@ func scanHubIdentityIncidentFields(row scanner) (*HubIdentity, error) {
 		&identity.IncidentWatchPointLat,
 		&identity.IncidentWatchPointLon,
 		&identity.IncidentWatchRadiusKm,
+		&systemLabelsJSON,
 		&identity.CreatedAt,
 		&identity.UpdatedAt,
 	); err != nil {
 		return nil, err
 	}
 	identity.IncidentWatchAreas = decodeStringJSONArray(watchAreasJSON)
+	identity.IncidentSystemLabels = decodeStringJSONArray(systemLabelsJSON)
 	return &identity, nil
 }
 
@@ -75,6 +78,10 @@ func (d *DB) UpdateHubIncidentSettings(settings HubIdentity) (*HubIdentity, erro
 	if err != nil {
 		return nil, err
 	}
+	systemLabelsJSON, err := encodeStringJSONArray(settings.IncidentSystemLabels)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().Unix()
 	row := d.db.QueryRow(`
 		UPDATE hub_identity SET
@@ -86,14 +93,16 @@ func (d *DB) UpdateHubIncidentSettings(settings HubIdentity) (*HubIdentity, erro
 			incident_watch_point_lat = $6,
 			incident_watch_point_lon = $7,
 			incident_watch_radius_km = $8,
-			updated_at = $9
+			incident_system_labels = $9::jsonb,
+			updated_at = $10
 		WHERE id = 'local'
 		RETURNING hub_id, name, public_url, region, contact, public_key, private_key,
 		          federation_enabled, directory_validation_status, trust_level,
 		          trust_issuer_hub_id, trust_certificate, trust_expires_at, trust_verified_at,
 		          incident_management_enabled, incident_handler_hub_id, incident_auto_suggest,
 		          incident_auto_open, incident_watch_areas, incident_watch_point_lat,
-		          incident_watch_point_lon, incident_watch_radius_km, created_at, updated_at`,
+		          incident_watch_point_lon, incident_watch_radius_km, incident_system_labels,
+		          created_at, updated_at`,
 		settings.IncidentManagementEnabled,
 		strings.TrimSpace(settings.IncidentHandlerHubID),
 		settings.IncidentAutoSuggest,
@@ -102,6 +111,7 @@ func (d *DB) UpdateHubIncidentSettings(settings HubIdentity) (*HubIdentity, erro
 		settings.IncidentWatchPointLat,
 		settings.IncidentWatchPointLon,
 		settings.IncidentWatchRadiusKm,
+		systemLabelsJSON,
 		now,
 	)
 	return scanHubIdentityIncidentFields(row)

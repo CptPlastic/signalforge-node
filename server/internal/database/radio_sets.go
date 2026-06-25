@@ -218,6 +218,22 @@ func (d *DB) UpdateRadioSet(id, userID, name, selectionMode string, talkgroups [
 	return nil
 }
 
+// SetRadioSetTalkgroups replaces only the talkgroups list on an existing radio set
+// without changing selection_mode or talkgroup_groups.
+func (d *DB) SetRadioSetTalkgroups(id string, talkgroups []int) error {
+	if talkgroups == nil {
+		talkgroups = []int{}
+	}
+	raw, err := json.Marshal(talkgroups)
+	if err != nil {
+		return err
+	}
+	_, err = d.db.Exec(
+		`UPDATE radio_sets SET talkgroups = $1, updated_at = $2 WHERE id = $3`,
+		string(raw), time.Now().Unix(), id)
+	return err
+}
+
 // DeleteRadioSet removes a set by ID scoped to the given user.
 func (d *DB) DeleteRadioSet(id, userID string) error {
 	res, err := d.db.Exec(`DELETE FROM radio_sets WHERE id = $1 AND user_id = $2`, id, userID)

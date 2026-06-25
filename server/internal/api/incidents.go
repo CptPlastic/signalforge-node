@@ -19,6 +19,7 @@ type incidentSettingsRequest struct {
 	IncidentWatchPointLat     float64  `json:"incidentWatchPointLat"`
 	IncidentWatchPointLon     float64  `json:"incidentWatchPointLon"`
 	IncidentWatchRadiusKm     float64  `json:"incidentWatchRadiusKm"`
+	IncidentSystemLabels      []string `json:"incidentSystemLabels"`
 }
 
 type createIncidentRequest struct {
@@ -161,6 +162,7 @@ func (h *handler) handleGetIncidentSettings(w http.ResponseWriter, r *http.Reque
 		"incidentWatchPointLat":     identity.IncidentWatchPointLat,
 		"incidentWatchPointLon":     identity.IncidentWatchPointLon,
 		"incidentWatchRadiusKm":     identity.IncidentWatchRadiusKm,
+		"incidentSystemLabels":      identity.IncidentSystemLabels,
 	})
 }
 
@@ -198,6 +200,9 @@ func (h *handler) handleUpdateIncidentSettings(w http.ResponseWriter, r *http.Re
 	}
 	if req.IncidentWatchRadiusKm > 0 {
 		updated.IncidentWatchRadiusKm = req.IncidentWatchRadiusKm
+	}
+	if req.IncidentSystemLabels != nil {
+		updated.IncidentSystemLabels = req.IncidentSystemLabels
 	}
 
 	saved, err := h.db.UpdateHubIncidentSettings(updated)
@@ -303,7 +308,7 @@ func (h *handler) handleListIncidentSignals(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, signals)
 }
 
-func (h *handler) createIncidentFromTemplate(user authUser, req createIncidentRequest, status string, activate bool) (incidentResponse, error) {
+func (h *handler) createIncidentFromTemplate(user authUser, req createIncidentRequest, status string, activate bool, systemLabels []string) (incidentResponse, error) {
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
 		return incidentResponse{}, fmt.Errorf("title is required")
@@ -348,6 +353,19 @@ func (h *handler) createIncidentFromTemplate(user authUser, req createIncidentRe
 	rs, err := h.db.CreateRadioSet(user.ID, setName, selectionMode, tmpl.Talkgroups, tmpl.TalkgroupGroups)
 	if err != nil {
 		return incidentResponse{}, err
+	}
+
+	if rs.IsGroupsMode() && len(rs.TalkgroupGroups) > 0 && len(rs.Talkgroups) == 0 {
+		tgIDs, resolveErr := h.db.ListDistinctTalkgroupsForGroups(rs.TalkgroupGroups, systemLabels)
+		if resolveErr != nil {
+			h.logger.Warn("resolve talkgroups from groups failed", "error", resolveErr, "radioSetId", rs.ID, "groups", rs.TalkgroupGroups)
+		} else if len(tgIDs) > 0 {
+			if updateErr := h.db.SetRadioSetTalkgroups(rs.ID, tgIDs); updateErr != nil {
+				h.logger.Warn("set radio set talkgroups failed", "error", updateErr, "radioSetId", rs.ID)
+			} else {
+				rs.Talkgroups = tgIDs
+			}
+		}
 	}
 
 	incident, err := h.db.CreateIncident(database.Incident{
@@ -404,7 +422,11 @@ func (h *handler) handleCreateIncident(w http.ResponseWriter, r *http.Request) {
 	if req.Activate {
 		status = "active"
 	}
-	resp, err := h.createIncidentFromTemplate(user, req, status, req.Activate)
+	var systemLabels []string
+	if identity, err := h.ensureHubIdentity(); err == nil {
+		systemLabels = identity.IncidentSystemLabels
+	}
+	resp, err := h.createIncidentFromTemplate(user, req, status, req.Activate, systemLabels)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -550,7 +572,11 @@ func (h *handler) handlePromoteIncidentSignal(w http.ResponseWriter, r *http.Req
 		Notes:      signal.Detail,
 		Activate:   true,
 	}
-	resp, err := h.createIncidentFromTemplate(user, req, "active", true)
+	var systemLabels []string
+	if identity, err := h.ensureHubIdentity(); err == nil {
+		systemLabels = identity.IncidentSystemLabels
+	}
+	resp, err := h.createIncidentFromTemplate(user, req, "active", true, systemLabels)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

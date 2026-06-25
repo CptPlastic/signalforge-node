@@ -26,6 +26,7 @@ type HubIdentity struct {
 	IncidentWatchPointLat     float64  `json:"incidentWatchPointLat"`
 	IncidentWatchPointLon     float64  `json:"incidentWatchPointLon"`
 	IncidentWatchRadiusKm     float64  `json:"incidentWatchRadiusKm"`
+	IncidentSystemLabels      []string `json:"incidentSystemLabels"`
 	CreatedAt                 int64    `json:"createdAt"`
 	UpdatedAt                 int64    `json:"updatedAt"`
 }
