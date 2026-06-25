@@ -194,6 +194,7 @@ func (h *handler) handleCallUpload(w http.ResponseWriter, r *http.Request) {
 
 	h.broadcastCall(call, metricsSourceID)
 	h.streamHub.push(call, audio)
+	h.addCallTalkgroupToRadioSets(call)
 
 	// SDRTrunk checks the response body for this exact string to confirm success.
 	// Returning JSON causes TEMPORARY_BROADCAST_ERROR even on HTTP 200.

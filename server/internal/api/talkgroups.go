@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -96,38 +98,29 @@ func (h *handler) handleDeleteTalkgroup(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *handler) startTalkgroupResolutionLoop() {
+	h.resolveRadioSetTalkgroups()
 	go func() {
-		timer := time.NewTimer(talkgroupResolutionInterval)
-		defer timer.Stop()
-		for {
-			<-timer.C
+		ticker := time.NewTicker(talkgroupResolutionInterval)
+		defer ticker.Stop()
+		for range ticker.C {
 			h.resolveRadioSetTalkgroups()
-			timer.Reset(talkgroupResolutionInterval)
 		}
 	}()
 }
 
 func (h *handler) resolveRadioSetTalkgroups() {
-	identity, found, err := h.db.GetHubIdentity()
-	if err != nil {
-		h.logger.Error("load hub identity for talkgroup resolution failed", "error", err)
-		return
-	}
-	var systemLabels []string
-	if found {
-		systemLabels = identity.IncidentSystemLabels
-	}
-
 	sets, err := h.db.ListAllRadioSets()
 	if err != nil {
 		h.logger.Error("list radio sets for talkgroup resolution failed", "error", err)
 		return
 	}
+	resolved := 0
 	for _, rs := range sets {
 		if !rs.IsGroupsMode() || len(rs.TalkgroupGroups) == 0 {
 			continue
 		}
-		tgIDs, resolveErr := h.db.ListDistinctTalkgroupsForGroups(rs.TalkgroupGroups, systemLabels)
+		resolved++
+		tgIDs, resolveErr := h.db.ListDistinctTalkgroupsForGroups(rs.TalkgroupGroups, nil)
 		if resolveErr != nil {
 			h.logger.Warn("talkgroup resolution failed for radio set",
 				slog.String("radioSetId", rs.ID),
@@ -151,6 +144,8 @@ func (h *handler) resolveRadioSetTalkgroups() {
 				slog.Int("count", len(tgIDs)))
 		}
 	}
+	h.logger.Debug("talkgroup resolution cycle done",
+		slog.Int("radioSetsInGroupsMode", resolved))
 }
 
 func intSliceEqual(a, b []int) bool {
@@ -163,6 +158,59 @@ func intSliceEqual(a, b []int) bool {
 		}
 	}
 	return true
+}
+
+func intSliceContains(s []int, v int) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *handler) addCallTalkgroupToRadioSets(call *database.Call) {
+	if call.TalkgroupGroup == "" {
+		return
+	}
+	sets, err := h.db.ListAllRadioSets()
+	if err != nil {
+		h.logger.Warn("list radio sets for call talkgroup failed", "error", err)
+		return
+	}
+	for _, rs := range sets {
+		if !rs.IsGroupsMode() || len(rs.TalkgroupGroups) == 0 {
+			continue
+		}
+		matched := false
+		callGroup := strings.TrimSpace(strings.ToLower(call.TalkgroupGroup))
+		for _, g := range rs.TalkgroupGroups {
+			if strings.TrimSpace(strings.ToLower(g)) == callGroup {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		if intSliceContains(rs.Talkgroups, call.Talkgroup) {
+			continue
+		}
+		newTGs := append(append([]int{}, rs.Talkgroups...), call.Talkgroup)
+		sort.Ints(newTGs)
+		if updateErr := h.db.SetRadioSetTalkgroups(rs.ID, newTGs); updateErr != nil {
+			h.logger.Warn("add call talkgroup to radio set failed",
+				slog.String("radioSetId", rs.ID),
+				slog.Int("talkgroup", call.Talkgroup),
+				slog.String("label", call.TalkgroupLabel),
+				slog.Any("error", updateErr))
+		} else {
+			h.logger.Info("added call talkgroup to radio set",
+				slog.String("radioSetId", rs.ID),
+				slog.Int("talkgroup", call.Talkgroup),
+				slog.String("label", call.TalkgroupLabel))
+		}
+	}
 }
 
 func (h *handler) handleListDistinctTalkgroups(w http.ResponseWriter, r *http.Request) {

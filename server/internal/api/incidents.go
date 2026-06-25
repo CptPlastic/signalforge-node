@@ -308,7 +308,7 @@ func (h *handler) handleListIncidentSignals(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, signals)
 }
 
-func (h *handler) createIncidentFromTemplate(user authUser, req createIncidentRequest, status string, activate bool, systemLabels []string) (incidentResponse, error) {
+func (h *handler) createIncidentFromTemplate(user authUser, req createIncidentRequest, status string, activate bool) (incidentResponse, error) {
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
 		return incidentResponse{}, fmt.Errorf("title is required")
@@ -353,19 +353,6 @@ func (h *handler) createIncidentFromTemplate(user authUser, req createIncidentRe
 	rs, err := h.db.CreateRadioSet(user.ID, setName, selectionMode, tmpl.Talkgroups, tmpl.TalkgroupGroups)
 	if err != nil {
 		return incidentResponse{}, err
-	}
-
-	if rs.IsGroupsMode() && len(rs.TalkgroupGroups) > 0 && len(rs.Talkgroups) == 0 {
-		tgIDs, resolveErr := h.db.ListDistinctTalkgroupsForGroups(rs.TalkgroupGroups, systemLabels)
-		if resolveErr != nil {
-			h.logger.Warn("resolve talkgroups from groups failed", "error", resolveErr, "radioSetId", rs.ID, "groups", rs.TalkgroupGroups)
-		} else if len(tgIDs) > 0 {
-			if updateErr := h.db.SetRadioSetTalkgroups(rs.ID, tgIDs); updateErr != nil {
-				h.logger.Warn("set radio set talkgroups failed", "error", updateErr, "radioSetId", rs.ID)
-			} else {
-				rs.Talkgroups = tgIDs
-			}
-		}
 	}
 
 	incident, err := h.db.CreateIncident(database.Incident{
@@ -422,11 +409,7 @@ func (h *handler) handleCreateIncident(w http.ResponseWriter, r *http.Request) {
 	if req.Activate {
 		status = "active"
 	}
-	var systemLabels []string
-	if identity, err := h.ensureHubIdentity(); err == nil {
-		systemLabels = identity.IncidentSystemLabels
-	}
-	resp, err := h.createIncidentFromTemplate(user, req, status, req.Activate, systemLabels)
+	resp, err := h.createIncidentFromTemplate(user, req, status, req.Activate)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -572,11 +555,7 @@ func (h *handler) handlePromoteIncidentSignal(w http.ResponseWriter, r *http.Req
 		Notes:      signal.Detail,
 		Activate:   true,
 	}
-	var systemLabels []string
-	if identity, err := h.ensureHubIdentity(); err == nil {
-		systemLabels = identity.IncidentSystemLabels
-	}
-	resp, err := h.createIncidentFromTemplate(user, req, "active", true, systemLabels)
+	resp, err := h.createIncidentFromTemplate(user, req, "active", true)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

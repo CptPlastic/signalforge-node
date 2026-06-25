@@ -471,17 +471,6 @@ func (h *handler) maybeAutoCreateIncidentFromSignal(identity *database.HubIdenti
 		return err
 	}
 
-	if selectionMode == "groups" && len(groups) > 0 && len(tgs) == 0 {
-		tgIDs, resolveErr := h.db.ListDistinctTalkgroupsForGroups(groups, identity.IncidentSystemLabels)
-		if resolveErr != nil {
-			h.logger.Warn("resolve talkgroups from groups failed", "error", resolveErr, "radioSetId", rs.ID, "groups", groups)
-		} else if len(tgIDs) > 0 {
-			if updateErr := h.db.SetRadioSetTalkgroups(rs.ID, tgIDs); updateErr != nil {
-				h.logger.Warn("set radio set talkgroups failed", "error", updateErr, "radioSetId", rs.ID)
-			}
-		}
-	}
-
 	incident, err := h.db.CreateIncident(database.Incident{
 		Title:          signal.Title,
 		IncidentType:   incidentType,
