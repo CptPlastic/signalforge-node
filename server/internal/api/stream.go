@@ -43,6 +43,7 @@ type streamChunk struct {
 
 type streamListener struct {
 	ownerUserID     string
+	radioSetID      string
 	talkgroups      map[int]struct{}
 	talkgroupGroups map[string]struct{}
 	sourceIDs       map[string]struct{}
@@ -177,7 +178,7 @@ func (l *streamListener) matchesCall(call *database.Call) bool {
 
 // subscribe registers a listener. Returns a receive-only channel and an
 // unsubscribe function that must be called (typically via defer).
-func (sh *streamHub) subscribe(ownerUserID string, talkgroups []int, talkgroupGroups []string, sourceIDs []string) (<-chan streamChunk, func()) {
+func (sh *streamHub) subscribe(ownerUserID string, radioSetID string, talkgroups []int, talkgroupGroups []string, sourceIDs []string) (<-chan streamChunk, func()) {
 	tgSet := make(map[int]struct{}, len(talkgroups))
 	for _, tg := range talkgroups {
 		tgSet[tg] = struct{}{}
@@ -198,6 +199,7 @@ func (sh *streamHub) subscribe(ownerUserID string, talkgroups []int, talkgroupGr
 	ch := make(chan streamChunk, 32)
 	l := &streamListener{
 		ownerUserID:     ownerUserID,
+		radioSetID:      radioSetID,
 		talkgroups:      tgSet,
 		talkgroupGroups: groupSet,
 		sourceIDs:       sourceIDSet,
@@ -217,6 +219,34 @@ func (sh *streamHub) subscribe(ownerUserID string, talkgroups []int, talkgroupGr
 				close(ch)
 				return
 			}
+		}
+	}
+}
+
+// updateRadioSetTalkgroups replaces the talkgroup and group maps for all listeners
+// associated with the given radio set. This is called when the radio set's talkgroup
+// configuration changes after a listener's WebSocket has already been established
+// (e.g., a new talkgroup is added via addCallTalkgroupToRadioSets or the background
+// resolution loop discovers new talkgroups for a groups-mode radio set).
+func (sh *streamHub) updateRadioSetTalkgroups(radioSetID string, talkgroups []int, talkgroupGroups []string) {
+	tgSet := make(map[int]struct{}, len(talkgroups))
+	for _, tg := range talkgroups {
+		tgSet[tg] = struct{}{}
+	}
+	groupSet := make(map[string]struct{}, len(talkgroupGroups))
+	for _, g := range talkgroupGroups {
+		g = strings.TrimSpace(g)
+		if g != "" {
+			groupSet[normalizeTalkgroupGroup(g)] = struct{}{}
+		}
+	}
+
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	for _, l := range sh.listeners {
+		if l.radioSetID == radioSetID {
+			l.talkgroups = tgSet
+			l.talkgroupGroups = groupSet
 		}
 	}
 }
@@ -289,7 +319,7 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 	subscribedTalkgroups, subscribedGroups := publicStreamSubscription(rs)
 
 	// Subscribe before seeding so no live calls are missed during the seed phase.
-	ch, unsubscribe := h.streamHub.subscribe(rs.UserID, subscribedTalkgroups, subscribedGroups, sourceIDs)
+	ch, unsubscribe := h.streamHub.subscribe(rs.UserID, rs.ID, subscribedTalkgroups, subscribedGroups, sourceIDs)
 	defer unsubscribe()
 
 	wantMP3 := strings.EqualFold(r.URL.Query().Get("format"), "mp3")

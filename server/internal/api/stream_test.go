@@ -10,9 +10,9 @@ import (
 
 func TestStreamHubPushDeliversToMultipleSourceMatchedListeners(t *testing.T) {
 	hub := newStreamHub(slog.Default())
-	first, unsubscribeFirst := hub.subscribe("owner-a", []int{101}, nil, []string{"src-main"})
+	first, unsubscribeFirst := hub.subscribe("owner-a", "", []int{101}, nil, []string{"src-main"})
 	defer unsubscribeFirst()
-	second, unsubscribeSecond := hub.subscribe("owner-a", []int{101}, nil, []string{"src-main"})
+	second, unsubscribeSecond := hub.subscribe("owner-a", "", []int{101}, nil, []string{"src-main"})
 	defer unsubscribeSecond()
 
 	hub.push(&database.Call{ID: 42, SourceID: "src-main", Talkgroup: 101, AudioType: "audio/mpeg"}, []byte("audio"))
@@ -23,11 +23,11 @@ func TestStreamHubPushDeliversToMultipleSourceMatchedListeners(t *testing.T) {
 
 func TestStreamHubPushFiltersByTalkgroupAndSource(t *testing.T) {
 	hub := newStreamHub(slog.Default())
-	wrongTalkgroup, unsubscribeWrongTalkgroup := hub.subscribe("owner-a", []int{202}, nil, []string{"src-main"})
+	wrongTalkgroup, unsubscribeWrongTalkgroup := hub.subscribe("owner-a", "", []int{202}, nil, []string{"src-main"})
 	defer unsubscribeWrongTalkgroup()
-	wrongSource, unsubscribeWrongSource := hub.subscribe("owner-a", []int{101}, nil, []string{"src-other"})
+	wrongSource, unsubscribeWrongSource := hub.subscribe("owner-a", "", []int{101}, nil, []string{"src-other"})
 	defer unsubscribeWrongSource()
-	matched, unsubscribeMatched := hub.subscribe("owner-a", []int{101}, nil, []string{"src-main"})
+	matched, unsubscribeMatched := hub.subscribe("owner-a", "", []int{101}, nil, []string{"src-main"})
 	defer unsubscribeMatched()
 
 	hub.push(&database.Call{ID: 7, SourceID: "src-main", Talkgroup: 101}, []byte("audio"))
@@ -39,9 +39,9 @@ func TestStreamHubPushFiltersByTalkgroupAndSource(t *testing.T) {
 
 func TestStreamHubPushMatchesTalkgroupGroup(t *testing.T) {
 	hub := newStreamHub(slog.Default())
-	matched, unsubscribeMatched := hub.subscribe("owner-a", nil, []string{"FIRE"}, []string{"src-main"})
+	matched, unsubscribeMatched := hub.subscribe("owner-a", "", nil, []string{"FIRE"}, []string{"src-main"})
 	defer unsubscribeMatched()
-	unmatched, unsubscribeUnmatched := hub.subscribe("owner-a", nil, []string{"POLICE"}, []string{"src-main"})
+	unmatched, unsubscribeUnmatched := hub.subscribe("owner-a", "", nil, []string{"POLICE"}, []string{"src-main"})
 	defer unsubscribeUnmatched()
 
 	hub.push(&database.Call{ID: 11, SourceID: "src-main", Talkgroup: 5001, TalkgroupGroup: "FIRE"}, []byte("audio"))
@@ -52,7 +52,7 @@ func TestStreamHubPushMatchesTalkgroupGroup(t *testing.T) {
 
 func TestStreamHubPushStillMatchesCallOwner(t *testing.T) {
 	hub := newStreamHub(slog.Default())
-	ch, unsubscribe := hub.subscribe("owner-a", []int{303}, nil, nil)
+	ch, unsubscribe := hub.subscribe("owner-a", "", []int{303}, nil, nil)
 	defer unsubscribe()
 
 	hub.push(&database.Call{ID: 9, UserID: "owner-a", Talkgroup: 303}, []byte("audio"))

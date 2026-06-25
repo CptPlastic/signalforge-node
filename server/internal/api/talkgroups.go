@@ -142,6 +142,7 @@ func (h *handler) resolveRadioSetTalkgroups() {
 			h.logger.Info("auto-resolved talkgroups for radio set",
 				slog.String("radioSetId", rs.ID),
 				slog.Int("count", len(tgIDs)))
+			h.streamHub.updateRadioSetTalkgroups(rs.ID, tgIDs, rs.TalkgroupGroups)
 		}
 	}
 	h.logger.Debug("talkgroup resolution cycle done",
@@ -209,6 +210,7 @@ func (h *handler) addCallTalkgroupToRadioSets(call *database.Call) {
 				slog.String("radioSetId", rs.ID),
 				slog.Int("talkgroup", call.Talkgroup),
 				slog.String("label", call.TalkgroupLabel))
+			h.streamHub.updateRadioSetTalkgroups(rs.ID, newTGs, rs.TalkgroupGroups)
 		}
 	}
 }

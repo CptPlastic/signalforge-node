@@ -87,7 +87,7 @@ func TestPublicCallMetaFromCallRFCANARY(t *testing.T) {
 func TestStreamHubPushDeliversPTTOnVirtualTalkgroup(t *testing.T) {
 	hub := newStreamHub(slog.Default())
 	pttTG := 9000015
-	ch, unsubscribe := hub.subscribe("owner-a", []int{101, pttTG}, []string{"PTT"}, []string{"src-main"})
+	ch, unsubscribe := hub.subscribe("owner-a", "", []int{101, pttTG}, []string{"PTT"}, []string{"src-main"})
 	defer unsubscribe()
 
 	hub.push(&database.Call{

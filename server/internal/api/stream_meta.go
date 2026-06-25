@@ -178,7 +178,7 @@ func (h *handler) handlePublicWSMeta(w http.ResponseWriter, r *http.Request) {
 
 	subscribedTalkgroups, subscribedGroups := publicStreamSubscription(rs)
 
-	ch, unsubscribe := h.streamHub.subscribe(rs.UserID, subscribedTalkgroups, subscribedGroups, sourceIDs)
+	ch, unsubscribe := h.streamHub.subscribe(rs.UserID, rs.ID, subscribedTalkgroups, subscribedGroups, sourceIDs)
 	defer unsubscribe()
 
 	sourceLabels := make(map[string]string)
