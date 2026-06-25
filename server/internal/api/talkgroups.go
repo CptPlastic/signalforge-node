@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -9,6 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/projectseven-co-ltd/p7-scanner/server/internal/database"
 )
+
+const talkgroupResolutionInterval = 60 * time.Second
 
 func (h *handler) handleListTalkgroupSettings(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAuthenticated(w, r); !ok {
@@ -90,6 +93,76 @@ func (h *handler) handleDeleteTalkgroup(w http.ResponseWriter, r *http.Request) 
 
 	_ = h.db.AppendAuditLog(admin.ID, "admin.talkgroup_deleted", "talkgroup", strconv.Itoa(talkgroup), map[string]any{"callsDeleted": deleted})
 	writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "talkgroup": talkgroup, "callsDeleted": deleted})
+}
+
+func (h *handler) startTalkgroupResolutionLoop() {
+	go func() {
+		timer := time.NewTimer(talkgroupResolutionInterval)
+		defer timer.Stop()
+		for {
+			<-timer.C
+			h.resolveRadioSetTalkgroups()
+			timer.Reset(talkgroupResolutionInterval)
+		}
+	}()
+}
+
+func (h *handler) resolveRadioSetTalkgroups() {
+	identity, found, err := h.db.GetHubIdentity()
+	if err != nil {
+		h.logger.Error("load hub identity for talkgroup resolution failed", "error", err)
+		return
+	}
+	var systemLabels []string
+	if found {
+		systemLabels = identity.IncidentSystemLabels
+	}
+
+	sets, err := h.db.ListAllRadioSets()
+	if err != nil {
+		h.logger.Error("list radio sets for talkgroup resolution failed", "error", err)
+		return
+	}
+	for _, rs := range sets {
+		if !rs.IsGroupsMode() || len(rs.TalkgroupGroups) == 0 {
+			continue
+		}
+		tgIDs, resolveErr := h.db.ListDistinctTalkgroupsForGroups(rs.TalkgroupGroups, systemLabels)
+		if resolveErr != nil {
+			h.logger.Warn("talkgroup resolution failed for radio set",
+				slog.String("radioSetId", rs.ID),
+				slog.Any("groups", rs.TalkgroupGroups),
+				slog.Any("error", resolveErr))
+			continue
+		}
+		if len(tgIDs) == 0 {
+			continue
+		}
+		if intSliceEqual(tgIDs, rs.Talkgroups) {
+			continue
+		}
+		if updateErr := h.db.SetRadioSetTalkgroups(rs.ID, tgIDs); updateErr != nil {
+			h.logger.Warn("update radio set talkgroups failed",
+				slog.String("radioSetId", rs.ID),
+				slog.Any("error", updateErr))
+		} else {
+			h.logger.Info("auto-resolved talkgroups for radio set",
+				slog.String("radioSetId", rs.ID),
+				slog.Int("count", len(tgIDs)))
+		}
+	}
+}
+
+func intSliceEqual(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *handler) handleListDistinctTalkgroups(w http.ResponseWriter, r *http.Request) {

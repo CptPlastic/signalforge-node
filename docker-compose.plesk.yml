@@ -173,7 +173,7 @@ services:
       DISCORD_TOKEN: ${BOT1_TOKEN:?signal1 token required}
       DISCORD_CLIENT_ID: ${BOT1_CLIENT_ID:?signal1 client ID required}
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?guild ID required}
-      DISCORD_BOT_INSTANCE_ID: signal
+      DISCORD_BOT_INSTANCE_ID: signal1
       DISCORD_BOT_WORKER_TOKEN:
       SIGNALFORGE_API_URL: http://api:8080
       HOSTED_HUB_URL: ${HOSTED_HUB_URL:-${APP_BASE_URL:-https://p7hub.projectseven.us}}

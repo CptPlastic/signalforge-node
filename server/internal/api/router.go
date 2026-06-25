@@ -27,6 +27,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 	handle.startHubDirectorySyncLoop()
 	handle.startCallArchiveLoop()
 	handle.startIncidentSignalPoller()
+	handle.startTalkgroupResolutionLoop()
 	r.Use(handle.withUserContext)
 
 	// Long-lived connections — no request timeout.
