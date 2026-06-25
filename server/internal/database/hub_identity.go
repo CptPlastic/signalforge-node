@@ -66,7 +66,7 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 			 federation_enabled, directory_validation_status, trust_level, trust_issuer_hub_id,
 			 trust_certificate, trust_expires_at, trust_verified_at, incident_system_labels,
 			 created_at, updated_at)
-		VALUES ('local', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $16)
+		VALUES ('local', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $17)
 		ON CONFLICT (id) DO UPDATE SET
 			name = excluded.name,
 			public_url = excluded.public_url,
@@ -103,7 +103,9 @@ func (d *DB) UpsertHubIdentity(identity HubIdentity) (*HubIdentity, error) {
 		identity.TrustCertificate,
 		identity.TrustExpiresAt,
 		identity.TrustVerifiedAt,
+		now,
 		systemLabelsJSON,
+		now,
 		now,
 	)
 
