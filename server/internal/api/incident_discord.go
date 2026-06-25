@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -79,7 +80,12 @@ func (h *handler) nextDiscordBotInstance() string {
 		return "signal1"
 	}
 	n := h.discordBotCounter.Add(1) - 1
-	return instances[n%int64(len(instances))]
+	chosen := instances[n%int64(len(instances))]
+	h.logger.Info("assigned discord bot instance",
+		slog.Int("counterAfter", int(n+1)),
+		slog.String("chosen", chosen),
+		slog.Int("numInstances", len(instances)))
+	return chosen
 }
 
 func (h *handler) upsertDiscordIntegration(incident database.Incident, existing database.IncidentIntegration, hasExisting bool, botInstanceID string) (database.IncidentIntegration, error) {
@@ -135,6 +141,9 @@ func (h *handler) queueDiscordIntegrationForIncident(incidentID, userID string) 
 	if hasExisting {
 		switch existing.Status {
 		case "active":
+			h.logger.Debug("discord integration already active",
+				"incidentId", incidentID,
+				"botInstanceId", existing.BotInstanceID)
 			return true, ""
 		case "stopping":
 			return false, ""
@@ -142,6 +151,10 @@ func (h *handler) queueDiscordIntegrationForIncident(incidentID, userID string) 
 			staleCutoff := time.Now().Unix() - stalePendingTaskSeconds
 			if existing.UpdatedAt > staleCutoff {
 				// Still fresh — another bot should pick it up.
+				h.logger.Debug("discord integration already pending (fresh)",
+					"incidentId", incidentID,
+					"botInstanceId", existing.BotInstanceID,
+					"updatedAt", existing.UpdatedAt)
 				return true, ""
 			}
 			// Stale pending — bot may be down; fall through to reassign.
