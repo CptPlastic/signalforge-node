@@ -44,6 +44,8 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 	// All other routes run under a 30-second timeout.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Timeout(30 * time.Second))
+		r.Get("/public/incidents", handle.handlePublicIncidentsPage)
+		r.Get("/api/v1/public/incidents", handle.handlePublicIncidentsJSON)
 		r.Get("/public/player/{token}", handle.handlePublicPlayer)
 		r.Get("/public/last-call/{token}", handle.handlePublicLastCall)
 		r.Get("/public/calls/{token}/{id}/audio", handle.handlePublicCallAudio)

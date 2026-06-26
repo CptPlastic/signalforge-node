@@ -613,6 +613,24 @@ func (d *DB) MatchIncidentTemplateByNWSEvent(event string) (IncidentTemplate, bo
 	return IncidentTemplate{}, false, nil
 }
 
+// ListActiveCommunityIncidents returns active incidents with community exposure that have a radio set.
+func (d *DB) ListActiveCommunityIncidents() ([]Incident, error) {
+	rows, err := d.db.Query(incidentSelect + ` WHERE status = 'active' AND exposure = 'community' AND radio_set_id IS NOT NULL ORDER BY updated_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Incident, 0)
+	for rows.Next() {
+		inc, err := scanIncident(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, inc)
+	}
+	return out, rows.Err()
+}
+
 // ListActiveWeatherIncidents returns active incidents of type "weather" that have a radio set.
 func (d *DB) ListActiveWeatherIncidents() ([]Incident, error) {
 	rows, err := d.db.Query(incidentSelect+` WHERE status = 'active' AND incident_type = 'weather' AND radio_set_id IS NOT NULL ORDER BY updated_at DESC`)
