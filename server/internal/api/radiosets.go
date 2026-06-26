@@ -215,6 +215,8 @@ func (h *handler) handleUpdateRadioSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rs, _, _ = h.resolveRadioSet(id, user)
+	subscribedTalkgroups, subscribedGroups := publicStreamSubscription(&rs)
+	h.streamHub.updateRadioSetTalkgroups(id, subscribedTalkgroups, subscribedGroups)
 	writeJSON(w, http.StatusOK, rs)
 }
 
