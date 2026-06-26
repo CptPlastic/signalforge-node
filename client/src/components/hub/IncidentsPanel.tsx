@@ -116,7 +116,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
   const [activate, setActivate] = useState(true)
   const [showSignals, setShowSignals] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
-  const [incTGMode, setIncTGMode] = useState<RadioSetSelectionMode>('talkgroups')
+  const [incTGMode, setIncTGMode] = useState<RadioSetSelectionMode>('groups')
   const [incTalkgroupsData, setIncTalkgroupsData] = useState<TalkgroupInfo[]>([])
   const [incAllGroups, setIncAllGroups] = useState<string[]>([])
   const [incSelectedTGs, setIncSelectedTGs] = useState<number[]>([])
@@ -224,18 +224,34 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
     if (!tmpl) return
     setExposure(tmpl.defaultExposure || 'members')
     setPriority(tmpl.defaultPriority || 'normal')
+    if (tmpl.selectionMode === 'groups' && tmpl.talkgroupGroups.length > 0) {
+      setIncTGMode('groups')
+      setIncSelectedGroups([...tmpl.talkgroupGroups])
+      setIncSelectedTGs([])
+    } else if (tmpl.selectionMode === 'talkgroups' && tmpl.talkgroups.length > 0) {
+      setIncTGMode('talkgroups')
+      setIncSelectedTGs([...tmpl.talkgroups])
+      setIncSelectedGroups([])
+    }
   }, [templateId, templates])
 
   useEffect(() => {
     if (!showCreate) return
     void api.distinctTalkgroups().then(setIncTalkgroupsData).catch(() => {})
     void api.callGroups().then(setIncAllGroups).catch(() => {})
-    setIncTGMode('talkgroups')
-    setIncSelectedTGs([])
-    setIncSelectedGroups([])
     setIncTGSearch('')
     setIncGroupSearch('')
-  }, [showCreate])
+    const tmpl = templates.find((t) => t.id === templateId)
+    if (tmpl?.selectionMode === 'talkgroups' && tmpl.talkgroups.length > 0) {
+      setIncTGMode('talkgroups')
+      setIncSelectedTGs([...tmpl.talkgroups])
+      setIncSelectedGroups([])
+    } else {
+      setIncTGMode('groups')
+      setIncSelectedGroups(tmpl?.talkgroupGroups ? [...tmpl.talkgroupGroups] : [])
+      setIncSelectedTGs([])
+    }
+  }, [showCreate, templateId, templates])
 
   const filteredIncTGs = useMemo(() => {
     const q = incTGSearch.trim().toLowerCase()
@@ -740,11 +756,9 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
             className="w-full bg-console-bg border border-console-border rounded px-2 py-1 outline-none focus:border-console-accent resize-y"
           />
 
-          <details className="border border-console-border rounded p-1.5 text-[10px]">
-            <summary className="cursor-pointer text-console-muted hover:text-console-accent">
-              Talkgroups (optional)
-            </summary>
-            <div className="mt-1.5 flex flex-col gap-1">
+          <div className="border border-console-border rounded p-1.5 text-[10px]">
+            <p className="text-[10px] text-console-muted mb-1.5 uppercase tracking-wider">Talkgroup selection</p>
+            <div className="flex flex-col gap-1">
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -842,7 +856,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
                 </div>
               )}
             </div>
-          </details>
+          </div>
 
           <label className="flex items-center gap-2 text-console-muted">
             <input type="checkbox" checked={activate} onChange={(e) => setActivate(e.target.checked)} />

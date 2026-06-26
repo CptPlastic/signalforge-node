@@ -58,32 +58,12 @@ function isOpenIncidentRadioSet(radioSet: RadioSet): boolean {
   return radioSet.name.startsWith('INC ·')
 }
 
-function radioSetSubmitLabel(rsLoading: boolean, rsEditID: string | null): string {
-  if (rsLoading) return 'SAVING...'
-  if (rsEditID) return 'SAVE'
-  return 'CREATE'
-}
-
 function pluralTalkgroups(count: number): string {
   return count === 1 ? 'talkgroup' : 'talkgroups'
 }
 
 function replaceRadioSet(radioSets: RadioSet[], radioSet: RadioSet): RadioSet[] {
   return radioSets.map((row) => row.id === radioSet.id ? radioSet : row)
-}
-
-function updateTalkgroupSelection(talkgroup: number, checked: boolean) {
-  return (talkgroups: number[]): number[] => {
-    if (checked) return talkgroups.filter((id) => id !== talkgroup)
-    return [...talkgroups, talkgroup]
-  }
-}
-
-function updateGroupSelection(group: string, checked: boolean) {
-  return (groups: string[]): string[] => {
-    if (checked) return groups.filter((name) => name !== group)
-    return [...groups, group]
-  }
 }
 
 function copyToClipboard(text: string) {
@@ -188,13 +168,6 @@ export function RadioSetsView({
         .includes(query),
     )
   }, [distinctTalkgroups, rsTGSearch])
-
-  const selectedTalkgroups = rsEditID ? rsEditTGs : rsCreateTGs
-  const setSelectedTalkgroups = rsEditID ? setRsEditTGs : setRsCreateTGs
-  const selectedGroups = rsEditID ? rsEditGroups : rsCreateGroups
-  const setSelectedGroups = rsEditID ? setRsEditGroups : setRsCreateGroups
-  const selectionMode = rsEditID ? rsEditMode : rsCreateMode
-  const setSelectionMode = rsEditID ? setRsEditMode : setRsCreateMode
 
   const filteredGroups = useMemo(() => {
     const query = rsGroupSearch.trim().toLowerCase()
@@ -349,122 +322,124 @@ export function RadioSetsView({
         <p className="text-xs text-console-error border border-console-error rounded px-2 py-1">{rsError}</p>
       )}
 
-      <div className="border border-console-border rounded p-3 flex flex-col gap-3">
-        <p className="console-label text-xs">{rsEditID ? 'EDIT RADIO SET' : 'CREATE RADIO SET'}</p>
-        <input
-          value={rsEditID ? rsEditName : rsName}
-          onChange={(event) => rsEditID ? setRsEditName(event.target.value) : setRsName(event.target.value)}
-          placeholder="Set name..."
-          className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
-        />
-        <div className="flex gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setSelectionMode('talkgroups')}
-            className={`px-2 py-1 border rounded text-[10px] uppercase tracking-wider ${
-              selectionMode === 'talkgroups'
-                ? 'border-console-accent text-console-accent bg-console-accent/10'
-                : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
-            }`}
-          >
-            Talkgroups
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectionMode('groups')}
-            className={`px-2 py-1 border rounded text-[10px] uppercase tracking-wider ${
-              selectionMode === 'groups'
-                ? 'border-console-accent text-console-accent bg-console-accent/10'
-                : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
-            }`}
-          >
-            Groups
-          </button>
-        </div>
-        {selectionMode === 'talkgroups' ? (
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <span className="text-[10px] text-console-muted uppercase tracking-wider">Talkgroups</span>
-              <input
-                value={rsTGSearch}
-                onChange={(event) => setRsTGSearch(event.target.value)}
-                placeholder="Filter..."
-                className="bg-console-bg border border-console-border rounded px-2 py-0.5 text-[10px] outline-none focus:border-console-accent w-full sm:w-32"
-              />
-            </div>
-            <div className="max-h-48 overflow-y-auto border border-console-border rounded divide-y divide-console-border/50">
-              {filteredTalkgroups.map((tg) => {
-                const checked = selectedTalkgroups.includes(tg.talkgroup)
-                return (
-                  <label key={tg.talkgroup} className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-console-surface text-xs">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => setSelectedTalkgroups(updateTalkgroupSelection(tg.talkgroup, checked))}
-                    />
-                    <span className="text-console-accent tabular-nums">{tg.talkgroup}</span>
-                    {tg.talkgroupLabel && <span>{tg.talkgroupLabel}</span>}
-                    {tg.talkgroupGroup && <span className="text-console-muted">{tg.talkgroupGroup}</span>}
-                  </label>
-                )
-              })}
-              {distinctTalkgroups.length === 0 && (
-                <p className="text-[10px] text-console-muted px-2 py-2">No talkgroups seen yet</p>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <span className="text-[10px] text-console-muted uppercase tracking-wider">Talkgroup groups</span>
-              <input
-                value={rsGroupSearch}
-                onChange={(event) => setRsGroupSearch(event.target.value)}
-                placeholder="Filter..."
-                className="bg-console-bg border border-console-border rounded px-2 py-0.5 text-[10px] outline-none focus:border-console-accent w-full sm:w-32"
-              />
-            </div>
-            <p className="text-[10px] text-console-muted">
-              Dynamic playset — new talkgroups in these groups are included automatically.
-            </p>
-            <div className="max-h-48 overflow-y-auto border border-console-border rounded divide-y divide-console-border/50">
-              {filteredGroups.map((group) => {
-                const checked = selectedGroups.includes(group)
-                return (
-                  <label key={group} className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-console-surface text-xs">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => setSelectedGroups(updateGroupSelection(group, checked))}
-                    />
-                    <span>{group}</span>
-                  </label>
-                )
-              })}
-              {allGroups.length === 0 && (
-                <p className="text-[10px] text-console-muted px-2 py-2">No groups seen yet</p>
-              )}
-            </div>
-          </div>
-        )}
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={submitRadioSet}
-            disabled={rsLoading}
-            className="px-3 py-1 border border-console-accent text-console-accent rounded text-[10px] uppercase tracking-widest hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50 flex-1 sm:flex-none"
-          >
-            {radioSetSubmitLabel(rsLoading, rsEditID)}
-          </button>
-          {rsEditID && (
+      {!rsEditID && (
+        <div className="border border-console-border rounded p-3 flex flex-col gap-3">
+          <p className="console-label text-xs">CREATE RADIO SET</p>
+          <input
+            value={rsName}
+            onChange={(event) => setRsName(event.target.value)}
+            placeholder="Set name..."
+            className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
+          />
+          <div className="flex gap-2 flex-wrap">
             <button
-              onClick={resetEditForm}
-              className="px-3 py-1 border border-console-border text-console-muted rounded text-[10px] uppercase tracking-widest hover:border-console-accent hover:text-console-accent flex-1 sm:flex-none"
+              type="button"
+              onClick={() => setRsCreateMode('talkgroups')}
+              className={`px-2 py-1 border rounded text-[10px] uppercase tracking-wider ${
+                rsCreateMode === 'talkgroups'
+                  ? 'border-console-accent text-console-accent bg-console-accent/10'
+                  : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
+              }`}
             >
-              CANCEL
+              Talkgroups
             </button>
+            <button
+              type="button"
+              onClick={() => setRsCreateMode('groups')}
+              className={`px-2 py-1 border rounded text-[10px] uppercase tracking-wider ${
+                rsCreateMode === 'groups'
+                  ? 'border-console-accent text-console-accent bg-console-accent/10'
+                  : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
+              }`}
+            >
+              Groups
+            </button>
+          </div>
+          {rsCreateMode === 'talkgroups' ? (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-[10px] text-console-muted uppercase tracking-wider">Talkgroups</span>
+                <input
+                  value={rsTGSearch}
+                  onChange={(event) => setRsTGSearch(event.target.value)}
+                  placeholder="Filter..."
+                  className="bg-console-bg border border-console-border rounded px-2 py-0.5 text-[10px] outline-none focus:border-console-accent w-full sm:w-32"
+                />
+              </div>
+              <div className="max-h-48 overflow-y-auto border border-console-border rounded divide-y divide-console-border/50">
+                {filteredTalkgroups.map((tg) => {
+                  const checked = rsCreateTGs.includes(tg.talkgroup)
+                  return (
+                    <label key={tg.talkgroup} className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-console-surface text-xs">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setRsCreateTGs(
+                          checked
+                            ? rsCreateTGs.filter((t) => t !== tg.talkgroup)
+                            : [...rsCreateTGs, tg.talkgroup],
+                        )}
+                      />
+                      <span className="text-console-accent tabular-nums">{tg.talkgroup}</span>
+                      {tg.talkgroupLabel && <span>{tg.talkgroupLabel}</span>}
+                      {tg.talkgroupGroup && <span className="text-console-muted">{tg.talkgroupGroup}</span>}
+                    </label>
+                  )
+                })}
+                {distinctTalkgroups.length === 0 && (
+                  <p className="text-[10px] text-console-muted px-2 py-2">No talkgroups seen yet</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-[10px] text-console-muted uppercase tracking-wider">Talkgroup groups</span>
+                <input
+                  value={rsGroupSearch}
+                  onChange={(event) => setRsGroupSearch(event.target.value)}
+                  placeholder="Filter..."
+                  className="bg-console-bg border border-console-border rounded px-2 py-0.5 text-[10px] outline-none focus:border-console-accent w-full sm:w-32"
+                />
+              </div>
+              <p className="text-[10px] text-console-muted">
+                Dynamic playset — new talkgroups in these groups are included automatically.
+              </p>
+              <div className="max-h-48 overflow-y-auto border border-console-border rounded divide-y divide-console-border/50">
+                {filteredGroups.map((group) => {
+                  const checked = rsCreateGroups.includes(group)
+                  return (
+                    <label key={group} className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-console-surface text-xs">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setRsCreateGroups(
+                          checked
+                            ? rsCreateGroups.filter((g) => g !== group)
+                            : [...rsCreateGroups, group],
+                        )}
+                      />
+                      <span>{group}</span>
+                    </label>
+                  )
+                })}
+                {allGroups.length === 0 && (
+                  <p className="text-[10px] text-console-muted px-2 py-2">No groups seen yet</p>
+                )}
+              </div>
+            </div>
           )}
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={submitRadioSet}
+              disabled={rsLoading}
+              className="px-3 py-1 border border-console-accent text-console-accent rounded text-[10px] uppercase tracking-widest hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50 flex-1 sm:flex-none"
+            >
+              {rsLoading ? 'SAVING...' : 'CREATE'}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {radioSets.length === 0 ? (
         <p className="text-xs text-console-muted">No radio sets created yet</p>
@@ -663,6 +638,131 @@ export function RadioSetsView({
                         </button>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {rsEditID === radioSet.id && (
+                  <div className="border border-console-accent/30 rounded p-3 flex flex-col gap-3 bg-console-bg/40">
+                    <p className="console-label text-[10px]">EDIT RADIO SET</p>
+                    <input
+                      value={rsEditName}
+                      onChange={(event) => setRsEditName(event.target.value)}
+                      placeholder="Set name..."
+                      className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs outline-none focus:border-console-accent"
+                    />
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setRsEditMode('talkgroups')}
+                        className={`px-2 py-1 border rounded text-[10px] uppercase tracking-wider ${
+                          rsEditMode === 'talkgroups'
+                            ? 'border-console-accent text-console-accent bg-console-accent/10'
+                            : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
+                        }`}
+                      >
+                        Talkgroups
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRsEditMode('groups')}
+                        className={`px-2 py-1 border rounded text-[10px] uppercase tracking-wider ${
+                          rsEditMode === 'groups'
+                            ? 'border-console-accent text-console-accent bg-console-accent/10'
+                            : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
+                        }`}
+                      >
+                        Groups
+                      </button>
+                    </div>
+                    {rsEditMode === 'talkgroups' ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-[10px] text-console-muted uppercase tracking-wider">Talkgroups</span>
+                          <input
+                            value={rsTGSearch}
+                            onChange={(event) => setRsTGSearch(event.target.value)}
+                            placeholder="Filter..."
+                            className="bg-console-bg border border-console-border rounded px-2 py-0.5 text-[10px] outline-none focus:border-console-accent w-full sm:w-32"
+                          />
+                        </div>
+                        <div className="max-h-48 overflow-y-auto border border-console-border rounded divide-y divide-console-border/50">
+                          {filteredTalkgroups.map((tg) => {
+                            const checked = rsEditTGs.includes(tg.talkgroup)
+                            return (
+                              <label key={tg.talkgroup} className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-console-surface text-xs">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => setRsEditTGs(
+                                    checked
+                                      ? rsEditTGs.filter((t) => t !== tg.talkgroup)
+                                      : [...rsEditTGs, tg.talkgroup],
+                                  )}
+                                />
+                                <span className="text-console-accent tabular-nums">{tg.talkgroup}</span>
+                                {tg.talkgroupLabel && <span>{tg.talkgroupLabel}</span>}
+                                {tg.talkgroupGroup && <span className="text-console-muted">{tg.talkgroupGroup}</span>}
+                              </label>
+                            )
+                          })}
+                          {distinctTalkgroups.length === 0 && (
+                            <p className="text-[10px] text-console-muted px-2 py-2">No talkgroups seen yet</p>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-[10px] text-console-muted uppercase tracking-wider">Talkgroup groups</span>
+                          <input
+                            value={rsGroupSearch}
+                            onChange={(event) => setRsGroupSearch(event.target.value)}
+                            placeholder="Filter..."
+                            className="bg-console-bg border border-console-border rounded px-2 py-0.5 text-[10px] outline-none focus:border-console-accent w-full sm:w-32"
+                          />
+                        </div>
+                        <p className="text-[10px] text-console-muted">
+                          Dynamic playset — new talkgroups in these groups are included automatically.
+                        </p>
+                        <div className="max-h-48 overflow-y-auto border border-console-border rounded divide-y divide-console-border/50">
+                          {filteredGroups.map((group) => {
+                            const checked = rsEditGroups.includes(group)
+                            return (
+                              <label key={group} className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-console-surface text-xs">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => setRsEditGroups(
+                                    checked
+                                      ? rsEditGroups.filter((g) => g !== group)
+                                      : [...rsEditGroups, group],
+                                  )}
+                                />
+                                <span>{group}</span>
+                              </label>
+                            )
+                          })}
+                          {allGroups.length === 0 && (
+                            <p className="text-[10px] text-console-muted px-2 py-2">No groups seen yet</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={submitRadioSet}
+                        disabled={rsLoading}
+                        className="px-3 py-1 border border-console-accent text-console-accent rounded text-[10px] uppercase tracking-widest hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50 flex-1 sm:flex-none"
+                      >
+                        {rsLoading ? 'SAVING...' : 'SAVE'}
+                      </button>
+                      <button
+                        onClick={resetEditForm}
+                        className="px-3 py-1 border border-console-border text-console-muted rounded text-[10px] uppercase tracking-widest hover:border-console-accent hover:text-console-accent flex-1 sm:flex-none"
+                      >
+                        CANCEL
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
