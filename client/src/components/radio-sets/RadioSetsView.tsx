@@ -208,7 +208,7 @@ export function RadioSetsView({
       onNotify?.('Incident ended')
       await refreshRadioSets()
     } catch {
-      setRsError('Could not end incident — are you admin/dispatcher with incident management enabled?')
+      setRsError('Could not end incident — are you admin or an incident handler with incident management enabled?')
       onNotify?.('End incident failed')
     } finally {
       setRsLoading(false)
@@ -449,7 +449,7 @@ export function RadioSetsView({
             const canManageRadioSet =
               radioSet.userId === authUser?.id || authUser?.role === 'admin'
             const canEndIncident =
-              (authUser?.role === 'admin' || authUser?.dispatcherEnabled) && isOpenIncidentRadioSet(radioSet)
+              (authUser?.role === 'admin' || authUser?.role === 'incident_handler') && isOpenIncidentRadioSet(radioSet)
             const isScanning = rsPlayingID === radioSet.id
             return (
               <div

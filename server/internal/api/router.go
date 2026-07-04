@@ -114,6 +114,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Put("/api/v1/hub/incidents/settings", handle.handleUpdateIncidentSettings)
 		r.Get("/api/v1/incident-templates", handle.handleListIncidentTemplates)
 		r.Get("/api/v1/incidents", handle.handleListIncidents)
+		r.Get("/api/v1/incidents/active", handle.handleListActiveIncidents)
 		r.Post("/api/v1/incidents", handle.handleCreateIncident)
 		r.Get("/api/v1/incidents/signals", handle.handleListIncidentSignals)
 		r.Post("/api/v1/incidents/signals/poll", handle.handlePollIncidentSignals)

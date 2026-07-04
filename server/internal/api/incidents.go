@@ -93,7 +93,21 @@ func (h *handler) ensureCommunityShareToken(incident database.Incident) (string,
 }
 
 func canManageIncidents(user authUser) bool {
-	return isAdmin(user) || user.DispatcherEnabled
+	return isAdmin(user) || isIncidentHandler(user)
+}
+
+func canListenToIncident(user authUser, incident database.Incident) bool {
+	if incident.Status != "active" && incident.Status != "monitoring" {
+		return false
+	}
+	switch incident.Exposure {
+	case "community", "members":
+		return !isGuest(user)
+	case "internal":
+		return canManageIncidents(user)
+	default:
+		return !isGuest(user)
+	}
 }
 
 func (h *handler) incidentManagementAvailable(identity *database.HubIdentity) bool {
@@ -250,22 +264,7 @@ func (h *handler) handleListIncidentTemplates(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, templates)
 }
 
-func (h *handler) handleListIncidents(w http.ResponseWriter, r *http.Request) {
-	user, _, ok := h.requireIncidentManager(w, r)
-	if !ok {
-		return
-	}
-	_ = user
-	includeArchived := r.URL.Query().Get("archived") == "1"
-	incidents, err := h.db.ListIncidents(includeArchived)
-	if err != nil {
-		h.logger.Error("list incidents failed", "error", err, "includeArchived", includeArchived)
-		http.Error(w, "list incidents", http.StatusInternalServerError)
-		return
-	}
-	if incidents == nil {
-		incidents = []database.Incident{}
-	}
+func (h *handler) incidentListItemsFromIncidents(incidents []database.Incident) []incidentListItem {
 	items := make([]incidentListItem, 0, len(incidents))
 	for _, inc := range incidents {
 		item := incidentListItem{
@@ -290,8 +289,48 @@ func (h *handler) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, item)
 	}
+	return items
+}
+
+func (h *handler) handleListIncidents(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := h.requireIncidentManager(w, r)
+	if !ok {
+		return
+	}
+	_ = user
+	includeArchived := r.URL.Query().Get("archived") == "1"
+	incidents, err := h.db.ListIncidents(includeArchived)
+	if err != nil {
+		h.logger.Error("list incidents failed", "error", err, "includeArchived", includeArchived)
+		http.Error(w, "list incidents", http.StatusInternalServerError)
+		return
+	}
+	if incidents == nil {
+		incidents = []database.Incident{}
+	}
+	items := h.incidentListItemsFromIncidents(incidents)
 	h.logger.Info("listed incidents", "count", len(items), "includeArchived", includeArchived)
 	writeJSON(w, http.StatusOK, items)
+}
+
+func (h *handler) handleListActiveIncidents(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.requireAuthenticated(w, r)
+	if !ok {
+		return
+	}
+	incidents, err := h.db.ListActiveIncidents()
+	if err != nil {
+		h.logger.Error("list active incidents failed", "error", err)
+		http.Error(w, "list active incidents", http.StatusInternalServerError)
+		return
+	}
+	filtered := make([]database.Incident, 0, len(incidents))
+	for _, inc := range incidents {
+		if canListenToIncident(user, inc) {
+			filtered = append(filtered, inc)
+		}
+	}
+	writeJSON(w, http.StatusOK, h.incidentListItemsFromIncidents(filtered))
 }
 
 func (h *handler) handleListIncidentSignals(w http.ResponseWriter, r *http.Request) {

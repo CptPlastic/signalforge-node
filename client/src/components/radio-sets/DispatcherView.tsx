@@ -9,6 +9,7 @@ import {
   pickPttMimeType,
   playCallOnAudioElement,
   pttBlobMimeType,
+  validatePttBlob,
 } from '../../lib/pttRecording'
 import { MonitorAudioBar } from '../MonitorAudioBar'
 
@@ -146,10 +147,8 @@ export function DispatcherView({
   const suspendMonitorForTransmit = useCallback(() => {
     suspendChirpAudio()
     const monitor = monitorAudioRef.current
-    if (monitor) {
+    if (monitor && !monitor.paused) {
       monitor.pause()
-      monitor.removeAttribute('src')
-      monitor.load()
     }
     clearPlaybackStatus()
   }, [clearPlaybackStatus])
@@ -185,9 +184,13 @@ export function DispatcherView({
         await playChirp(volumeToGain(chirpVolumeRef.current))
       }
       if (!monitorOnRef.current || isTransmitting()) return
-      await playCallOnAudioElement(monitor, call.id, gain)
+      try {
+        await playCallOnAudioElement(monitor, call.id, gain)
+      } catch {
+        clearPlaybackStatus()
+      }
     }
-    void run().catch(() => clearPlaybackStatus())
+    void run()
   }, [clearPlaybackStatus, isTransmitting, resolveAudibleSetName])
 
   playMonitorCallRef.current = playMonitorCall
@@ -258,13 +261,7 @@ export function DispatcherView({
     setTxState('arming')
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      })
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       if (requestId !== micRequestRef.current) {
         for (const track of stream.getTracks()) track.stop()
         setTxState('idle')
@@ -302,6 +299,15 @@ export function DispatcherView({
         chunksRef.current = []
         if (blob.size < MIN_PTT_BLOB_BYTES) {
           setError(`Recording empty (${blob.size} bytes) — hold PTT longer`)
+          setTxState('error')
+          globalThis.setTimeout(() => {
+            if (stateRef.current === 'error') setTxState('idle')
+          }, 2500)
+          return
+        }
+        const validated = await validatePttBlob(blob)
+        if (!validated.ok) {
+          setError(validated.reason)
           setTxState('error')
           globalThis.setTimeout(() => {
             if (stateRef.current === 'error') setTxState('idle')
@@ -378,7 +384,6 @@ export function DispatcherView({
       return
     }
     if (stateRef.current !== 'recording') return
-    micRequestRef.current += 1
     const recorder = recorderRef.current
     if (recorder?.state === 'recording') {
       recorder.stop()

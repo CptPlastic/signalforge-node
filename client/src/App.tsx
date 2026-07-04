@@ -1848,7 +1848,7 @@ function App() {
         activeView={activeView}
         authUser={authUser}
         onViewChange={setActiveView}
-        showIncidentsTab={isAdmin || !!authUser?.dispatcherEnabled}
+        showIncidentsTab={!!authUser && authUser.role !== 'guest'}
       />
 
     {sessionWarning && (
@@ -2601,7 +2601,7 @@ function App() {
       </AuthenticatedView>
 
       <AuthenticatedView activeView={activeView} authUser={authUser} view="incidents">
-        {(isAdmin || authUser?.dispatcherEnabled) && authUser ? (
+        {authUser && authUser.role !== 'guest' ? (
           <main className="console-panel">
             <IncidentsPanel
               authUser={authUser}
@@ -2618,7 +2618,7 @@ function App() {
           </main>
         ) : (
           <main className="console-panel text-xs text-console-muted">
-            Incident management requires admin or dispatcher role.
+            Sign in to view active incidents.
           </main>
         )}
       </AuthenticatedView>

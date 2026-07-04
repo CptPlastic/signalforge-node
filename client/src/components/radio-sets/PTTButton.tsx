@@ -6,6 +6,7 @@ import {
   finalizePttBlob,
   MIN_PTT_BLOB_BYTES,
   pickPttMimeType,
+  validatePttBlob,
 } from '../../lib/pttRecording'
 
 const MIN_DURATION_MS = 300
@@ -76,6 +77,13 @@ export function PTTButton({ radioSetId, disabled, enableSpacebar, deviceId, onTr
         chunksRef.current = []
         if (blob.size < MIN_PTT_BLOB_BYTES) {
           setError(`Recording empty (${blob.size} bytes) — hold PTT longer`)
+          setState('error')
+          globalThis.setTimeout(() => setState((current) => (current === 'error' ? 'idle' : current)), 2500)
+          return
+        }
+        const validated = await validatePttBlob(blob)
+        if (!validated.ok) {
+          setError(validated.reason)
           setState('error')
           globalThis.setTimeout(() => setState((current) => (current === 'error' ? 'idle' : current)), 2500)
           return

@@ -368,6 +368,7 @@ function UserManagementPanel({
                   className="bg-console-bg border border-console-border rounded px-2 py-1 text-xs"
                 >
                   <option value="admin">admin</option>
+                  <option value="incident_handler">incident handler</option>
                   <option value="user">user</option>
                   <option value="guest">guest</option>
                 </select>

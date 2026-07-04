@@ -287,7 +287,7 @@ export type SourceSharesResponse = {
 export type AuthUser = {
   id: string
   email: string
-  role: 'admin' | 'user' | 'guest'
+  role: 'admin' | 'user' | 'guest' | 'incident_handler'
   txEnabled?: boolean
   dispatcherEnabled?: boolean
 }
@@ -295,7 +295,7 @@ export type AuthUser = {
 export type UserRecord = {
   id: string
   email: string
-  role: 'admin' | 'user' | 'guest'
+  role: 'admin' | 'user' | 'guest' | 'incident_handler'
   status: 'active' | 'pending' | 'disabled'
   txEnabled: boolean
   dispatcherEnabled: boolean
@@ -566,6 +566,10 @@ export const api = {
   incidentTemplates: () => request<IncidentTemplate[]>('/api/v1/incident-templates'),
   incidents: async (archived = false) => {
     const body = await request<unknown>(`/api/v1/incidents${archived ? '?archived=1' : ''}`)
+    return parseIncidentsList(body)
+  },
+  activeIncidents: async () => {
+    const body = await request<unknown>('/api/v1/incidents/active')
     return parseIncidentsList(body)
   },
   createIncident: (payload: {

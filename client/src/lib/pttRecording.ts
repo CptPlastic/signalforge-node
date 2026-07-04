@@ -41,30 +41,42 @@ export function finalizePttBlob(chunks: BlobPart[], recorderMimeType: string | u
   return new Blob(chunks, { type: pttBlobMimeType(recorderMimeType) })
 }
 
-/** Load call audio into a monitor element and play when the buffer is ready. */
+/** Play call audio on a monitor element (same pattern as App playCall). */
 export function playCallOnAudioElement(
   audio: HTMLAudioElement,
   callId: number,
   volume: number,
 ): Promise<void> {
   audio.volume = volume
-  const src = `/api/v1/calls/${callId}/audio?play=1`
-  return new Promise((resolve, reject) => {
-    const cleanup = () => {
-      audio.removeEventListener('canplay', onReady)
-      audio.removeEventListener('error', onError)
-    }
-    const onReady = () => {
-      cleanup()
-      void audio.play().then(resolve).catch(reject)
-    }
-    const onError = () => {
-      cleanup()
-      reject(new Error('call audio failed to load'))
-    }
-    audio.addEventListener('canplay', onReady)
-    audio.addEventListener('error', onError)
-    audio.src = src
-    audio.load()
-  })
+  audio.src = `/api/v1/calls/${callId}/audio?play=1`
+  return audio.play()
+}
+
+/** Reject blobs that decode to no audible content (passes byte-size checks but is silent). */
+export async function validatePttBlob(blob: Blob): Promise<{ ok: true; durationSec: number } | { ok: false; reason: string }> {
+  const url = URL.createObjectURL(blob)
+  try {
+    const probe = new Audio()
+    const durationSec = await new Promise<number>((resolve, reject) => {
+      const timer = globalThis.setTimeout(() => reject(new Error('timeout')), 5000)
+      probe.onloadedmetadata = () => {
+        globalThis.clearTimeout(timer)
+        if (!Number.isFinite(probe.duration) || probe.duration < 0.12) {
+          reject(new Error('no audio'))
+        } else {
+          resolve(probe.duration)
+        }
+      }
+      probe.onerror = () => {
+        globalThis.clearTimeout(timer)
+        reject(new Error('decode'))
+      }
+      probe.src = url
+    })
+    return { ok: true, durationSec }
+  } catch {
+    return { ok: false, reason: 'Recording has no voice — hold PTT longer and check mic' }
+  } finally {
+    URL.revokeObjectURL(url)
+  }
 }

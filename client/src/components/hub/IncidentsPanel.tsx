@@ -97,12 +97,13 @@ function mergeIncidentLists(primary: Incident[], fallback: Incident[]): Incident
 }
 
 export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRadioSet, onRefreshRadioSets }: Props) {
-  const canManage = isAdmin || !!authUser.dispatcherEnabled
+  const canManage = isAdmin || authUser.role === 'incident_handler'
 
   const [settings, setSettings] = useState<IncidentSettings | null>(null)
   const [settingsDraft, setSettingsDraft] = useState<IncidentSettings | null>(null)
   const [templates, setTemplates] = useState<IncidentTemplate[]>([])
   const [incidents, setIncidents] = useState<Incident[]>([])
+  const [activeListenIncidents, setActiveListenIncidents] = useState<Incident[]>([])
   const [archivedIncidents, setArchivedIncidents] = useState<Incident[]>([])
   const [signals, setSignals] = useState<IncidentSignal[]>([])
   const [discordByIncident, setDiscordByIncident] = useState<Record<string, IncidentDiscordIntegration | null>>({})
@@ -208,6 +209,22 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
     }
   }, [canManage, onNotify])
 
+  const refreshListenOnly = useCallback(async () => {
+    if (canManage) return
+    setLoading(true)
+    setLoadError('')
+    try {
+      const list = await api.activeIncidents()
+      setActiveListenIncidents(list)
+    } catch (err) {
+      console.error(err)
+      setLoadError('Could not load active incidents.')
+      setActiveListenIncidents([])
+    } finally {
+      setLoading(false)
+    }
+  }, [canManage])
+
   useEffect(() => {
     if (templates.length === 0) return
     if (!templates.some((t) => t.id === templateId)) {
@@ -216,8 +233,12 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
   }, [templates, templateId])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    if (canManage) {
+      void refresh()
+    } else {
+      void refreshListenOnly()
+    }
+  }, [canManage, refresh, refreshListenOnly])
 
   useEffect(() => {
     const tmpl = templates.find((t) => t.id === templateId)
@@ -269,14 +290,6 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
     if (!q) return incAllGroups
     return incAllGroups.filter((g) => g.toLowerCase().includes(q))
   }, [incAllGroups, incGroupSearch])
-
-  if (!canManage) {
-    return (
-      <div className="border border-console-border rounded p-3 text-xs text-console-muted">
-        Incident management requires admin or dispatcher role.
-      </div>
-    )
-  }
 
   async function saveSettings() {
     if (!settingsDraft || !isAdmin) return
@@ -383,8 +396,9 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
       .finally(() => setLoading(false))
   }
 
-  function renderIncidentRow(inc: Incident, actions: 'full' | 'archive-only') {
+  function renderIncidentRow(inc: Incident, actions: 'full' | 'archive-only' | 'listen-only') {
     const canEnd = actions === 'full' && (inc.status === 'active' || inc.status === 'draft' || inc.status === 'monitoring')
+    const canListenInHub = (actions === 'full' || actions === 'listen-only') && Boolean(inc.radioSetId && onOpenRadioSet)
     const discord = discordByIncident[inc.id]
     const discordLabel = discord?.status === 'active'
       ? 'DISCORD LIVE'
@@ -422,7 +436,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
               {inc.openedAt ? ` · opened ${fmtDateTime(inc.openedAt)}` : ''}
               {discord?.status ? ` · discord ${discord.status}` : ''}
             </div>
-            {inc.radioSet && canEnd && (
+            {inc.radioSet && (canEnd || actions === 'listen-only') && (
               <div className="text-console-muted text-[10px] mt-1">
                 Radio set: {inc.radioSet.name} · {inc.radioSet.selectionMode === 'groups' ? 'groups' : 'TGs'}: {monitorLabel}
               </div>
@@ -483,10 +497,10 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {inc.radioSetId && onOpenRadioSet && canEnd && (
+          {canListenInHub && (
             <button
               type="button"
-              onClick={() => onOpenRadioSet(inc.radioSetId!)}
+              onClick={() => onOpenRadioSet!(inc.radioSetId!)}
               className="px-2 py-0.5 border border-console-accent text-console-accent rounded text-[10px]"
             >
               LISTEN IN HUB
@@ -552,6 +566,41 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
             </>
           )}
         </div>
+      </div>
+    )
+  }
+
+  if (!canManage) {
+    return (
+      <div className="border border-console-border rounded p-3 flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <p className="console-label text-xs">// ACTIVE INCIDENTS</p>
+            <p className="text-[11px] text-console-muted">
+              Running incidents you can listen to. Incident management is limited to admins and incident handlers.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refreshListenOnly()}
+            disabled={loading}
+            className="px-2 py-1 border border-console-border text-console-muted rounded text-xs hover:border-console-accent disabled:opacity-50"
+          >
+            REFRESH
+          </button>
+        </div>
+        {loadError && (
+          <p className="text-console-error text-[11px] border border-console-error/40 rounded p-2">
+            {loadError}
+          </p>
+        )}
+        {activeListenIncidents.length === 0 ? (
+          <div className="border border-dashed border-console-border rounded p-4 text-center text-[11px] text-console-muted">
+            No active incidents right now.
+          </div>
+        ) : (
+          activeListenIncidents.map((inc) => renderIncidentRow(inc, 'listen-only'))
+        )}
       </div>
     )
   }

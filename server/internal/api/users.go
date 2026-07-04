@@ -30,7 +30,7 @@ type setUserPasswordRequest struct {
 
 func normalizeUserRole(role string) string {
 	switch strings.ToLower(strings.TrimSpace(role)) {
-	case "admin", "user", "guest":
+	case "admin", "user", "guest", "incident_handler":
 		return strings.ToLower(strings.TrimSpace(role))
 	default:
 		return ""

@@ -64,6 +64,10 @@ func isGuest(user authUser) bool {
 	return user.Role == "guest"
 }
 
+func isIncidentHandler(user authUser) bool {
+	return user.Role == "incident_handler"
+}
+
 func (h *handler) requireAuthenticated(w http.ResponseWriter, r *http.Request) (authUser, bool) {
 	user, ok := getAuthUser(r.Context())
 	if !ok {
