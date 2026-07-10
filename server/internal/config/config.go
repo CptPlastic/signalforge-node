@@ -43,6 +43,7 @@ type Config struct {
 	CallArchiveS3Cfg         string
 	CallArchiveDeleteLocalAfterS3 bool
 	CallArchiveVacuumFull         bool
+	IncidentArchiveDays           int
 	LogLevel                 slog.Level
 }
 
@@ -84,6 +85,7 @@ func Load() (Config, error) {
 		CallArchiveS3Cfg:         strings.TrimSpace(getEnv("CALL_ARCHIVE_S3CFG", "/etc/signalforge/s3cfg")),
 		CallArchiveDeleteLocalAfterS3: getBoolEnv("CALL_ARCHIVE_DELETE_LOCAL_AFTER_S3", false),
 		CallArchiveVacuumFull:         getBoolEnv("CALL_ARCHIVE_VACUUM_FULL", true),
+		IncidentArchiveDays:           getIntEnv("INCIDENT_ARCHIVE_DAYS", 365),
 	}
 
 	logLevel := getEnv("LOG_LEVEL", "info")

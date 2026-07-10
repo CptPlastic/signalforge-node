@@ -247,6 +247,15 @@ func (d *DB) DeleteRadioSet(id, userID string) error {
 	return nil
 }
 
+// DeleteRadioSetByID removes a radio set without user scoping (incident retention cleanup).
+func (d *DB) DeleteRadioSetByID(id string) error {
+	if strings.TrimSpace(id) == "" {
+		return nil
+	}
+	_, err := d.db.Exec(`DELETE FROM radio_sets WHERE id = $1`, id)
+	return err
+}
+
 // scanRadioSet scans a row into a RadioSet, decoding JSONB membership columns.
 type scannable interface {
 	Scan(dest ...any) error

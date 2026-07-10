@@ -167,6 +167,16 @@ Archive request body:
 
 After large deletes, the hub vacuums the `calls` table automatically. `VACUUM FULL` (returning disk to the OS) runs when a retention sweep finishes; set `CALL_ARCHIVE_VACUUM_FULL=false` to skip the full shrink and rely on `VACUUM ANALYZE` only.
 
+## Incident Retention
+
+Closed and archived incidents are purged separately from call audio.
+
+| Variable | Meaning |
+| --- | --- |
+| `INCIDENT_ARCHIVE_DAYS` | Delete closed/archived incidents older than this many days (default `365`). Set `0` to disable. Runs every 6 hours. |
+
+Purge also removes the incident's dedicated radio set and Discord integration rows. Active incidents are never deleted.
+
 Example Spaces setup:
 
 ```bash

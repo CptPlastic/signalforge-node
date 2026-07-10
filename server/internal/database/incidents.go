@@ -366,6 +366,68 @@ func (d *DB) ArchiveIncident(id string) (Incident, error) {
 	return scanIncident(row)
 }
 
+// ListIncidentsForPurge returns closed/archived incidents older than the cutoff.
+// Age is based on archived_at when set, otherwise closed_at, otherwise updated_at.
+func (d *DB) ListIncidentsForPurge(olderThanUnix int64, limit int) ([]Incident, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := d.db.Query(incidentSelect+`
+		WHERE status IN ('closed', 'archived')
+		  AND CASE
+		        WHEN archived_at > 0 THEN archived_at
+		        WHEN closed_at > 0 THEN closed_at
+		        ELSE updated_at
+		      END < $1
+		ORDER BY CASE
+		           WHEN archived_at > 0 THEN archived_at
+		           WHEN closed_at > 0 THEN closed_at
+		           ELSE updated_at
+		         END ASC
+		LIMIT $2`, olderThanUnix, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Incident, 0)
+	for rows.Next() {
+		inc, scanErr := scanIncident(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		out = append(out, inc)
+	}
+	return out, rows.Err()
+}
+
+// DeleteIncident removes an incident row. Integrations cascade; signal links are cleared.
+// Returns the linked radio_set_id (may be empty) so callers can delete the dedicated set.
+func (d *DB) DeleteIncident(id string) (radioSetID string, err error) {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var rsID sql.NullString
+	if err := tx.QueryRow(`SELECT radio_set_id FROM incidents WHERE id = $1`, id).Scan(&rsID); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(`UPDATE incident_signals SET incident_id = '' WHERE incident_id = $1`, id); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(`DELETE FROM incidents WHERE id = $1`, id); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	if rsID.Valid {
+		return rsID.String, nil
+	}
+	return "", nil
+}
+
 func scanIncidentSignal(row scanner) (IncidentSignal, error) {
 	var signal IncidentSignal
 	var raw []byte

@@ -77,6 +77,8 @@ func (h *handler) handleVersion(w http.ResponseWriter, _ *http.Request) {
 		"callArchiveDir":          h.cfg.CallArchiveDir,
 		"callArchiveS3Uri":        h.cfg.CallArchiveS3URI,
 		"callArchiveLoopEnabled":  h.callArchiveLoopEnabled(),
+		"incidentArchiveDays":     h.cfg.IncidentArchiveDays,
+		"incidentCleanupEnabled":  h.incidentCleanupLoopEnabled(),
 	})
 }
 

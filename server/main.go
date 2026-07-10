@@ -53,6 +53,14 @@ func main() {
 			"autoArchive", cfg.CallRetentionDays > 0 && cfg.CallArchiveDir != "",
 		)
 	}
+	if cfg.IncidentArchiveDays > 0 {
+		logger.Info("incident archive configuration",
+			"retentionDays", cfg.IncidentArchiveDays,
+			"autoPurge", true,
+		)
+	} else {
+		logger.Info("incident archive cleanup disabled", "incidentArchiveDays", 0)
+	}
 
 	db, err := database.Open(cfg.DatabaseURL)
 	if err != nil {

@@ -315,10 +315,18 @@ Sync fields on hub incident: `schedkit_incident_id`, `schedkit_sync_status`, `sc
 Retention policy (hub config, separate from call retention):
 
 ```text
-INCIDENT_ARCHIVE_DAYS=365   # default 1 year
+INCIDENT_ARCHIVE_DAYS=365   # default 1 year; set 0 to disable
 ```
 
-Archived incidents appear in **Hub → Incidents → Archive**, not mixed with call log export UI.
+When enabled, a background job runs every 6 hours and **deletes** closed/archived
+incidents older than the retention window, including:
+
+- Incident row + Discord integration rows (CASCADE)
+- Linked dedicated radio set
+- Signal → incident links (cleared, signals kept)
+
+Active / monitoring / draft incidents are never purged.
+Archived incidents appear in **Hub → Incidents → Ended** until retention removes them.
 
 ---
 

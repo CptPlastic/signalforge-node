@@ -26,6 +26,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 	handle.startFederationSyncLoop()
 	handle.startHubDirectorySyncLoop()
 	handle.startCallArchiveLoop()
+	handle.startIncidentCleanupLoop()
 	handle.startIncidentSignalPoller()
 	handle.startTalkgroupResolutionLoop()
 	r.Use(handle.withUserContext)
