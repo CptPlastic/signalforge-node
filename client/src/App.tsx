@@ -1179,6 +1179,7 @@ function App() {
       setExpandedSourceID(sourceId)
     } catch (err) {
       console.error(err)
+      setNewSourceError(getErrorMessage(err, 'Could not generate source key'))
     } finally {
       setGeneratingKeyFor(null)
     }
