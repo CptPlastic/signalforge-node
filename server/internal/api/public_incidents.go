@@ -43,6 +43,12 @@ func (h *handler) fetchPublicIncidents() []publicIncidentItem {
 }
 
 func (h *handler) handlePublicIncidentsJSON(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	items := h.fetchPublicIncidents()
 	if items == nil {
 		items = []publicIncidentItem{}
