@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -176,6 +177,110 @@ func (h *handler) handleListCalls(w http.ResponseWriter, r *http.Request) {
 		clearTranscriptStatus(calls)
 	}
 	writeJSON(w, http.StatusOK, calls)
+}
+
+// handleListConversations exposes an opt-in grouped call-log view. The legacy
+// /calls endpoint intentionally stays per transmission for recorder, mobile,
+// federation, and other existing API consumers.
+func (h *handler) handleListConversations(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.requireAuthenticated(w, r)
+	if !ok {
+		return
+	}
+
+	params := listCallsParamsFromRequest(r)
+	pageLimit, offset := params.Limit, params.Offset
+	params.Limit, params.Offset = 1000, 0
+	calls, err := h.db.ListCalls(params)
+	if err != nil {
+		h.logger.Error("list conversations failed", "error", err)
+		http.Error(w, "query conversations", http.StatusInternalServerError)
+		return
+	}
+	sourceByID, err := h.sourceAccessMap()
+	if err != nil {
+		h.logger.Error("list sources for conversation access failed", "error", err)
+		http.Error(w, "query sources", http.StatusInternalServerError)
+		return
+	}
+	sharedSourceIDs, err := h.sharedSourceIDsForUser(user)
+	if err != nil {
+		h.logger.Error("list source shares for conversation access failed", "error", err)
+		http.Error(w, "query source shares", http.StatusInternalServerError)
+		return
+	}
+
+	visible := make([]database.Call, 0, len(calls))
+	for _, call := range calls {
+		if h.canReadCall(user, call, sourceByID, sharedSourceIDs) {
+			if !h.transcriptionEnabled() {
+				sanitizeCallTranscriptionFields(&call)
+			}
+			visible = append(visible, call)
+		}
+	}
+	conversations := database.GroupCallsIntoConversations(visible, h.cfg.ConversationGapSeconds)
+	sortConversations(conversations, params.SortBy, params.Order)
+	if offset >= len(conversations) {
+		writeJSON(w, http.StatusOK, []database.Conversation{})
+		return
+	}
+	end := offset + pageLimit
+	if end > len(conversations) {
+		end = len(conversations)
+	}
+	writeJSON(w, http.StatusOK, conversations[offset:end])
+}
+
+func sortConversations(conversations []database.Conversation, sortBy, order string) {
+	desc := strings.ToUpper(order) != "ASC"
+	compare := func(left, right database.Conversation) int {
+		switch strings.ToLower(sortBy) {
+		case "duration":
+			if left.Duration < right.Duration {
+				return -1
+			}
+			if left.Duration > right.Duration {
+				return 1
+			}
+		case "frequency":
+			if left.Frequency < right.Frequency {
+				return -1
+			}
+			if left.Frequency > right.Frequency {
+				return 1
+			}
+		case "talkgroup":
+			if left.Talkgroup < right.Talkgroup {
+				return -1
+			}
+			if left.Talkgroup > right.Talkgroup {
+				return 1
+			}
+		default:
+			if left.DateTime < right.DateTime {
+				return -1
+			}
+			if left.DateTime > right.DateTime {
+				return 1
+			}
+		}
+		return 0
+	}
+	sort.SliceStable(conversations, func(i, j int) bool {
+		result := compare(conversations[i], conversations[j])
+		if result == 0 {
+			if conversations[i].ID < conversations[j].ID {
+				result = -1
+			} else if conversations[i].ID > conversations[j].ID {
+				result = 1
+			}
+		}
+		if desc {
+			return result > 0
+		}
+		return result < 0
+	})
 }
 
 func listCallsParamsFromRequest(r *http.Request) database.ListCallsParams {

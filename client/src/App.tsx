@@ -7,6 +7,7 @@ import {
   type RadioSetSelectionMode,
   type AuditLogEntry,
   type Call,
+  type Conversation,
   type FederationStatus,
   type HubIdentity,
   type HubInvite,
@@ -300,7 +301,8 @@ function App() {
   const [apiHealthy, setAPIHealthy] = useState(false)
   const [apiLastHealthyUnix, setAPILastHealthyUnix] = useState<number | null>(null)
   const [calls, setCalls] = useState<Call[]>([])
-  const [serverResults, setServerResults] = useState<Call[] | null>(null)
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [serverResults, setServerResults] = useState<Conversation[] | null>(null)
   const [serverLoading, setServerLoading] = useState(false)
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [search, setSearch] = useState('')
@@ -518,8 +520,14 @@ function App() {
   }
 
   const refreshCalls = (limit = 250) =>
-  api.calls({ limit, sort: 'datetime', order: 'desc' })
-    .then((rows) => setCalls((prev) => mergeCalls(prev, rows)))
+  Promise.all([
+    api.calls({ limit, sort: 'datetime', order: 'desc' }),
+    api.conversations({ limit, sort: 'datetime', order: 'desc' }),
+  ])
+    .then(([rows, grouped]) => {
+      setCalls((prev) => mergeCalls(prev, rows))
+      setConversations(grouped)
+    })
     .catch((err) => {
     console.error(err)
     })
@@ -629,13 +637,15 @@ function App() {
     })()
     Promise.all([
       api.calls({ limit: 500, sort: 'datetime', order: 'desc' }),
+      api.conversations({ limit: 500, sort: 'datetime', order: 'desc' }),
       api.talkgroupSettings(),
       api.callGroups(),
       refreshSources(),
       refreshAPIHealth(),
     ])
-      .then(([callRows, settings, groups]) => {
+      .then(([callRows, conversationRows, settings, groups]) => {
         setCalls(callRows)
+        setConversations(conversationRows)
         const mapped = Object.fromEntries(settings.map((s) => [s.talkgroup, s]))
         setSettingsMap(mapped)
         setAllGroups(groups)
@@ -939,7 +949,7 @@ function App() {
     return () => ws.disconnect()
   }, [ws])
 
-  function playCall(call: Call) {
+  function playCall(call: Call | Conversation) {
     if (call.redacted) {
       return
     }
@@ -949,20 +959,36 @@ function App() {
       return
     }
     const audio = audioRef.current ?? new Audio()
-    audio.src = `/api/v1/calls/${call.id}/audio?play=1`
     const audioVolume = volumeToGain(rsVolumeRef.current)
     audio.volume = audioVolume
-    audio.onended = () => setPlayingId(null)
     if (selectedDeviceId && 'setSinkId' in audio) {
       (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> })
         .setSinkId(selectedDeviceId)
         .catch(console.error)
     }
     audioRef.current = audio
+    const parts = 'parts' in call && call.parts.length > 0 ? call.parts : [call]
+    let partIndex = 0
+    const playPart = () => {
+      const part = parts[partIndex]
+      audio.src = `/api/v1/calls/${part.id}/audio?play=1`
+      audio.onended = () => {
+        partIndex++
+        if (partIndex < parts.length) {
+          void audio.play().catch((err) => {
+            console.error(err)
+            setPlayingId(null)
+          })
+          return
+        }
+        setPlayingId(null)
+      }
+      return audio.play()
+    }
     const chirpReady = call.origin === 'ptt'
       ? playChirp(volumeToGain(chirpVolumeRef.current))
       : Promise.resolve()
-    chirpReady.then(() => audio.play())
+    chirpReady.then(playPart)
       .then(() => setPlayingId(call.id))
       .catch((err) => {
         console.error(err)
@@ -1002,6 +1028,7 @@ function App() {
     try {
       await api.deleteTalkgroup(talkgroup)
       setCalls((prev) => prev.filter((call) => call.talkgroup !== talkgroup))
+      setConversations((prev) => prev.filter((conversation) => conversation.talkgroup !== talkgroup))
       setDistinctTalkgroups((prev) => prev.filter((tg) => tg.talkgroup !== talkgroup))
       setSettingsMap((prev) => {
         const next = { ...prev }
@@ -1413,7 +1440,7 @@ function App() {
   const [allGroups, setAllGroups] = useState<string[]>([])
 
   const filteredCalls = useMemo(() => buildFilteredCalls({
-    calls,
+    calls: conversations,
     groupFilter,
     hideMuted,
     search,
@@ -1422,8 +1449,8 @@ function App() {
     showFavoritesOnly,
     sortBy,
     sortOrder,
-  }), [calls, serverResults, hideMuted, search, groupFilter, settingsMap, showFavoritesOnly, sortBy, sortOrder])
-  const callLogCountLabel = formatCallLogCount(serverLoading, serverResults, filteredCalls.length, calls.length)
+  }), [conversations, serverResults, hideMuted, search, groupFilter, settingsMap, showFavoritesOnly, sortBy, sortOrder])
+  const callLogCountLabel = formatCallLogCount(serverLoading, serverResults, filteredCalls.length, conversations.length)
   const transcriptStatusSummary = useMemo(
     () => (transcriptionEnabled ? summarizeTranscriptStatus(filteredCalls) : { total: 0, done: 0, pending: 0, processing: 0, skipped: 0, failed: 0 }),
     [filteredCalls, transcriptionEnabled],
@@ -1472,7 +1499,7 @@ function App() {
       } else if (favTalkgroups.length > 0) {
         params.talkgroups = favTalkgroups
       }
-      api.calls(params)
+      api.conversations(params)
         .then((rows) => setServerResults(rows))
         .catch(console.error)
         .finally(() => setServerLoading(false))

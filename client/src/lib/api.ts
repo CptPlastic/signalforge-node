@@ -57,6 +57,14 @@ export type Call = {
   createdAt: number
 }
 
+// A conversation preserves the normal Call fields from its first transmission
+// and adds chronological parts for continuous playback.
+export type Conversation = Call & {
+  endDateTime: number
+  partCount: number
+  parts: Call[]
+}
+
 export type HubIdentity = {
   hubId: string
   name: string
@@ -628,6 +636,8 @@ export const api = {
   enableHubPeer: (id: string) => request<HubPeer>(`/api/v1/hub/peers/${encodeURIComponent(id)}/enable`, { method: 'PATCH' }),
   deleteHubPeer: (id: string) => request<void>(`/api/v1/hub/peers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   calls: (params?: CallQuery) => request<Call[]>(`/api/v1/calls${buildQuery(params ?? { limit: 100 })}`),
+  conversations: (params?: CallQuery) =>
+    request<Conversation[]>(`/api/v1/conversations${buildQuery(params ?? { limit: 100 })}`),
   callGroups: () => request<string[]>('/api/v1/calls/groups'),
   talkgroupSettings: () => request<TalkgroupSetting[]>('/api/v1/talkgroups/settings'),
   updateTalkgroupSettings: (talkgroup: number, setting: { favorite: boolean; muted: boolean; transcribe: boolean }) =>

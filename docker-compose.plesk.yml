@@ -87,6 +87,7 @@ services:
       UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-https://signalforge.org/p7-scanner-update.json}
       TRANSCRIPTION_WORKER_TOKEN: ${TRANSCRIPTION_WORKER_TOKEN:-}
       TRANSCRIPTION_MIN_DURATION_SECONDS: ${TRANSCRIPTION_MIN_DURATION_SECONDS:-0.75}
+      CONVERSATION_GAP_SECONDS: ${CONVERSATION_GAP_SECONDS:-4}
       # Multi-bot instances for round-robin assignment (5 bots).
       DISCORD_BOT_INSTANCES: signal1,signal2,signal3,signal4,signal5
       # Pass-through (no ${}) — Portainer stack env; avoids empty interpolation wiping env_file.
