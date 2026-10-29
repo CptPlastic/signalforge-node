@@ -1,14 +1,14 @@
-import type { Call, TalkgroupSetting } from './api'
+import type { Conversation, TalkgroupSetting } from './api'
 
 type CallSortBy = 'datetime' | 'duration' | 'frequency' | 'talkgroup'
 type CallSortOrder = 'asc' | 'desc'
 
 type BuildFilteredCallsArgs = Readonly<{
-  calls: Call[]
+  calls: Conversation[]
   groupFilter: string
   hideMuted: boolean
   search: string
-  serverResults: Call[] | null
+  serverResults: Conversation[] | null
   settingsMap: Record<number, TalkgroupSetting>
   showFavoritesOnly: boolean
   sortBy: CallSortBy
@@ -25,7 +25,7 @@ export function buildFilteredCalls({
   showFavoritesOnly,
   sortBy,
   sortOrder,
-}: BuildFilteredCallsArgs): Call[] {
+}: BuildFilteredCallsArgs): Conversation[] {
   const usingLiveStream = serverResults === null
   let list = [...(serverResults ?? calls)]
   const query = search.trim().toLowerCase()
@@ -70,7 +70,7 @@ export function buildFilteredCalls({
   return list
 }
 
-export function formatCallLogCount(serverLoading: boolean, serverResults: Call[] | null, filteredCount: number, totalCount: number): string {
+export function formatCallLogCount(serverLoading: boolean, serverResults: Conversation[] | null, filteredCount: number, totalCount: number): string {
   if (serverLoading) return 'searching...'
   if (serverResults) return `${filteredCount} results`
   return `${filteredCount}/${totalCount} calls`

@@ -8,81 +8,83 @@ import (
 )
 
 type Config struct {
-	ListenAddr               string
-	DatabaseURL              string
-	AppEnv                   string
-	StackID                  string
-	DeployTag                string
-	PublicBaseURL            string
-	MailFromEmail            string
-	MailFromName             string
-	MailjetAPIKey            string
-	MailjetSecretKey         string
-	HubName                  string
-	HubPublicURL             string
-	HubRegion                string
-	HubContact               string
-	HubFederation            bool
-	HubTrustLevel            string
-	HubTrustIssuer           string
-	HubTrustCert             string
-	HubTrustExpires          int64
-	HubDirectoryURL          string
-	UpdateCheckURL           string
-	TranscriptionWorkerToken string
-	TranscriptionMinDuration float64
-	DiscordBotWorkerToken    string
-	DiscordBotInstances      []string
-	AuthBootstrapEmail       string
-	AuthBootstrapPassword    string
-	AuthAutoApproveUsers     bool
-	AuthPasswordLoginEnabled bool
-	CallRetentionDays        int
-	CallArchiveDir           string
-	CallArchiveS3URI         string
-	CallArchiveS3Cfg         string
+	ListenAddr                    string
+	DatabaseURL                   string
+	AppEnv                        string
+	StackID                       string
+	DeployTag                     string
+	PublicBaseURL                 string
+	MailFromEmail                 string
+	MailFromName                  string
+	MailjetAPIKey                 string
+	MailjetSecretKey              string
+	HubName                       string
+	HubPublicURL                  string
+	HubRegion                     string
+	HubContact                    string
+	HubFederation                 bool
+	HubTrustLevel                 string
+	HubTrustIssuer                string
+	HubTrustCert                  string
+	HubTrustExpires               int64
+	HubDirectoryURL               string
+	UpdateCheckURL                string
+	TranscriptionWorkerToken      string
+	TranscriptionMinDuration      float64
+	DiscordBotWorkerToken         string
+	DiscordBotInstances           []string
+	AuthBootstrapEmail            string
+	AuthBootstrapPassword         string
+	AuthAutoApproveUsers          bool
+	AuthPasswordLoginEnabled      bool
+	ConversationGapSeconds        float64
+	CallRetentionDays             int
+	CallArchiveDir                string
+	CallArchiveS3URI              string
+	CallArchiveS3Cfg              string
 	CallArchiveDeleteLocalAfterS3 bool
 	CallArchiveVacuumFull         bool
 	IncidentArchiveDays           int
-	LogLevel                 slog.Level
+	LogLevel                      slog.Level
 }
 
 func Load() (Config, error) {
 	publicBaseURL := strings.TrimSpace(getEnv("APP_BASE_URL", ""))
 	cfg := Config{
-		ListenAddr:               getEnv("LISTEN_ADDR", ":8080"),
-		DatabaseURL:              getEnv("DATABASE_URL", "postgres://p7scanner@localhost:5432/p7scanner?sslmode=disable"),
-		AppEnv:                   getEnv("APP_ENV", "development"),
-		StackID:                  getFirstEnv([]string{"STACK_ID", "PORTAINER_STACK_NAME", "COMPOSE_PROJECT_NAME"}, "local"),
-		DeployTag:                getFirstEnv([]string{"DEPLOY_TAG", "IMAGE_TAG"}, "unknown"),
-		PublicBaseURL:            publicBaseURL,
-		MailFromEmail:            strings.TrimSpace(getEnv("MAIL_FROM_EMAIL", "")),
-		MailFromName:             strings.TrimSpace(getEnv("MAIL_FROM_NAME", "SignalForge Hub")),
-		MailjetAPIKey:            strings.TrimSpace(getEnv("MAILJET_API_KEY", "")),
-		MailjetSecretKey:         strings.TrimSpace(getEnv("MAILJET_SECRET_KEY", "")),
-		HubName:                  strings.TrimSpace(getEnv("HUB_NAME", "SignalForge Hub")),
-		HubPublicURL:             strings.TrimSpace(getEnv("HUB_PUBLIC_URL", publicBaseURL)),
-		HubRegion:                strings.TrimSpace(getEnv("HUB_REGION", "")),
-		HubContact:               strings.TrimSpace(getEnv("HUB_CONTACT", "")),
-		HubFederation:            getBoolEnv("HUB_FEDERATION_ENABLED", false),
-		HubTrustLevel:            normalizeHubTrustLevel(getEnv("HUB_TRUST_LEVEL", "community")),
-		HubTrustIssuer:           strings.TrimSpace(getEnv("HUB_TRUST_ISSUER", "")),
-		HubTrustCert:             strings.TrimSpace(getEnv("HUB_TRUST_CERTIFICATE", "")),
-		HubTrustExpires:          getInt64Env("HUB_TRUST_EXPIRES_AT", 0),
-		HubDirectoryURL:          strings.TrimSpace(getEnv("HUB_DIRECTORY_URL", "https://signalforge.org/directory/hubs.json")),
-		UpdateCheckURL:           strings.TrimSpace(getEnv("UPDATE_CHECK_URL", "https://signalforge.org/p7-scanner-update.json")),
-		TranscriptionWorkerToken: strings.TrimSpace(getEnv("TRANSCRIPTION_WORKER_TOKEN", "")),
-		TranscriptionMinDuration: getFloat64Env("TRANSCRIPTION_MIN_DURATION_SECONDS", 0.75),
-		DiscordBotWorkerToken:    strings.TrimSpace(getEnv("DISCORD_BOT_WORKER_TOKEN", "")),
-		DiscordBotInstances:      parseCommaList(getEnv("DISCORD_BOT_INSTANCES", "signal1")),
-		AuthBootstrapEmail:       strings.ToLower(strings.TrimSpace(getEnv("AUTH_BOOTSTRAP_EMAIL", ""))),
-		AuthBootstrapPassword:    getEnv("AUTH_BOOTSTRAP_PASSWORD", ""),
-		AuthAutoApproveUsers:     getBoolEnv("AUTH_AUTO_APPROVE_USERS", false),
-		AuthPasswordLoginEnabled: getBoolEnv("AUTH_PASSWORD_LOGIN_ENABLED", false),
-		CallRetentionDays:        getIntEnv("CALL_RETENTION_DAYS", 0),
-		CallArchiveDir:           strings.TrimSpace(getEnv("CALL_ARCHIVE_DIR", "/data/call-archive")),
-		CallArchiveS3URI:         strings.TrimSpace(getEnv("CALL_ARCHIVE_S3_URI", "")),
-		CallArchiveS3Cfg:         strings.TrimSpace(getEnv("CALL_ARCHIVE_S3CFG", "/etc/signalforge/s3cfg")),
+		ListenAddr:                    getEnv("LISTEN_ADDR", ":8080"),
+		DatabaseURL:                   getEnv("DATABASE_URL", "postgres://p7scanner@localhost:5432/p7scanner?sslmode=disable"),
+		AppEnv:                        getEnv("APP_ENV", "development"),
+		StackID:                       getFirstEnv([]string{"STACK_ID", "PORTAINER_STACK_NAME", "COMPOSE_PROJECT_NAME"}, "local"),
+		DeployTag:                     getFirstEnv([]string{"DEPLOY_TAG", "IMAGE_TAG"}, "unknown"),
+		PublicBaseURL:                 publicBaseURL,
+		MailFromEmail:                 strings.TrimSpace(getEnv("MAIL_FROM_EMAIL", "")),
+		MailFromName:                  strings.TrimSpace(getEnv("MAIL_FROM_NAME", "SignalForge Hub")),
+		MailjetAPIKey:                 strings.TrimSpace(getEnv("MAILJET_API_KEY", "")),
+		MailjetSecretKey:              strings.TrimSpace(getEnv("MAILJET_SECRET_KEY", "")),
+		HubName:                       strings.TrimSpace(getEnv("HUB_NAME", "SignalForge Hub")),
+		HubPublicURL:                  strings.TrimSpace(getEnv("HUB_PUBLIC_URL", publicBaseURL)),
+		HubRegion:                     strings.TrimSpace(getEnv("HUB_REGION", "")),
+		HubContact:                    strings.TrimSpace(getEnv("HUB_CONTACT", "")),
+		HubFederation:                 getBoolEnv("HUB_FEDERATION_ENABLED", false),
+		HubTrustLevel:                 normalizeHubTrustLevel(getEnv("HUB_TRUST_LEVEL", "community")),
+		HubTrustIssuer:                strings.TrimSpace(getEnv("HUB_TRUST_ISSUER", "")),
+		HubTrustCert:                  strings.TrimSpace(getEnv("HUB_TRUST_CERTIFICATE", "")),
+		HubTrustExpires:               getInt64Env("HUB_TRUST_EXPIRES_AT", 0),
+		HubDirectoryURL:               strings.TrimSpace(getEnv("HUB_DIRECTORY_URL", "https://signalforge.org/directory/hubs.json")),
+		UpdateCheckURL:                strings.TrimSpace(getEnv("UPDATE_CHECK_URL", "https://signalforge.org/p7-scanner-update.json")),
+		TranscriptionWorkerToken:      strings.TrimSpace(getEnv("TRANSCRIPTION_WORKER_TOKEN", "")),
+		TranscriptionMinDuration:      getFloat64Env("TRANSCRIPTION_MIN_DURATION_SECONDS", 0.75),
+		DiscordBotWorkerToken:         strings.TrimSpace(getEnv("DISCORD_BOT_WORKER_TOKEN", "")),
+		DiscordBotInstances:           parseCommaList(getEnv("DISCORD_BOT_INSTANCES", "signal1")),
+		AuthBootstrapEmail:            strings.ToLower(strings.TrimSpace(getEnv("AUTH_BOOTSTRAP_EMAIL", ""))),
+		AuthBootstrapPassword:         getEnv("AUTH_BOOTSTRAP_PASSWORD", ""),
+		AuthAutoApproveUsers:          getBoolEnv("AUTH_AUTO_APPROVE_USERS", false),
+		AuthPasswordLoginEnabled:      getBoolEnv("AUTH_PASSWORD_LOGIN_ENABLED", false),
+		ConversationGapSeconds:        getFloat64Env("CONVERSATION_GAP_SECONDS", 4),
+		CallRetentionDays:             getIntEnv("CALL_RETENTION_DAYS", 0),
+		CallArchiveDir:                strings.TrimSpace(getEnv("CALL_ARCHIVE_DIR", "/data/call-archive")),
+		CallArchiveS3URI:              strings.TrimSpace(getEnv("CALL_ARCHIVE_S3_URI", "")),
+		CallArchiveS3Cfg:              strings.TrimSpace(getEnv("CALL_ARCHIVE_S3CFG", "/etc/signalforge/s3cfg")),
 		CallArchiveDeleteLocalAfterS3: getBoolEnv("CALL_ARCHIVE_DELETE_LOCAL_AFTER_S3", false),
 		CallArchiveVacuumFull:         getBoolEnv("CALL_ARCHIVE_VACUUM_FULL", true),
 		IncidentArchiveDays:           getIntEnv("INCIDENT_ARCHIVE_DAYS", 365),
@@ -103,6 +105,9 @@ func Load() (Config, error) {
 	// operators forget AUTH_PASSWORD_LOGIN_ENABLED (common in Portainer/Plesk stacks).
 	if cfg.AuthBootstrapEmail != "" && strings.TrimSpace(cfg.AuthBootstrapPassword) != "" {
 		cfg.AuthPasswordLoginEnabled = true
+	}
+	if cfg.ConversationGapSeconds < 0 {
+		cfg.ConversationGapSeconds = 0
 	}
 
 	return cfg, nil

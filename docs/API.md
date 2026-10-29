@@ -96,6 +96,7 @@ Authenticated session required.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/calls` | List calls with pagination, search, talkgroup, group, source, and radio-set filters. |
+| `GET` | `/api/v1/conversations` | Opt-in grouped call-log view. Adjacent same-system/talkgroup calls include chronological `parts` for continuous playback. |
 | `GET` | `/api/v1/calls/{id}/audio` | Download/play call audio if readable by the current user. |
 | `GET` | `/api/v1/calls/groups` | List distinct talkgroup groups. |
 | `GET` | `/api/v1/talkgroups/distinct` | List distinct talkgroups for radio-set editing. |
@@ -116,6 +117,23 @@ Common `/api/v1/calls` query parameters:
 | `sourceId` | Filter by source. |
 | `sort` | Field such as `datetime`, `duration`, `talkgroup`, or `frequency`. |
 | `order` | `asc` or `desc`. |
+
+`/api/v1/calls` remains unchanged and returns individual transmissions for
+existing recorder, federation, and mobile clients. `/api/v1/conversations`
+uses the same filters and sort options, but combines calls when the next call
+starts within `CONVERSATION_GAP_SECONDS` (default `4`) after the prior call
+ends. It returns the first call's normal fields plus `endDateTime`,
+`partCount`, and oldest-first `parts`. Each part remains downloadable through
+the existing `/api/v1/calls/{id}/audio` endpoint.
+
+Grouping is calculated when the endpoint is queried, not stored in the
+database. No migration or historical backfill is needed, and changing the
+environment value takes effect after the hub restarts.
+
+The WebSocket/live-stream and `/api/v1/calls` surfaces continue to emit
+individual calls for compatibility. SignalForge Mobile can adopt
+`/api/v1/conversations` and play `parts` oldest-first when it is ready; no
+mobile change is required for this server release.
 
 ## Call Storage And Retention (Admin)
 

@@ -4,19 +4,19 @@ import "encoding/json"
 
 // HubIdentity identifies this SignalForge Hub instance for future SignalHub federation.
 type HubIdentity struct {
-	HubID                     string `json:"hubId"`
-	Name                      string `json:"name"`
-	PublicURL                 string `json:"publicUrl"`
-	Region                    string `json:"region"`
-	Contact                   string `json:"contact"`
-	PublicKey                 string `json:"publicKey"`
-	PrivateKey                string `json:"-"`
-	FederationEnabled         bool   `json:"federationEnabled"`
-	DirectoryValidationStatus string `json:"directoryValidationStatus"`
-	TrustLevel                string `json:"trustLevel"`
-	TrustIssuerHubID          string `json:"trustIssuerHubId"`
-	TrustCertificate          string `json:"trustCertificate"`
-	TrustExpiresAt            int64  `json:"trustExpiresAt"`
+	HubID                     string   `json:"hubId"`
+	Name                      string   `json:"name"`
+	PublicURL                 string   `json:"publicUrl"`
+	Region                    string   `json:"region"`
+	Contact                   string   `json:"contact"`
+	PublicKey                 string   `json:"publicKey"`
+	PrivateKey                string   `json:"-"`
+	FederationEnabled         bool     `json:"federationEnabled"`
+	DirectoryValidationStatus string   `json:"directoryValidationStatus"`
+	TrustLevel                string   `json:"trustLevel"`
+	TrustIssuerHubID          string   `json:"trustIssuerHubId"`
+	TrustCertificate          string   `json:"trustCertificate"`
+	TrustExpiresAt            int64    `json:"trustExpiresAt"`
 	TrustVerifiedAt           int64    `json:"trustVerifiedAt"`
 	IncidentManagementEnabled bool     `json:"incidentManagementEnabled"`
 	IncidentHandlerHubID      string   `json:"incidentHandlerHubId"`
@@ -87,6 +87,19 @@ type Call struct {
 	CreatedAt   int64  `json:"createdAt"`
 }
 
+// Conversation is a read-only view of adjacent calls on one system and
+// talkgroup. Calls remain individual database records and are available
+// through the existing call API and audio endpoint.
+//
+// The embedded Call supplies the row metadata from the first call. Parts are
+// chronological so clients can play them in sequence.
+type Conversation struct {
+	Call
+	EndDateTime int64  `json:"endDateTime"`
+	PartCount   int    `json:"partCount"`
+	Parts       []Call `json:"parts"`
+}
+
 // TranscriptionJob is a queued call ready for an external worker.
 type TranscriptionJob struct {
 	CallID         int64   `json:"callId"`
@@ -128,15 +141,15 @@ type IngestionSource struct {
 
 // User represents an account that can own sources and sessions.
 type User struct {
-	ID                  string `json:"id"`
-	Email               string `json:"email"`
-	Role                string `json:"role"`
-	Status              string `json:"status"`
-	TxEnabled           bool   `json:"txEnabled"`
-	DispatcherEnabled   bool   `json:"dispatcherEnabled"`
-	PasswordConfigured  bool   `json:"passwordConfigured"`
-	CreatedAt           int64  `json:"createdAt"`
-	UpdatedAt           int64  `json:"updatedAt"`
+	ID                 string `json:"id"`
+	Email              string `json:"email"`
+	Role               string `json:"role"`
+	Status             string `json:"status"`
+	TxEnabled          bool   `json:"txEnabled"`
+	DispatcherEnabled  bool   `json:"dispatcherEnabled"`
+	PasswordConfigured bool   `json:"passwordConfigured"`
+	CreatedAt          int64  `json:"createdAt"`
+	UpdatedAt          int64  `json:"updatedAt"`
 }
 
 // AuditLogEntry represents a single audit event.
@@ -208,8 +221,8 @@ type ListCallsParams struct {
 	Offset      int
 	UserID      string
 	OnlyUnowned bool
-	Talkgroups      []int
-	Groups          []string
+	Talkgroups  []int
+	Groups      []string
 }
 
 // FederatedCall is a call payload shared between trusted hubs.

@@ -68,6 +68,8 @@ export function CallRow({
   const rowClass = getRowClass(active, playing)
   const transcript = transcriptLabel(call)
   const transcriptState = transcriptBadge(call)
+  const parts = 'parts' in call && Array.isArray(call.parts) ? call.parts : [call]
+  const partCount = parts.length
 
   return (
     <tr
@@ -134,7 +136,16 @@ export function CallRow({
       <td className="py-2 px-3 tabular-nums text-console-muted whitespace-nowrap">
         {fmtFreq(call.frequency)}
       </td>
-      <td className="py-2 px-3 tabular-nums text-console-muted">{fmtDur(call.duration)}</td>
+      <td className="py-2 px-3 tabular-nums text-console-muted">
+        <div className="flex items-center gap-1.5">
+          <span>{fmtDur(call.duration)}</span>
+          {partCount > 1 && (
+            <span className="px-1.5 py-0.5 border border-console-accent/60 rounded text-[9px] text-console-accent uppercase tracking-widest">
+              {partCount} parts
+            </span>
+          )}
+        </div>
+      </td>
       <td className="py-2 px-3 text-console-muted">
         <div className="flex items-start gap-2">
           {transcriptState && (
@@ -161,6 +172,24 @@ export function CallRow({
           </button>
           {isRedacted ? (
             <span className="px-2 py-0.5 border border-console-border rounded text-[10px] text-console-muted">—</span>
+          ) : partCount > 1 ? (
+            <details className="relative">
+              <summary className="cursor-pointer list-none px-2 py-0.5 border border-console-border rounded text-[10px] text-console-muted hover:border-console-accent hover:text-console-accent">
+                ↓ PARTS
+              </summary>
+              <div className="absolute right-0 z-10 mt-1 min-w-28 border border-console-border rounded bg-console-surface p-1 shadow-lg">
+                {parts.map((part, index) => (
+                  <a
+                    key={part.id}
+                    href={`/api/v1/calls/${part.id}/audio?download=1`}
+                    download={part.audioName || `call-${part.id}`}
+                    className="block px-2 py-1 text-[10px] text-console-muted hover:text-console-accent"
+                  >
+                    Part {index + 1} · {fmtDur(part.duration)}
+                  </a>
+                ))}
+              </div>
+            </details>
           ) : (
             <a
               href={`/api/v1/calls/${call.id}/audio?download=1`}
