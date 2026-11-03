@@ -50,6 +50,7 @@ import {
   smoothSourceStatusMap,
   type SmoothedSourceStatus,
 } from './lib/sourceStatus'
+import { playCallParts } from './lib/callPlayback'
 import { WebSocketClient } from './lib/ws'
 import { isMobileUserAgent, tryOpenSignalforgeApp } from './lib/mobileAuthHandoff'
 import type { AppView } from './types/app'
@@ -911,7 +912,7 @@ function App() {
                   [msg.sourceId!]: {
                     ...existing,
                     callsReceived: existing.callsReceived + 1,
-                    lastSeenUnix: msg.call.dateTime,
+                    lastSeenUnix: Math.floor(Date.now() / 1000),
                   },
                 }
               })
@@ -968,27 +969,18 @@ function App() {
     }
     audioRef.current = audio
     const parts = 'parts' in call && call.parts.length > 0 ? call.parts : [call]
-    let partIndex = 0
-    const playPart = () => {
-      const part = parts[partIndex]
-      audio.src = `/api/v1/calls/${part.id}/audio?play=1`
-      audio.onended = () => {
-        partIndex++
-        if (partIndex < parts.length) {
-          void audio.play().catch((err) => {
-            console.error(err)
-            setPlayingId(null)
-          })
-          return
-        }
-        setPlayingId(null)
-      }
-      return audio.play()
-    }
     const chirpReady = call.origin === 'ptt'
       ? playChirp(volumeToGain(chirpVolumeRef.current))
       : Promise.resolve()
-    chirpReady.then(playPart)
+    chirpReady.then(() => playCallParts(
+      audio,
+      parts,
+      () => setPlayingId(null),
+      (err) => {
+        console.error(err)
+        setPlayingId(null)
+      },
+    ))
       .then(() => setPlayingId(call.id))
       .catch((err) => {
         console.error(err)
@@ -1952,7 +1944,7 @@ function App() {
                     <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${status.dotClass}`} aria-hidden title={status.title} />
                     <span className="font-semibold truncate max-w-[120px]" title={source.label || source.id}>{source.label || source.id}</span>
                     <span className="text-console-muted tabular-nums">{source.callsReceived}c</span>
-                    {source.errorCount > 0 && <span className="text-console-error tabular-nums">{source.errorCount}e</span>}
+                    {status.state === 'error' && <span className="text-console-error tabular-nums">{source.errorCount}e</span>}
                     <button
                       onClick={() => toggleSourceEnabled(source)}
                       disabled={!canManageThisSource}

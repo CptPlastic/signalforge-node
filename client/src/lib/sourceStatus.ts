@@ -1,11 +1,12 @@
 import type { IngestionSource } from './api'
 
-export const SOURCE_STALE_AFTER_SEC = 12
+// Radio traffic is naturally bursty; no call for several minutes is normal.
+export const SOURCE_STALE_AFTER_SEC = 10 * 60
 export const SOURCE_STATUS_MIN_DWELL_SEC = 6
 export const SOURCE_OFFLINE_GRACE_SEC = 10
 
 export type SourceRuntimeStatus = {
-  state: 'live' | 'offline' | 'disabled' | 'error'
+  state: 'live' | 'offline' | 'disabled' | 'error' | 'waiting'
   dotClass: string
   title: string
   label: string
@@ -26,32 +27,16 @@ export function getSourceRuntimeStatus(source: IngestionSource, nowUnix: number)
   }
 
   if (source.lastSeenUnix <= 0) {
-    if (source.errorCount > 0) {
-      return {
-        state: 'error',
-        dotClass: 'bg-console-error',
-        title: `${source.errorCount} errors`,
-        label: 'ERROR',
-      }
-    }
     return {
-      state: 'offline',
-      dotClass: 'bg-console-amber',
-      title: 'degraded (no calls received yet)',
-      label: 'DEGRADED',
+      state: 'waiting',
+      dotClass: 'bg-console-muted',
+      title: 'waiting for first call',
+      label: 'WAITING',
     }
   }
 
   const ageSec = nowUnix - source.lastSeenUnix
   if (ageSec > SOURCE_STALE_AFTER_SEC) {
-    if (source.errorCount > 0) {
-      return {
-        state: 'error',
-        dotClass: 'bg-console-error',
-        title: `offline - ${source.errorCount} errors`,
-        label: 'ERROR',
-      }
-    }
     return {
       state: 'offline',
       dotClass: 'bg-console-amber',
@@ -62,10 +47,10 @@ export function getSourceRuntimeStatus(source: IngestionSource, nowUnix: number)
 
   if (source.errorCount > 0) {
     return {
-      state: 'live',
-      dotClass: 'bg-console-accent',
-      title: `live - ${source.errorCount} past errors`,
-      label: 'LIVE',
+      state: 'error',
+      dotClass: 'bg-console-error',
+      title: `${source.errorCount} recent errors`,
+      label: 'ERROR',
     }
   }
 

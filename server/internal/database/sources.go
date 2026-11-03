@@ -133,6 +133,7 @@ func (d *DB) IncrementSourceMetrics(sourceID string, success bool) error {
 			ON CONFLICT(id) DO UPDATE SET
 			    calls_received = ingestion_sources.calls_received + 1,
 			    last_seen_unix = excluded.last_seen_unix,
+			    error_count = 0,
 			    updated_at    = excluded.updated_at`,
 			sourceID, now, now)
 		return err
