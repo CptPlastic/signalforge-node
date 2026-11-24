@@ -8,7 +8,7 @@ RUN go mod download
 COPY server ./
 RUN sh b
 
-FROM alpine:3.20
+FROM alpine:3.24
 RUN apk add --no-cache ffmpeg ca-certificates su-exec s3cmd \
 	&& addgroup -S app \
 	&& adduser -S -G app -u 10001 app
