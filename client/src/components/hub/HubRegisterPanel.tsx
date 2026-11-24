@@ -198,7 +198,7 @@ export function HubRegisterPanel({
             href={registerUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10"
+            className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent/10"
           >
             OPEN REGISTRATION FORM ↗
           </a>

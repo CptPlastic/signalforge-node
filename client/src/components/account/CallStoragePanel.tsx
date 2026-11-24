@@ -330,7 +330,7 @@ export function CallStoragePanel() {
 
       {envNotReachingContainer && (
         <div className="rounded border border-console-error/40 bg-console-error/10 px-3 py-2 text-[11px] text-console-error">
-          Stack env vars are not reaching the api container. In Portainer → Stack → Environment, set{' '}
+          Stack env vars are not reaching the api container. In the Coolify stack environment, set{' '}
           <code>CALL_RETENTION_DAYS=30</code> and <code>CALL_ARCHIVE_DIR=/data/call-archive</code>, update the stack
           compose from the latest repo (must include pass-through lines under <code>api.environment</code>), then{' '}
           <strong>Update the stack</strong> with pull + recreate. Verify with{' '}
@@ -340,7 +340,7 @@ export function CallStoragePanel() {
 
       {archiveConfigured && stats && stats.retentionDays <= 0 && (
         <div className="rounded border border-console-error/40 bg-console-error/10 px-3 py-2 text-[11px] text-console-error">
-          CALL_RETENTION_DAYS is not set. Add it to the Portainer stack Environment (e.g. <code>30</code>) and redeploy.
+          CALL_RETENTION_DAYS is not set. Add it to the Coolify stack environment (e.g. <code>30</code>) and redeploy.
         </div>
       )}
 
@@ -362,7 +362,7 @@ export function CallStoragePanel() {
         <button
           type="button"
           onClick={() => void runArchive(false)}
-          className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+          className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent/10 disabled:opacity-50"
           disabled={working || !stats?.retentionDays || !archiveConfigured}
         >
           {working ? 'ARCHIVING…' : 'ARCHIVE NOW'}

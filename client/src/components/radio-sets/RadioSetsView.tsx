@@ -433,7 +433,7 @@ export function RadioSetsView({
             <button
               onClick={submitRadioSet}
               disabled={rsLoading}
-              className="px-3 py-1 border border-console-accent text-console-accent rounded text-[10px] uppercase tracking-widest hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50 flex-1 sm:flex-none"
+              className="px-3 py-1 border border-console-accent text-console-accent rounded text-[10px] uppercase tracking-widest hover:bg-console-accent/10 disabled:opacity-50 flex-1 sm:flex-none"
             >
               {rsLoading ? 'SAVING...' : 'CREATE'}
             </button>
@@ -520,7 +520,7 @@ export function RadioSetsView({
                         <PTTButton radioSetId={radioSet.id} />
                         <button
                           onClick={() => onOpenPTTMode(radioSet.id)}
-                          className="px-2 py-1 sm:py-0.5 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10"
+                          className="px-2 py-1 sm:py-0.5 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent/10"
                           title="Open dedicated PTT mode with spacebar binding"
                         >
                           KEY
@@ -570,7 +570,7 @@ export function RadioSetsView({
                     </button>
                     <button
                       onClick={() => deleteRadioSet(radioSet)}
-                      className="px-2 py-1 sm:py-0.5 border border-console-error text-console-error rounded text-[10px] hover:bg-console-error hover:bg-opacity-10"
+                      className="px-2 py-1 sm:py-0.5 border border-console-error text-console-error rounded text-[10px] hover:bg-console-error/10"
                       disabled={!canManageRadioSet}
                     >
                       DEL
@@ -606,7 +606,7 @@ export function RadioSetsView({
                       <span className="text-[10px] text-console-muted uppercase tracking-wider">Share links</span>
                       <button
                         onClick={() => revokeShareLink(radioSet.id)}
-                        className="px-1.5 py-0.5 border border-console-error text-console-error rounded text-[10px] hover:bg-console-error hover:bg-opacity-10"
+                        className="px-1.5 py-0.5 border border-console-error text-console-error rounded text-[10px] hover:bg-console-error/10"
                         disabled={!canManageRadioSet}
                       >
                         REVOKE
@@ -752,7 +752,7 @@ export function RadioSetsView({
                       <button
                         onClick={submitRadioSet}
                         disabled={rsLoading}
-                        className="px-3 py-1 border border-console-accent text-console-accent rounded text-[10px] uppercase tracking-widest hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50 flex-1 sm:flex-none"
+                        className="px-3 py-1 border border-console-accent text-console-accent rounded text-[10px] uppercase tracking-widest hover:bg-console-accent/10 disabled:opacity-50 flex-1 sm:flex-none"
                       >
                         {rsLoading ? 'SAVING...' : 'SAVE'}
                       </button>

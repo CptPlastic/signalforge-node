@@ -30,7 +30,7 @@ function getViewButtonClass(activeView: AppView, view: AppView, authUser: AuthUs
   const isAccountWhenLoggedOut = view === 'account' && !authUser
 
   if (isAccountWhenLoggedOut) {
-    return 'border-console-accent text-console-accent bg-console-accent bg-opacity-5 account-tab-attn font-bold'
+    return 'border-console-accent text-console-accent bg-console-accent/5 account-tab-attn font-bold'
   }
 
   if (!isAvailable) {

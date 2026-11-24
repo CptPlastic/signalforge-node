@@ -101,7 +101,7 @@ function AdminOperatorPanel({ onOpenHub }: { onOpenHub?: () => void }) {
           <button
             type="button"
             onClick={onOpenHub}
-            className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10"
+            className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent/10"
           >
             OPEN HUB ADMIN
           </button>
@@ -130,7 +130,7 @@ function SessionPanel({ authUser, authLoading, onLogoutSession }: SessionPanelPr
         <div className="text-console-muted">Role: <span className="text-console-accent uppercase">{authUser.role}</span></div>
         <button
           onClick={onLogoutSession}
-          className="w-fit px-2 py-1 border border-console-error text-console-error rounded text-[11px] hover:bg-console-error hover:bg-opacity-10"
+          className="w-fit px-2 py-1 border border-console-error text-console-error rounded text-[11px] hover:bg-console-error/10"
           disabled={authLoading}
         >
           {authLoading ? 'WORKING...' : 'LOGOUT'}
@@ -189,7 +189,7 @@ function AuthAccessCard({
           />
           <button
             onClick={onPasswordLogin}
-            className="w-full sm:w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+            className="w-full sm:w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent/10 disabled:opacity-50"
             disabled={authLoading || !authEmail.trim() || !authPassword}
           >
             {authLoading ? 'WORKING...' : 'SIGN IN'}
@@ -221,7 +221,7 @@ function AuthAccessCard({
             />
             <button
               onClick={onRequestMagicLink}
-              className="w-full sm:w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+              className="w-full sm:w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent/10 disabled:opacity-50"
               disabled={authLoading || !authEmail.trim()}
             >
               {authLoading ? 'WORKING...' : 'SEND CODE'}
@@ -256,7 +256,7 @@ function AuthAccessCard({
             />
             <button
               onClick={onVerifyMagicLinkToken}
-              className="w-full sm:w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+              className="w-full sm:w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent/10 disabled:opacity-50"
               disabled={authLoading || !authToken.trim()}
             >
               {authLoading ? 'WORKING...' : 'VERIFY & LOGIN'}
@@ -423,7 +423,7 @@ function UserManagementPanel({
                   {user.status === 'pending' && (
                     <button
                       onClick={() => onApproveUser(user)}
-                      className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10"
+                      className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent/10"
                       disabled={userActionID === user.id}
                     >
                       APPROVE
@@ -431,7 +431,7 @@ function UserManagementPanel({
                   )}
                   <button
                     onClick={() => onSaveUser(user)}
-                    className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10"
+                    className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent/10"
                     disabled={userActionID === user.id}
                   >
                     SAVE
@@ -447,7 +447,7 @@ function UserManagementPanel({
                   )}
                   <button
                     onClick={() => onRemoveUser(user)}
-                    className="px-2 py-1 border border-console-error text-console-error rounded text-[10px] hover:bg-console-error hover:bg-opacity-10"
+                    className="px-2 py-1 border border-console-error text-console-error rounded text-[10px] hover:bg-console-error/10"
                     disabled={userActionID === user.id}
                   >
                     DELETE
@@ -473,7 +473,7 @@ function UserManagementPanel({
                     />
                     <button
                       onClick={() => void submitPassword(user)}
-                      className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10"
+                      className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent/10"
                       disabled={userActionID === user.id}
                     >
                       {userActionID === user.id ? 'SAVING...' : 'SAVE PASSWORD'}

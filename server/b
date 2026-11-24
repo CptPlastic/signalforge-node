@@ -3,7 +3,10 @@ set -eu
 
 version="${BUILD_VERSION:-${GIT_SHA:-unknown}}"
 commit="${GIT_SHA:-unknown}"
-build_date="${BUILD_DATE:-unknown}"
+build_date="${BUILD_DATE:-}"
+if [ -z "$build_date" ] || [ "$build_date" = "unknown" ]; then
+	build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+fi
 
 ldflags="-X main.V=${version}"
 ldflags="${ldflags} -X main.C=${commit}"

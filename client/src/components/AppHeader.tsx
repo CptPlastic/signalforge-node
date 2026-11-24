@@ -27,7 +27,7 @@ function PwaInstallControl({ isStandalone, onInstallApp, showInstallButton }: Re
     return (
       <button
         onClick={onInstallApp}
-        className="px-2 py-1 border border-console-accent text-console-accent rounded uppercase tracking-wider hover:bg-console-accent hover:bg-opacity-10"
+        className="px-2 py-1 border border-console-accent text-console-accent rounded uppercase tracking-wider hover:bg-console-accent/10"
         title="Install SignalForge Hub as an app"
       >
         INSTALL APP
@@ -85,8 +85,8 @@ export function AppHeader({
       ].filter(Boolean).join('\n')
     : 'Hub identity not initialized'
   const updateBadgeClass = hasUpdateAvailable
-    ? 'border-console-amber text-console-amber hover:bg-console-amber'
-    : 'border-console-error text-console-error hover:bg-console-error'
+    ? 'border-console-amber text-console-amber hover:bg-console-amber/10'
+    : 'border-console-error text-console-error hover:bg-console-error/10'
 
   return (
     <header className="console-panel flex flex-col gap-3">
@@ -113,7 +113,7 @@ export function AppHeader({
         {showUpdateBadge && (
           <button
             onClick={onShowHub}
-            className={`px-2 py-1 border rounded uppercase tracking-wider hover:bg-opacity-10 ${updateBadgeClass}`}
+            className={`px-2 py-1 border rounded uppercase tracking-wider ${updateBadgeClass}`}
             title={updateTitle}
           >
             {hasUpdateAvailable ? 'UPDATE AVAILABLE' : 'UPDATE CHECK FAILED'}

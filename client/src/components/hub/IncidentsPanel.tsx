@@ -915,7 +915,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
             type="button"
             onClick={() => void createIncident()}
             disabled={loading || !settings?.incidentManagementEnabled || templates.length === 0 || !templateId}
-            className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+            className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent/10 disabled:opacity-50"
           >
             OPEN INCIDENT
           </button>
@@ -1022,7 +1022,7 @@ export function IncidentsPanel({ authUser, isAdmin, hubPeers, onNotify, onOpenRa
               type="button"
               onClick={() => void saveSettings()}
               disabled={loading}
-              className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+              className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent/10 disabled:opacity-50"
             >
               SAVE SETTINGS
             </button>

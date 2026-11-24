@@ -109,7 +109,7 @@ func (h *handler) upsertDiscordIntegration(incident database.Incident, existing 
 
 func (h *handler) discordQueueSkipReason(incident database.Incident) string {
 	if strings.TrimSpace(h.cfg.DiscordBotWorkerToken) == "" {
-		return "DISCORD_BOT_WORKER_TOKEN not set on api — add same secret to api + discord-bot in Portainer, then redeploy"
+		return "DISCORD_BOT_WORKER_TOKEN not set on api — add same secret to api + discord-bot in Coolify, then redeploy"
 	}
 	if incident.Exposure == "internal" {
 		return "internal incidents skip Discord"

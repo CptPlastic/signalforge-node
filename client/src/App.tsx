@@ -1877,7 +1877,7 @@ function App() {
       <span>{sessionWarning}</span>
       <button
         onClick={handleRefreshSession}
-        className="px-2 py-1 border border-console-error rounded text-[10px] hover:bg-console-error hover:bg-opacity-10"
+        className="px-2 py-1 border border-console-error rounded text-[10px] hover:bg-console-error/10"
       >
         RE-AUTH
       </button>
@@ -1901,7 +1901,7 @@ function App() {
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
           <button
             onClick={() => setActiveView('account')}
-            className="px-3 py-2 border border-console-accent text-console-accent rounded text-[10px] uppercase tracking-widest hover:bg-console-accent hover:bg-opacity-10"
+            className="px-3 py-2 border border-console-accent text-console-accent rounded text-[10px] uppercase tracking-widest hover:bg-console-accent/10"
           >
             CREATE ACCOUNT / SIGN IN
           </button>
@@ -1950,7 +1950,7 @@ function App() {
                       disabled={!canManageThisSource}
                       className={`px-1.5 py-0.5 border rounded text-[9px] transition-colors whitespace-nowrap ${
                         source.enabled
-                          ? 'border-console-accent text-console-accent hover:bg-console-accent hover:bg-opacity-10'
+                          ? 'border-console-accent text-console-accent hover:bg-console-accent/10'
                           : 'border-console-border text-console-muted hover:border-console-accent hover:text-console-accent'
                       }`}
                       title={source.enabled ? 'set source to disabled' : 'set source to enabled'}
@@ -2295,7 +2295,7 @@ function App() {
                 />
                 <button
                   onClick={createSourceProfile}
-                  className="px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10"
+                  className="px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent/10"
                 >
                   CREATE SOURCE
                 </button>
@@ -2357,7 +2357,7 @@ function App() {
                               </button>
                               <button
                                 onClick={() => revokeKey(source.id, key.id)}
-                                className="px-2 py-1 border border-console-error rounded text-[10px] text-console-error hover:bg-console-error hover:bg-opacity-10"
+                                className="px-2 py-1 border border-console-error rounded text-[10px] text-console-error hover:bg-console-error/10"
                               >
                                 REVOKE
                               </button>
@@ -2424,14 +2424,14 @@ function App() {
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => saveSourceSettings(source.id)}
-                              className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10"
+                              className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent/10"
                               disabled={!canManageThisSource || savingSourceID === source.id || deletingSourceID === source.id}
                             >
                               {savingSourceID === source.id ? 'SAVING...' : 'SAVE'}
                             </button>
                             <button
                               onClick={() => deleteSource(source)}
-                              className="px-2 py-1 border border-console-error text-console-error rounded text-[10px] hover:bg-console-error hover:bg-opacity-10"
+                              className="px-2 py-1 border border-console-error text-console-error rounded text-[10px] hover:bg-console-error/10"
                               disabled={!canManageThisSource || deletingSourceID === source.id || savingSourceID === source.id}
                             >
                               {deletingSourceID === source.id ? 'DELETING...' : 'DELETE'}
@@ -2447,7 +2447,7 @@ function App() {
                                 <span className="console-label text-[10px]">API KEYS</span>
                                 <button
                                   onClick={() => generateKey(source.id)}
-                                  className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent hover:bg-opacity-10"
+                                  className="px-2 py-1 border border-console-accent text-console-accent rounded text-[10px] hover:bg-console-accent/10"
                                   disabled={!canManageThisSource || generatingKeyFor === source.id}
                                 >
                                   {generatingKeyFor === source.id ? 'GENERATING...' : 'GENERATE KEY'}
@@ -2604,7 +2604,7 @@ function App() {
                       <td className="py-2 px-3">
                         <button
                           onClick={() => removeTalkgroup(row.talkgroup)}
-                          className="text-[10px] px-1.5 py-0.5 border border-console-error text-console-error rounded hover:bg-console-error hover:bg-opacity-10 disabled:opacity-50"
+                          className="text-[10px] px-1.5 py-0.5 border border-console-error text-console-error rounded hover:bg-console-error/10 disabled:opacity-50"
                           disabled={talkgroupActionID === row.talkgroup}
                           title="Remove stored calls for this talkgroup. It will reappear if new calls arrive."
                         >
@@ -2705,7 +2705,7 @@ function App() {
                 <div className="flex gap-2 flex-wrap">
                   <button
                     onClick={saveHubIdentity}
-                    className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+                    className="w-fit px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent/10 disabled:opacity-50"
                     disabled={hubLoading}
                   >
                     {hubLoading ? 'SAVING...' : 'SAVE HUB'}
@@ -2863,7 +2863,7 @@ function App() {
                 </div>
                 <button
                   onClick={connectHubPeer}
-                  className="px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+                  className="px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent/10 disabled:opacity-50"
                   disabled={hubPeerActionID === 'connect' || !hubIdentity?.federationEnabled || !peerRemoteURL.trim() || !peerInviteToken.trim()}
                   title={hubIdentity?.federationEnabled ? 'Connect peer hub' : 'Enable federation before connecting peers'}
                 >
@@ -2901,7 +2901,7 @@ function App() {
                               {disabledPeer && (
                                 <button
                                   onClick={() => enableHubPeer(peer.id)}
-                                  className="text-[10px] px-1.5 py-0.5 border border-console-accent text-console-accent rounded hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+                                  className="text-[10px] px-1.5 py-0.5 border border-console-accent text-console-accent rounded hover:bg-console-accent/10 disabled:opacity-50"
                                   disabled={hubPeerActionID === peer.id}
                                 >
                                   {hubPeerActionID === peer.id ? '...' : 'ENABLE'}
@@ -2909,7 +2909,7 @@ function App() {
                               )}
                               <button
                               onClick={() => deleteHubPeer(peer.id)}
-                                className="text-[10px] px-1.5 py-0.5 border border-console-error text-console-error rounded hover:bg-console-error hover:bg-opacity-10 disabled:opacity-50"
+                                className="text-[10px] px-1.5 py-0.5 border border-console-error text-console-error rounded hover:bg-console-error/10 disabled:opacity-50"
                               disabled={hubPeerActionID === peer.id}
                               >
                               {hubPeerActionID === peer.id ? '...' : 'REMOVE'}
@@ -2940,7 +2940,7 @@ function App() {
                 <div className="flex gap-2 flex-wrap">
                   <button
                     onClick={createHubInvite}
-                    className="px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+                    className="px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent/10 disabled:opacity-50"
                     disabled={hubInviteActionID === 'new' || !hubIdentity?.federationEnabled}
                     title={hubIdentity?.federationEnabled ? 'Generate peer invite token' : 'Enable federation before creating invites'}
                   >
@@ -2993,7 +2993,7 @@ function App() {
                               </button>
                               <button
                                 onClick={() => revokeHubInvite(invite.id)}
-                                className="text-[10px] px-1.5 py-0.5 border border-console-error text-console-error rounded hover:bg-console-error hover:bg-opacity-10 disabled:opacity-50"
+                                className="text-[10px] px-1.5 py-0.5 border border-console-error text-console-error rounded hover:bg-console-error/10 disabled:opacity-50"
                                 disabled={!active || hubInviteActionID === invite.id}
                               >
                                 {hubInviteActionID === invite.id ? '...' : 'REVOKE'}

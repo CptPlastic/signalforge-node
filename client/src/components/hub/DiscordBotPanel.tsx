@@ -112,7 +112,7 @@ export function DiscordBotPanel({ onNotify, onOpenIncidents }: Props) {
                 })
                 .finally(() => setLoading(false))
             }}
-            className="px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:bg-console-accent hover:bg-opacity-10 disabled:opacity-50"
+            className="px-2 py-1 border border-console-accent text-console-accent rounded text-xs hover:border-console-accent hover:bg-console-accent/10 disabled:opacity-50"
           >
             SYNC ACTIVE INCIDENTS → DISCORD
           </button>
@@ -134,7 +134,7 @@ export function DiscordBotPanel({ onNotify, onOpenIncidents }: Props) {
       )}
 
       <div className="text-[11px] text-console-muted border border-console-border rounded p-2 space-y-1">
-        <p className="text-console-text font-bold">Secrets (Portainer stack env)</p>
+        <p className="text-console-text font-bold">Secrets (Coolify stack env)</p>
         <ul className="list-disc list-inside space-y-0.5">
           <li>
             <code className="text-console-accent">DISCORD_TOKEN</code> — Developer Portal → Bot → Token

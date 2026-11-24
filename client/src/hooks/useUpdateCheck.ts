@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { api, type UpdateCheckResponse, type VersionInfo } from '../lib/api'
 import { deploymentFooterLabel, deploymentHeaderLabel, deploymentTitle } from '../lib/format'
+import { isNewerPublishedRelease } from '../lib/updateStatus'
 
 function fallbackUpdateInfo(message: string): UpdateCheckResponse {
   return {
@@ -41,13 +42,11 @@ export function useUpdateCheck() {
 
   const currentDeploymentTag = versionInfo?.deployTag || versionInfo?.commit?.slice(0, 8) || updateInfo?.current?.deployTag || 'unknown'
   const latestUpdateTag = updateInfo?.latest?.imageTag || updateInfo?.latest?.shortCommit || updateInfo?.latest?.commit?.slice(0, 8) || ''
-  const clientDetectedUpdate = Boolean(
-    updateInfo?.latest &&
-    latestUpdateTag &&
-    currentDeploymentTag !== 'unknown' &&
-    latestUpdateTag.toLowerCase() !== currentDeploymentTag.toLowerCase(),
-  )
-  const hasUpdateAvailable = Boolean(updateInfo?.updateAvailable || clientDetectedUpdate)
+  const hasUpdateAvailable = isNewerPublishedRelease({
+    deployTag: currentDeploymentTag,
+    commit: versionInfo?.commit || updateInfo?.current?.commit,
+    buildDate: versionInfo?.buildDate || updateInfo?.current?.buildDate,
+  }, updateInfo?.latest)
 
   const updateTitle = useMemo(() => {
     if (!updateInfo?.latest) return updateInfo?.error || 'update check unavailable'
