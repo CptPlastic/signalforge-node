@@ -448,8 +448,9 @@ type playerPageConfig struct {
 }
 
 type playerPageData struct {
-	Name   string
-	Config template.JS // JSON-encoded; safe for direct script embedding.
+	Name    string
+	LogoURL string
+	Config  template.JS // JSON-encoded; safe for direct script embedding.
 }
 
 var playerTmpl = template.Must(template.New("player").Parse(`<!DOCTYPE html>
@@ -462,6 +463,13 @@ var playerTmpl = template.Must(template.New("player").Parse(`<!DOCTYPE html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="{{.Name}}">
+<link rel="icon" type="image/png" href="{{.LogoURL}}">
+<link rel="apple-touch-icon" href="{{.LogoURL}}">
+<meta property="og:title" content="{{.Name}}">
+<meta property="og:image" content="{{.LogoURL}}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1024">
+<meta property="og:image:height" content="1024">
 <title>{{.Name}} // SignalForge Hub</title>
 <script>
 (function(){try{var m=localStorage.getItem('sf-display-mode');if(m==='dark'||m==='nite'||m==='nvg'||m==='light')document.documentElement.dataset.sfDisplayMode=m;}catch(e){}})();
@@ -1098,8 +1106,9 @@ func (h *handler) handlePublicPlayer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := playerPageData{
-		Name:   rs.Name,
-		Config: template.JS(cfgBytes), // json.Marshal output is safe for JS embedding
+		Name:    rs.Name,
+		LogoURL: publicStreamLogoURL(h.publicStreamBase(r)),
+		Config:  template.JS(cfgBytes), // json.Marshal output is safe for JS embedding
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

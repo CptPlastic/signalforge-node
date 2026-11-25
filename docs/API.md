@@ -221,8 +221,9 @@ Authenticated session required for radio-set management. Public player routes ar
 | `DELETE` | `/api/v1/radio-sets/{id}/share` | Revoke a public player share token. |
 | `GET` | `/public/player/{token}` | Public embeddable player page. Shows the MP3 stream URL and M3U/PLS playlist links. |
 | `GET` | `/public/stream/{token}.mp3` | Continuous 64 kbps mono MP3 (22050 Hz) for VLC, foobar2000, and phone radio apps. Same share-token access as the WebSocket: unknown, revoked, and private tokens return 404. Silence frames keep the stream alive between calls. Clients that send `Icy-MetaData: 1` on HTTP/1.1 receive SHOUTcast title updates. VLC ignores those titles when it connects with HTTP/2. |
-| `GET` | `/public/stream/{token}.m3u` | One-entry M3U playlist pointing at that share's MP3 stream. |
-| `GET` | `/public/stream/{token}.pls` | One-entry PLS playlist pointing at that share's MP3 stream. |
+| `GET` | `/public/stream/logo.png` | Square 1024×1024 SignalForge station art for every share. `logo-512.png` is the same mark at 512×512. |
+| `GET` | `/public/stream/{token}.m3u` | One-entry M3U playlist pointing at that share's MP3 stream. Entries include `tvg-logo` and `#EXTIMG` for the station art. |
+| `GET` | `/public/stream/{token}.pls` | One-entry PLS playlist pointing at that share's MP3 stream. Includes `Logo1` for the station art. |
 | `GET` | `/api/v1/radio-sets/playlist.m3u` | Authenticated M3U of every public share visible to the caller (own sets, or all sets for an admin). |
 | `GET` | `/api/v1/radio-sets/playlist.pls` | Authenticated PLS of the same shares. |
 | `GET` | `/public/ws/{token}` | Public WebSocket carrying call metadata and base64 audio atomically. Query: `seed=0` skips recent-call seeding; `format=mp3` transcodes non-MP3 clips to `audio/mpeg` (for embedded players). |

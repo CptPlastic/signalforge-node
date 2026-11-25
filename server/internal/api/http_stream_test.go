@@ -46,6 +46,44 @@ func TestParsePublicStreamFile(t *testing.T) {
 	}
 }
 
+func TestPublicStreamLogo(t *testing.T) {
+	h := &handler{logger: slog.Default()}
+	for _, tc := range []struct {
+		name string
+		size int
+	}{
+		{name: "logo.png", size: 1024},
+		{name: "logo-512.png", size: 512},
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/public/stream/"+tc.name, nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("name", tc.name)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rec := httptest.NewRecorder()
+		h.handlePublicHTTPStream(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status %d", tc.name, rec.Code)
+		}
+		if !strings.HasPrefix(rec.Header().Get("Content-Type"), "image/png") {
+			t.Fatalf("%s type %q", tc.name, rec.Header().Get("Content-Type"))
+		}
+		width, height, ok := pngDimensions(rec.Body.Bytes())
+		if !ok || width != tc.size || height != tc.size {
+			t.Fatalf("%s dimensions %d x %d ok=%v", tc.name, width, height, ok)
+		}
+	}
+	if got := publicStreamLogoURL("https://stream.p7hub.projectseven.us"); got != "https://stream.p7hub.projectseven.us/public/stream/logo.png" {
+		t.Fatalf("logo url %q", got)
+	}
+}
+
+func pngDimensions(b []byte) (int, int, bool) {
+	if len(b) < 24 || !bytes.Equal(b[:8], []byte("\x89PNG\r\n\x1a\n")) {
+		return 0, 0, false
+	}
+	return int(binary.BigEndian.Uint32(b[16:20])), int(binary.BigEndian.Uint32(b[20:24])), true
+}
+
 func TestPublicHTTPStreamRejectsBadName(t *testing.T) {
 	h := &handler{logger: slog.Default()}
 	for _, name := range []string{"", ".mp3", "..", "a/b.mp3", "bad name.mp3"} {
@@ -104,6 +142,20 @@ func TestPublicPlaylists(t *testing.T) {
 	}
 	if strings.Contains(pls, "\r") {
 		t.Fatal("pls contains CR")
+	}
+
+	logo := "https://stream.p7hub.projectseven.us/public/stream/logo.png"
+	withArt := string(buildM3U([]publicStreamEntry{{
+		Name: "City",
+		URL:  "https://stream.p7hub.projectseven.us/public/stream/share_abc.mp3",
+		Logo: logo,
+	}}))
+	if !strings.Contains(withArt, `tvg-logo="`+logo+`"`) || !strings.Contains(withArt, "#EXTIMG:"+logo) {
+		t.Fatalf("m3u art:\n%s", withArt)
+	}
+	plsArt := string(buildPLS([]publicStreamEntry{{Name: "City", URL: "https://stream.example/a.mp3", Logo: logo}}))
+	if !strings.Contains(plsArt, "Logo1="+logo) {
+		t.Fatalf("pls art:\n%s", plsArt)
 	}
 }
 
@@ -455,7 +507,7 @@ func TestPlayerPageIncludesHTTPStreamLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := buf.String()
-	for _, needle := range []string{"m3u-link", "pls-link", "/public/stream/", "httpStreamURL", "cfg.streamBase", "copyStream"} {
+	for _, needle := range []string{"m3u-link", "pls-link", "/public/stream/", "httpStreamURL", "cfg.streamBase", "og:image", "apple-touch-icon", "copyStream"} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("player page missing %q", needle)
 		}

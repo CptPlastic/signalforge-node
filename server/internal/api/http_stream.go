@@ -82,7 +82,12 @@ func parsePublicStreamFile(name string) (token string, kind string, ok bool) {
 }
 
 func (h *handler) handlePublicHTTPStream(w http.ResponseWriter, r *http.Request) {
-	token, kind, ok := parsePublicStreamFile(chi.URLParam(r, "name"))
+	name := chi.URLParam(r, "name")
+	if png, ok := streamLogoPNG(name); ok {
+		serveStreamLogo(w, r, name, png)
+		return
+	}
+	token, kind, ok := parsePublicStreamFile(name)
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -145,7 +150,7 @@ func (h *handler) servePublicMP3(w http.ResponseWriter, r *http.Request, rs *dat
 	}
 	icy := icyMetadataRequested(r)
 	if r.Method == http.MethodHead {
-		applyPublicMP3Headers(w.Header(), rs.Name, icy)
+		h.applyStreamResponseHeaders(w, r, rs.Name, icy)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -160,7 +165,7 @@ func (h *handler) servePublicMP3(w http.ResponseWriter, r *http.Request, rs *dat
 	)
 	defer h.logger.Info("public mp3 stream disconnected", "radio_set_id", rs.ID)
 
-	applyPublicMP3Headers(w.Header(), rs.Name, icy)
+	h.applyStreamResponseHeaders(w, r, rs.Name, icy)
 	w.WriteHeader(http.StatusOK)
 	writer := newIcyWriter(w, icy)
 	writer.SetTitle(streamIdleTitle)
@@ -230,6 +235,13 @@ func applyPublicMP3Headers(h http.Header, station string, icy bool) {
 		streamMP3SampleRate, streamMP3BitrateKbps, streamMP3Channels))
 	if icy {
 		h.Set("icy-metaint", fmt.Sprintf("%d", icyMetaInterval))
+	}
+}
+
+func (h *handler) applyStreamResponseHeaders(w http.ResponseWriter, r *http.Request, station string, icy bool) {
+	applyPublicMP3Headers(w.Header(), station, icy)
+	if logo := publicStreamLogoURL(h.publicStreamBase(r)); logo != "" {
+		w.Header().Set("icy-logo", logo)
 	}
 }
 
@@ -343,6 +355,7 @@ func flushStream(w http.ResponseWriter) {
 type publicStreamEntry struct {
 	Name string
 	URL  string
+	Logo string
 }
 
 func publicStreamEntryFromSet(base string, rs database.RadioSet) publicStreamEntry {
@@ -353,6 +366,7 @@ func publicStreamEntryFromSet(base string, rs database.RadioSet) publicStreamEnt
 	return publicStreamEntry{
 		Name: sanitizePlaylistTitle(rs.Name),
 		URL:  publicStreamFileURL(base, token, ".mp3"),
+		Logo: publicStreamLogoURL(base),
 	}
 }
 
@@ -460,6 +474,10 @@ func buildM3U(entries []publicStreamEntry) []byte {
 	var b strings.Builder
 	b.WriteString("#EXTM3U\n")
 	for _, entry := range entries {
+		if entry.Logo != "" {
+			fmt.Fprintf(&b, "#EXTINF:-1 tvg-logo=%q,%s\n#EXTIMG:%s\n%s\n", entry.Logo, entry.Name, entry.Logo, entry.URL)
+			continue
+		}
 		fmt.Fprintf(&b, "#EXTINF:-1,%s\n%s\n", entry.Name, entry.URL)
 	}
 	return []byte(b.String())
@@ -472,6 +490,9 @@ func buildPLS(entries []publicStreamEntry) []byte {
 	for i, entry := range entries {
 		n := i + 1
 		fmt.Fprintf(&b, "File%d=%s\nTitle%d=%s\nLength%d=-1\n", n, entry.URL, n, entry.Name, n)
+		if entry.Logo != "" {
+			fmt.Fprintf(&b, "Logo%d=%s\n", n, entry.Logo)
+		}
 	}
 	b.WriteString("Version=2\n")
 	return []byte(b.String())
