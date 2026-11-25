@@ -238,7 +238,8 @@ type icyWriter struct {
 	icy     bool
 	sent    int
 	title   string
-	pending []byte
+	pending string
+	queued  string
 }
 
 func newIcyWriter(w http.ResponseWriter, icy bool) *icyWriter {
@@ -247,13 +248,25 @@ func newIcyWriter(w http.ResponseWriter, icy bool) *icyWriter {
 
 func (iw *icyWriter) SetTitle(title string) {
 	title = sanitizeStreamTitle(title)
-	if title == "" || title == iw.title {
+	if title == "" || !iw.icy {
 		return
 	}
-	iw.title = title
-	if iw.icy {
-		iw.pending = icyMetadataBlock(title)
+	// A short P25 burst often ends before the next 8192-byte metadata slot.
+	// Replacing the unsent talkgroup title with "Scanning" dropped it on the
+	// floor, so players kept showing Scanning and the call looked like silence.
+	if iw.pending == "" {
+		if title == iw.title {
+			return
+		}
+		iw.pending = title
+		iw.title = title
+		return
 	}
+	if title == iw.pending && iw.queued == "" {
+		return
+	}
+	iw.queued = title
+	iw.title = title
 }
 
 func (iw *icyWriter) WriteAudio(p []byte) error {
@@ -292,12 +305,13 @@ func (iw *icyWriter) WriteAudio(p []byte) error {
 }
 
 func (iw *icyWriter) writeMeta() error {
-	if len(iw.pending) == 0 {
+	if iw.pending == "" {
 		_, err := iw.w.Write([]byte{0})
 		return err
 	}
-	block := iw.pending
-	iw.pending = nil
+	block := icyMetadataBlock(iw.pending)
+	iw.pending = iw.queued
+	iw.queued = ""
 	_, err := iw.w.Write(block)
 	return err
 }
@@ -574,8 +588,14 @@ func newPublicMP3Broker(hub *streamHub, logger *slog.Logger) *publicMP3Broker {
 	}
 }
 
+func (b *publicMP3Broker) logInfo(msg string, args ...any) {
+	if b != nil && b.logger != nil {
+		b.logger.Info(msg, args...)
+	}
+}
+
 func (b *publicMP3Broker) logWarn(msg string, args ...any) {
-	if b.logger != nil {
+	if b != nil && b.logger != nil {
 		b.logger.Warn(msg, args...)
 	}
 }
@@ -686,6 +706,13 @@ func (f *publicMP3Feed) run() {
 				scanning = false
 			}
 			if len(audio) > 0 {
+				if isCall && title != "" {
+					f.broker.logInfo("public mp3 call playing",
+						"radio_set_id", f.radioSetID,
+						"title", title,
+						"mp3_bytes", len(audio),
+					)
+				}
 				f.broadcast(mp3Piece{audio: audio, title: title, silence: !isCall})
 			}
 			dur := f.broker.pieceDuration(audio)
@@ -716,10 +743,22 @@ func (f *publicMP3Feed) encodeLoop(subCh <-chan streamChunk, out chan<- queuedCl
 					"error", err,
 					"radio_set_id", f.radioSetID,
 					"call_id", chunk.meta.ID,
+					"talkgroup", chunk.meta.Talkgroup,
+					"talkgroup_label", chunk.meta.TalkgroupLabel,
 					"audio_type", chunk.meta.AudioType,
+					"audio_bytes", len(chunk.audio),
 				)
 				continue
 			}
+			f.broker.logInfo("public mp3 call queued",
+				"radio_set_id", f.radioSetID,
+				"call_id", chunk.meta.ID,
+				"talkgroup", chunk.meta.Talkgroup,
+				"talkgroup_label", chunk.meta.TalkgroupLabel,
+				"audio_type", chunk.meta.AudioType,
+				"in_bytes", len(chunk.audio),
+				"mp3_bytes", len(audio),
+			)
 			clip := queuedClip{audio: audio, title: httpStreamTitle(chunk.meta)}
 			select {
 			case <-f.ctx.Done():

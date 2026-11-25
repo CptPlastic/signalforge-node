@@ -160,6 +160,31 @@ func TestPublicMP3Headers(t *testing.T) {
 	}
 }
 
+func TestIcyWriterKeepsShortCallTitle(t *testing.T) {
+	// A P25 burst is often shorter than the 8192-byte ICY slot. The next
+	// silence piece used to replace the pending talkgroup title before it
+	// was written, so the wire only showed StreamTitle='Scanning'.
+	rec := httptest.NewRecorder()
+	writer := newIcyWriter(rec, true)
+	writer.SetTitle("Scanning")
+	if err := writer.WriteAudio(bytes.Repeat([]byte{0x11}, icyMetaInterval+100)); err != nil {
+		t.Fatal(err)
+	}
+	writer.SetTitle("OHP AM-Comm")
+	if err := writer.WriteAudio(bytes.Repeat([]byte{0x22}, 6000)); err != nil {
+		t.Fatal(err)
+	}
+	writer.SetTitle("Scanning")
+	if err := writer.WriteAudio(bytes.Repeat([]byte{0x11}, icyMetaInterval)); err != nil {
+		t.Fatal(err)
+	}
+	_, titles := decodeICY(t, rec.Body.Bytes())
+	joined := strings.Join(titles, "\n")
+	if !strings.Contains(joined, "StreamTitle='OHP AM-Comm';") {
+		t.Fatalf("talkgroup title dropped, got %q", titles)
+	}
+}
+
 func TestIcyWriterRoundTrip(t *testing.T) {
 	rec := httptest.NewRecorder()
 	writer := newIcyWriter(rec, true)
