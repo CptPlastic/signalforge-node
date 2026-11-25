@@ -219,9 +219,23 @@ Authenticated session required for radio-set management. Public player routes ar
 | `DELETE` | `/api/v1/radio-sets/{id}` | Delete a radio set. |
 | `POST` | `/api/v1/radio-sets/{id}/share` | Generate a public player share token. |
 | `DELETE` | `/api/v1/radio-sets/{id}/share` | Revoke a public player share token. |
-| `GET` | `/public/player/{token}` | Public embeddable player page. |
+| `GET` | `/public/player/{token}` | Public embeddable player page. Shows the MP3 stream URL and M3U/PLS playlist links. |
+| `GET` | `/public/stream/{token}.mp3` | Continuous 64 kbps mono MP3 (22050 Hz) for VLC, foobar2000, and phone radio apps. Same share-token access as the WebSocket: unknown, revoked, and private tokens return 404. Silence frames keep the stream alive between calls. Clients that send `Icy-MetaData: 1` receive SHOUTcast title updates. |
+| `GET` | `/public/stream/{token}.m3u` | One-entry M3U playlist pointing at that share's MP3 stream. |
+| `GET` | `/public/stream/{token}.pls` | One-entry PLS playlist pointing at that share's MP3 stream. |
+| `GET` | `/api/v1/radio-sets/playlist.m3u` | Authenticated M3U of every public share visible to the caller (own sets, or all sets for an admin). |
+| `GET` | `/api/v1/radio-sets/playlist.pls` | Authenticated PLS of the same shares. |
 | `GET` | `/public/ws/{token}` | Public WebSocket carrying call metadata and base64 audio atomically. Query: `seed=0` skips recent-call seeding; `format=mp3` transcodes non-MP3 clips to `audio/mpeg` (for embedded players). |
 | `GET` | `/public/ws-meta/{token}` | Metadata-only WebSocket for the same radio set share token. Each message uses `cmd: "call_meta"` with no audio. Query: `seed=0` skips recent-call seeding. |
+| `GET` | `/public/last-call/{token}` | Most recent call audio for a public share token. |
+
+Example VLC URL:
+
+```
+https://p7hub.projectseven.us/public/stream/share_<id>.mp3
+```
+
+Open that URL with VLC's Media → Open Network Stream, or open the `.m3u` / `.pls` playlist. The browser player remains at `/public/player/{token}`.
 
 Example `call_meta` frame:
 
@@ -248,8 +262,6 @@ Field notes:
 - **PTT** — `sourceType: "PTT"`, `category: "ptt"`, `sourceLabel` is the sender email prefix (or `PTT` when unknown). Virtual talkgroups `9000000`–`9999999` are always classified as PTT. PTT calls use the set's virtual talkgroup and appear on any share token for that set.
 - **Canary** — detected when `talkgroupLabel` contains `CANARY` or `audioName` starts with `canary-`; `sourceLabel` becomes `CANARY` while `category` still reflects origin (`rf` for upload probes, `ptt` if sent via PTT).
 - **Scanner** — `sourceType: "RF"`, `category: "rf"`, `sourceLabel` is the ingestion source label.
-
-| `GET` | `/public/last-call/{token}` | Most recent call audio for a public share token. |
 
 ## Sources And Source Keys
 

@@ -25,6 +25,7 @@ type handler struct {
 	db                *database.DB
 	hub               *hub
 	streamHub         *streamHub
+	mp3Broker         *publicMP3Broker
 	logger            *slog.Logger
 	discordBotCounter atomic.Int64
 }
@@ -51,7 +52,9 @@ type updateCheckResponse struct {
 }
 
 func newHandler(cfg config.Config, db *database.DB, h *hub, sh *streamHub, logger *slog.Logger) *handler {
-	return &handler{cfg: cfg, db: db, hub: h, streamHub: sh, logger: logger}
+	handle := &handler{cfg: cfg, db: db, hub: h, streamHub: sh, logger: logger}
+	handle.mp3Broker = newPublicMP3Broker(sh, logger)
+	return handle
 }
 
 func (h *handler) handleHealth(w http.ResponseWriter, _ *http.Request) {

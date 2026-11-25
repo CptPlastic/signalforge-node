@@ -520,9 +520,12 @@ body{color:var(--sf-text);font-family:'JetBrains Mono','Courier New',Courier,mon
 .vol-lbl,.vol-val{font-size:9px;text-transform:uppercase;letter-spacing:.12em;line-height:1;white-space:nowrap}
 .vol-val{width:34px;text-align:right;color:var(--sf-accent-bright);font-variant-numeric:tabular-nums}
 .vol input{min-width:0;flex:1;accent-color:var(--sf-accent-bright);background:transparent}
-.stream-bar{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;background:var(--sf-bg)}
-.stream-url{font-size:9px;color:var(--sf-muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.04em;opacity:.7}
+.stream-bar{display:flex;flex-direction:column;gap:.28rem;padding:.45rem .75rem;background:var(--sf-bg)}
+.stream-row{display:flex;align-items:center;gap:.4rem;min-width:0}
+.stream-k{font-size:8px;color:var(--sf-muted);letter-spacing:.12em;text-transform:uppercase;width:46px;flex-shrink:0}
+.stream-url{font-size:9px;color:var(--sf-accent);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.04em}
 .copy-btn{background:none;border:1px solid var(--sf-border);color:var(--sf-muted);font-family:inherit;font-size:9px;text-transform:uppercase;letter-spacing:.1em;cursor:pointer;padding:.2rem .5rem;border-radius:2px;flex-shrink:0;transition:border-color .1s,color .1s}
+a.copy-btn{text-decoration:none;display:inline-block}
 .copy-btn:hover{border-color:var(--sf-accent);color:var(--sf-accent)}
 .copy-btn.ok{border-color:var(--sf-accent-bright);color:var(--sf-accent-bright)}
 .disp-transcript{font-size:9px;color:var(--sf-muted);margin-top:.35rem;letter-spacing:.03em;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;line-height:1.5;word-break:break-word}
@@ -576,8 +579,16 @@ body{color:var(--sf-text);font-family:'JetBrains Mono','Courier New',Courier,mon
 		</label>
   </div>
   <div class="stream-bar">
-    <span class="stream-url" id="stream-url-txt"></span>
-    <button class="copy-btn" id="copy-btn" onclick="copyStream()">COPY</button>
+    <div class="stream-row">
+      <span class="stream-k">MP3</span>
+      <span class="stream-url" id="stream-url-txt" title="Continuous MP3 stream for VLC and other players"></span>
+      <button class="copy-btn" id="copy-btn" onclick="copyStream()">COPY</button>
+    </div>
+    <div class="stream-row">
+      <span class="stream-k">PLAYLIST</span>
+      <a class="copy-btn" id="m3u-link" href="#" download>M3U</a>
+      <a class="copy-btn" id="pls-link" href="#" download>PLS</a>
+    </div>
   </div>
 </div>
 <audio id="audio" preload="none" playsinline></audio>
@@ -664,7 +675,14 @@ body{color:var(--sf-text);font-family:'JetBrains Mono','Courier New',Courier,mon
 
   var base = window.location.origin;
   var wsURL = base.replace(/^http/, 'ws') + '/public/ws/' + cfg.token;
-  document.getElementById('stream-url-txt').textContent = wsURL;
+  var httpStreamURL = base + '/public/stream/' + encodeURIComponent(cfg.token) + '.mp3';
+  var m3uURL = base + '/public/stream/' + encodeURIComponent(cfg.token) + '.m3u';
+  var plsURL = base + '/public/stream/' + encodeURIComponent(cfg.token) + '.pls';
+  var streamTxt = document.getElementById('stream-url-txt');
+  streamTxt.textContent = httpStreamURL;
+  streamTxt.title = httpStreamURL;
+  document.getElementById('m3u-link').href = m3uURL;
+  document.getElementById('pls-link').href = plsURL;
 
   var audio = document.getElementById('audio');
   var keepAlive = document.getElementById('audio-keepalive');
@@ -1043,7 +1061,7 @@ body{color:var(--sf-text);font-family:'JetBrains Mono','Courier New',Courier,mon
 
   window.copyStream = function() {
     var btn = document.getElementById('copy-btn');
-    navigator.clipboard.writeText(wsURL).then(function() {
+    navigator.clipboard.writeText(httpStreamURL).then(function() {
       btn.textContent = 'COPIED'; btn.className = 'copy-btn ok';
       setTimeout(function() { btn.textContent = 'COPY'; btn.className = 'copy-btn'; }, 1500);
     }).catch(function(){});

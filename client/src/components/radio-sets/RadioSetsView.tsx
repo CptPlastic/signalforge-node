@@ -75,6 +75,10 @@ function publicMetaWSURL(token: string): string {
   return `${protocol}//${globalThis.window.location.host}/public/ws-meta/${encodeURIComponent(token)}`
 }
 
+function publicStreamURL(token: string, ext: 'mp3' | 'm3u' | 'pls'): string {
+  return `${globalThis.window.location.origin}/public/stream/${encodeURIComponent(token)}.${ext}`
+}
+
 function FieldUnitConfigRow({
   label,
   hint,
@@ -305,6 +309,15 @@ export function RadioSetsView({
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="console-label text-xs">RADIO SETS</span>
         <div className="flex items-center gap-2">
+          {radioSets.some((radioSet) => Boolean(radioSet.shareToken)) && (
+            <a
+              href="/api/v1/radio-sets/playlist.m3u"
+              className="px-2 py-1 sm:py-0.5 border border-console-border text-console-muted rounded text-[10px] uppercase tracking-wider hover:border-console-accent hover:text-console-accent"
+              title="Playlist of every public stream on this account"
+            >
+              All streams
+            </a>
+          )}
           {authUser?.txEnabled && authUser?.dispatcherEnabled && (
             <button
               onClick={onOpenDispatcher}
@@ -616,6 +629,18 @@ export function RadioSetsView({
                       {
                         label: 'Player',
                         value: `${globalThis.window.location.origin}/public/player/${radioSet.shareToken}`,
+                      },
+                      {
+                        label: 'Stream',
+                        value: publicStreamURL(radioSet.shareToken, 'mp3'),
+                      },
+                      {
+                        label: 'M3U',
+                        value: publicStreamURL(radioSet.shareToken, 'm3u'),
+                      },
+                      {
+                        label: 'PLS',
+                        value: publicStreamURL(radioSet.shareToken, 'pls'),
                       },
                       {
                         label: 'Meta WS',

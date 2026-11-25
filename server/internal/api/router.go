@@ -35,6 +35,7 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 	r.Get("/ws", handle.handleWebSocket)
 	r.Get("/public/ws/{token}", handle.handlePublicWS)
 	r.Get("/public/ws-meta/{token}", handle.handlePublicWSMeta)
+	r.Get("/public/stream/{name}", handle.handlePublicHTTPStream)
 
 	// Long-running admin maintenance (sync API clients only).
 	r.Group(func(r chi.Router) {
@@ -105,6 +106,8 @@ func NewRouter(logger *slog.Logger, cfg config.Config, db *database.DB) http.Han
 		r.Get("/api/v1/talkgroups/settings", handle.handleListTalkgroupSettings)
 		r.Put("/api/v1/talkgroups/{talkgroup}/settings", handle.handleUpsertTalkgroupSettings)
 		r.Delete("/api/v1/talkgroups/{talkgroup}", handle.handleDeleteTalkgroup)
+		r.Get("/api/v1/radio-sets/playlist.m3u", handle.handleRadioSetPlaylist)
+		r.Get("/api/v1/radio-sets/playlist.pls", handle.handleRadioSetPlaylist)
 		r.Get("/api/v1/radio-sets", handle.handleListRadioSets)
 		r.Post("/api/v1/radio-sets", handle.handleCreateRadioSet)
 		r.Get(radioSetByIDRoute, handle.handleGetRadioSet)
