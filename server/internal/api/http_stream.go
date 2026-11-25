@@ -366,6 +366,12 @@ func publicStreamFileURL(base, token, ext string) string {
 }
 
 func (h *handler) publicStreamBase(r *http.Request) string {
+	// STREAM_PUBLIC_URL is an HTTP/1.1-only HTTPS origin. VLC's HTTP/2 access
+	// module does not read ICY titles, so playlists and the player page advertise
+	// this origin when it is set. The hub host keeps serving the same path.
+	if base := strings.TrimRight(strings.TrimSpace(h.cfg.StreamPublicURL), "/"); base != "" {
+		return base
+	}
 	if base := requestPublicBase(r); base != "" {
 		return base
 	}

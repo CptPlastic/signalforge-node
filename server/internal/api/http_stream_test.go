@@ -122,15 +122,27 @@ func TestRequestPublicBase(t *testing.T) {
 		t.Fatalf("bad host base = %q", got)
 	}
 
-	h := &handler{cfg: config.Config{HubPublicURL: "https://p7hub.projectseven.us/"}}
-	if got := h.publicStreamBase(req); got != "https://p7hub.projectseven.us" {
+	plain := &handler{cfg: config.Config{HubPublicURL: "https://p7hub.projectseven.us/"}}
+	if got := plain.publicStreamBase(req); got != "https://p7hub.projectseven.us" {
 		t.Fatalf("fallback base = %q", got)
 	}
 	token := "share_abc"
 	rs := database.RadioSet{Name: "City FD", ShareToken: &token}
-	entry := publicStreamEntryFromSet(h.publicStreamBase(req), rs)
+	entry := publicStreamEntryFromSet(plain.publicStreamBase(req), rs)
 	if entry.URL != "https://p7hub.projectseven.us/public/stream/share_abc.mp3" {
 		t.Fatalf("entry url = %q", entry.URL)
+	}
+
+	stream := &handler{cfg: config.Config{StreamPublicURL: "https://stream.p7hub.projectseven.us"}}
+	req.Host = "p7hub.projectseven.us"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "p7hub.projectseven.us")
+	if got := stream.publicStreamBase(req); got != "https://stream.p7hub.projectseven.us" {
+		t.Fatalf("stream base = %q", got)
+	}
+	entry = publicStreamEntryFromSet(stream.publicStreamBase(req), rs)
+	if entry.URL != "https://stream.p7hub.projectseven.us/public/stream/share_abc.mp3" {
+		t.Fatalf("playlist stayed on the hub host: %q", entry.URL)
 	}
 }
 
@@ -443,7 +455,7 @@ func TestPlayerPageIncludesHTTPStreamLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := buf.String()
-	for _, needle := range []string{"m3u-link", "pls-link", "/public/stream/", "httpStreamURL", "copyStream"} {
+	for _, needle := range []string{"m3u-link", "pls-link", "/public/stream/", "httpStreamURL", "cfg.streamBase", "copyStream"} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("player page missing %q", needle)
 		}

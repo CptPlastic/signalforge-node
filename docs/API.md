@@ -220,7 +220,7 @@ Authenticated session required for radio-set management. Public player routes ar
 | `POST` | `/api/v1/radio-sets/{id}/share` | Generate a public player share token. |
 | `DELETE` | `/api/v1/radio-sets/{id}/share` | Revoke a public player share token. |
 | `GET` | `/public/player/{token}` | Public embeddable player page. Shows the MP3 stream URL and M3U/PLS playlist links. |
-| `GET` | `/public/stream/{token}.mp3` | Continuous 64 kbps mono MP3 (22050 Hz) for VLC, foobar2000, and phone radio apps. Same share-token access as the WebSocket: unknown, revoked, and private tokens return 404. Silence frames keep the stream alive between calls. Clients that send `Icy-MetaData: 1` receive SHOUTcast title updates. |
+| `GET` | `/public/stream/{token}.mp3` | Continuous 64 kbps mono MP3 (22050 Hz) for VLC, foobar2000, and phone radio apps. Same share-token access as the WebSocket: unknown, revoked, and private tokens return 404. Silence frames keep the stream alive between calls. Clients that send `Icy-MetaData: 1` on HTTP/1.1 receive SHOUTcast title updates. VLC ignores those titles when it connects with HTTP/2. |
 | `GET` | `/public/stream/{token}.m3u` | One-entry M3U playlist pointing at that share's MP3 stream. |
 | `GET` | `/public/stream/{token}.pls` | One-entry PLS playlist pointing at that share's MP3 stream. |
 | `GET` | `/api/v1/radio-sets/playlist.m3u` | Authenticated M3U of every public share visible to the caller (own sets, or all sets for an admin). |
@@ -229,7 +229,15 @@ Authenticated session required for radio-set management. Public player routes ar
 | `GET` | `/public/ws-meta/{token}` | Metadata-only WebSocket for the same radio set share token. Each message uses `cmd: "call_meta"` with no audio. Query: `seed=0` skips recent-call seeding. |
 | `GET` | `/public/last-call/{token}` | Most recent call audio for a public share token. |
 
-Example VLC URL:
+`STREAM_PUBLIC_URL`, when set to an origin such as `https://stream.p7hub.projectseven.us`, is the base the player page and the `.m3u` / `.pls` files advertise. That origin has to negotiate TLS as HTTP/1.1 only. The hub hostname keeps serving `/public/stream/`. `/api/v1/version` includes `streamPublicURL`.
+
+Example VLC URL once that origin is in place:
+
+```
+https://stream.p7hub.projectseven.us/public/stream/share_<id>.mp3
+```
+
+The same path on the hub still plays audio:
 
 ```
 https://p7hub.projectseven.us/public/stream/share_<id>.mp3

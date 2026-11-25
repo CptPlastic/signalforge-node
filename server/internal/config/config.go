@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -20,6 +21,7 @@ type Config struct {
 	MailjetSecretKey              string
 	HubName                       string
 	HubPublicURL                  string
+	StreamPublicURL               string
 	HubRegion                     string
 	HubContact                    string
 	HubFederation                 bool
@@ -50,6 +52,10 @@ type Config struct {
 
 func Load() (Config, error) {
 	publicBaseURL := strings.TrimSpace(getEnv("APP_BASE_URL", ""))
+	streamPublicURL, err := NormalizeStreamPublicURL(getEnv("STREAM_PUBLIC_URL", ""))
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
 		ListenAddr:                    getEnv("LISTEN_ADDR", ":8080"),
 		DatabaseURL:                   getEnv("DATABASE_URL", "postgres://p7scanner@localhost:5432/p7scanner?sslmode=disable"),
@@ -63,6 +69,7 @@ func Load() (Config, error) {
 		MailjetSecretKey:              strings.TrimSpace(getEnv("MAILJET_SECRET_KEY", "")),
 		HubName:                       strings.TrimSpace(getEnv("HUB_NAME", "SignalForge Hub")),
 		HubPublicURL:                  strings.TrimSpace(getEnv("HUB_PUBLIC_URL", publicBaseURL)),
+		StreamPublicURL:               streamPublicURL,
 		HubRegion:                     strings.TrimSpace(getEnv("HUB_REGION", "")),
 		HubContact:                    strings.TrimSpace(getEnv("HUB_CONTACT", "")),
 		HubFederation:                 getBoolEnv("HUB_FEDERATION_ENABLED", false),
@@ -111,6 +118,27 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// NormalizeStreamPublicURL accepts an origin such as
+// https://stream.example.com or https://stream.example.com:8443.
+// An empty value is valid. A non-empty value must be http(s) with a host and no path.
+func NormalizeStreamPublicURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return "", fmt.Errorf("invalid STREAM_PUBLIC_URL %q", raw)
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", fmt.Errorf("invalid STREAM_PUBLIC_URL %q", raw)
+	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return "", fmt.Errorf("STREAM_PUBLIC_URL must be an origin without a path, got %q", raw)
+	}
+	return parsed.Scheme + "://" + parsed.Host, nil
 }
 
 func getEnv(key, fallback string) string {

@@ -442,8 +442,9 @@ func (h *handler) handlePublicWS(w http.ResponseWriter, r *http.Request) {
 // URLs are constructed client-side using window.location.origin to avoid server-side
 // scheme detection issues with reverse proxies.
 type playerPageConfig struct {
-	Token string `json:"token"`
-	Name  string `json:"name"`
+	Token      string `json:"token"`
+	Name       string `json:"name"`
+	StreamBase string `json:"streamBase,omitempty"`
 }
 
 type playerPageData struct {
@@ -675,9 +676,11 @@ a.copy-btn{text-decoration:none;display:inline-block}
 
   var base = window.location.origin;
   var wsURL = base.replace(/^http/, 'ws') + '/public/ws/' + cfg.token;
-  var httpStreamURL = base + '/public/stream/' + encodeURIComponent(cfg.token) + '.mp3';
-  var m3uURL = base + '/public/stream/' + encodeURIComponent(cfg.token) + '.m3u';
-  var plsURL = base + '/public/stream/' + encodeURIComponent(cfg.token) + '.pls';
+  var streamOrigin = base;
+  if (cfg.streamBase) streamOrigin = String(cfg.streamBase).replace(/\/$/, '');
+  var httpStreamURL = streamOrigin + '/public/stream/' + encodeURIComponent(cfg.token) + '.mp3';
+  var m3uURL = streamOrigin + '/public/stream/' + encodeURIComponent(cfg.token) + '.m3u';
+  var plsURL = streamOrigin + '/public/stream/' + encodeURIComponent(cfg.token) + '.pls';
   var streamTxt = document.getElementById('stream-url-txt');
   streamTxt.textContent = httpStreamURL;
   streamTxt.title = httpStreamURL;
@@ -1085,8 +1088,9 @@ func (h *handler) handlePublicPlayer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cfgBytes, err := json.Marshal(playerPageConfig{
-		Token: token,
-		Name:  rs.Name,
+		Token:      token,
+		Name:       rs.Name,
+		StreamBase: h.cfg.StreamPublicURL,
 	})
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)

@@ -1,4 +1,4 @@
-import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import { useEffect, useMemo, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { api, type AuthUser, type RadioSet, type RadioSetSelectionMode, type TalkgroupInfo } from '../../lib/api'
 import { PTTButton } from './PTTButton'
 
@@ -75,8 +75,26 @@ function publicMetaWSURL(token: string): string {
   return `${protocol}//${globalThis.window.location.host}/public/ws-meta/${encodeURIComponent(token)}`
 }
 
-function publicStreamURL(token: string, ext: 'mp3' | 'm3u' | 'pls'): string {
-  return `${globalThis.window.location.origin}/public/stream/${encodeURIComponent(token)}.${ext}`
+function publicStreamURL(token: string, ext: 'mp3' | 'm3u' | 'pls', origin: string): string {
+  const base = origin || globalThis.window.location.origin
+  return `${base}/public/stream/${encodeURIComponent(token)}.${ext}`
+}
+
+function useConfiguredStreamOrigin(): string {
+  const [origin, setOrigin] = useState('')
+  useEffect(() => {
+    let cancelled = false
+    void api.version()
+      .then((info) => {
+        const configured = info.streamPublicURL?.replace(/\/$/, '') ?? ''
+        if (!cancelled && configured) setOrigin(configured)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  return origin
 }
 
 function FieldUnitConfigRow({
@@ -162,6 +180,7 @@ export function RadioSetsView({
   onOpenDispatcher,
   onNotify,
 }: RadioSetsViewProps) {
+  const streamOrigin = useConfiguredStreamOrigin()
   const filteredTalkgroups = useMemo(() => {
     const query = rsTGSearch.trim().toLowerCase()
     if (!query) return distinctTalkgroups
@@ -632,15 +651,15 @@ export function RadioSetsView({
                       },
                       {
                         label: 'Stream',
-                        value: publicStreamURL(radioSet.shareToken, 'mp3'),
+                        value: publicStreamURL(radioSet.shareToken, 'mp3', streamOrigin),
                       },
                       {
                         label: 'M3U',
-                        value: publicStreamURL(radioSet.shareToken, 'm3u'),
+                        value: publicStreamURL(radioSet.shareToken, 'm3u', streamOrigin),
                       },
                       {
                         label: 'PLS',
-                        value: publicStreamURL(radioSet.shareToken, 'pls'),
+                        value: publicStreamURL(radioSet.shareToken, 'pls', streamOrigin),
                       },
                       {
                         label: 'Meta WS',

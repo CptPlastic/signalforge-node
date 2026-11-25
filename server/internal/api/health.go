@@ -82,6 +82,7 @@ func (h *handler) handleVersion(w http.ResponseWriter, _ *http.Request) {
 		"callArchiveLoopEnabled":  h.callArchiveLoopEnabled(),
 		"incidentArchiveDays":     h.cfg.IncidentArchiveDays,
 		"incidentCleanupEnabled":  h.incidentCleanupLoopEnabled(),
+		"streamPublicURL":         h.cfg.StreamPublicURL,
 	})
 }
 

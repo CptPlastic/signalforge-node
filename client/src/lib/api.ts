@@ -462,6 +462,7 @@ export type VersionInfo = {
   transcriptionEnabled?: boolean
   passwordLoginEnabled?: boolean
   emailDeliveryConfigured?: boolean
+  streamPublicURL?: string
 }
 
 export type UpdateManifest = {
